@@ -39,6 +39,7 @@ export interface Lecture {
   word_count: number
   status: 'draft' | 'recording' | 'finished' | 'archived'
   lang: Lang
+  ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
   created_at: string
   updated_at: string
 }
@@ -187,12 +188,12 @@ export const PLANS: Record<Plan, {
 }> = {
   free: {
     name: 'Free', priceRM: 0, durationHours: null,
-    lectureLimit: 3, minutesPerLecture: 30, notebookLimit: 1,
-    pdfExport: true, mdExport: true, aiSummary: false, watermark: true,
+    lectureLimit: 3, minutesPerLecture: 60, notebookLimit: 1,
+    pdfExport: true, mdExport: true, aiSummary: true, watermark: true,
     stripeMode: 'payment',
   },
   day: {
-    name: 'Day Pass', priceRM: 5, durationHours: 24,
+    name: 'Day Pass', priceRM: 7, durationHours: 24,
     lectureLimit: 10, minutesPerLecture: 180, notebookLimit: 3,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
     stripeMode: 'payment',
@@ -201,12 +202,12 @@ export const PLANS: Record<Plan, {
     name: 'Monthly', priceRM: 19, durationHours: 24 * 30,
     lectureLimit: 100, minutesPerLecture: 240, notebookLimit: 20,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
-    stripeMode: 'subscription',
+    stripeMode: 'payment',
   },
   year: {
     name: 'Yearly', priceRM: 149, durationHours: 24 * 365,
     lectureLimit: 9999, minutesPerLecture: 480, notebookLimit: 9999,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
-    stripeMode: 'subscription',
+    stripeMode: 'payment',
   },
 }
