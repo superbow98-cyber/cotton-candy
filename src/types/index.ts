@@ -18,6 +18,7 @@ export interface Profile {
   plan_expires_at: string | null
   lang: Lang
   theme: Theme | null
+  ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
   created_at: string
 }
 

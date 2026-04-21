@@ -54,6 +54,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [aiProcessing, setAiProcessing] = useState(false)
   const [aiResult, setAiResult] = useState<AISummary | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [aiUsedProvider, setAiUsedProvider] = useState<string | null>(null)
+  const [userAiProvider, setUserAiProvider] = useState<string>('auto')
   const [recLang, setRecLang] = useState<string>('en-US')
 
   const recRef = useRef<any>(null)
@@ -113,8 +115,9 @@ export default function LectureRecorder({ id }: { id: string }) {
           }
         } catch {}
       }
-      const { data: prof } = await sb.from('profiles').select('plan').eq('id', user.id).maybeSingle()
+      const { data: prof } = await sb.from('profiles').select('plan, ai_provider').eq('id', user.id).maybeSingle()
       setPlan((prof?.plan || 'free') as keyof typeof PLANS)
+      setUserAiProvider((prof?.ai_provider || 'auto'))
     })()
   }, [id, router])
 
@@ -258,17 +261,19 @@ export default function LectureRecorder({ id }: { id: string }) {
     if (!lecture) return
     setAiProcessing(true)
     setAiError(null)
+    setAiUsedProvider(null)
     try {
       const res = await fetch('/api/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lectureId: lecture.id }),
+        body: JSON.stringify({ lectureId: lecture.id, provider: userAiProvider }),
       })
       const json = await res.json()
       if (!res.ok || !json.ok) {
         setAiError(json.error || 'AI processing failed')
       } else {
         setAiResult(json.data as AISummary)
+        setAiUsedProvider(json.usedProvider || null)
       }
     } catch (e: any) {
       setAiError(e.message || 'Network error')
@@ -461,6 +466,9 @@ export default function LectureRecorder({ id }: { id: string }) {
               ? 'Biasanya 10-20 saat. Sedang extract topik, key points, formula, soalan, dan ringkasan.'
               : 'Usually 10-20 seconds. Extracting topics, key points, formulas, questions, and summary.'}
           </div>
+          <div style={{ fontSize: 10, color: s.gray, marginTop: 6, opacity: 0.7 }}>
+            {lang === 'bm' ? 'Provider' : 'Provider'}: {userAiProvider}
+          </div>
         </div>
       )}
 
@@ -489,6 +497,13 @@ export default function LectureRecorder({ id }: { id: string }) {
       {/* AI RESULT — organized sections */}
       {aiResult && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
+          {aiUsedProvider && (
+            <div style={{
+              fontSize: 11, color: s.gray, textAlign: 'right', marginBottom: 6, opacity: 0.7,
+            }}>
+              {lang === 'bm' ? '✨ Disusun oleh' : '✨ Organized by'}: <strong>{aiUsedProvider}</strong>
+            </div>
+          )}
           {aiResult.summary && (
             <Section icon="✨" title={lang === 'bm' ? 'Ringkasan (TL;DR)' : 'Summary (TL;DR)'} s={s}>
               <p style={{ margin: 0, lineHeight: 1.7, fontSize: 15 }}>{aiResult.summary}</p>
