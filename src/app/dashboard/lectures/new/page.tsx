@@ -6,6 +6,43 @@ import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
 import { PLANS } from '@/types'
+import type { ThemeTokens } from '@/types'
+
+// ----- Field component DEFINED OUTSIDE parent (critical!) -----
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  tokens,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  tokens: ThemeTokens
+}) {
+  return (
+    <div>
+      <label style={{
+        fontSize: 12, color: tokens.gray, fontWeight: 600,
+        display: 'block', marginBottom: 4,
+      }}>{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%', padding: '12px 14px',
+          borderRadius: 12, border: `1.5px solid ${tokens.border}`,
+          fontSize: 15, background: tokens.soft, outline: 'none',
+        }}
+        onFocus={(e) => (e.target.style.borderColor = tokens.primaryDark)}
+        onBlur={(e) => (e.target.style.borderColor = tokens.border)}
+      />
+    </div>
+  )
+}
 
 export default function NewLecture() {
   const { t, lang } = useLang()
@@ -57,26 +94,6 @@ export default function NewLecture() {
     }
   }
 
-  const Field = ({ label, value, onChange, placeholder }: {
-    label: string; value: string; onChange: (v: string) => void; placeholder?: string
-  }) => (
-    <div>
-      <label style={{ fontSize: 12, color: s.gray, fontWeight: 600, display: 'block', marginBottom: 4 }}>{label}</label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%', padding: '12px 14px',
-          borderRadius: 12, border: `1.5px solid ${s.border}`,
-          fontSize: 15, background: s.soft, outline: 'none',
-        }}
-        onFocus={(e) => (e.target.style.borderColor = s.primaryDark)}
-        onBlur={(e) => (e.target.style.borderColor = s.border)}
-      />
-    </div>
-  )
-
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(24px, 4vw, 32px)', marginBottom: 24 }}>
@@ -87,10 +104,10 @@ export default function NewLecture() {
         background: '#fff', padding: 24, borderRadius: 22,
         border: `1px solid ${s.border}`, display: 'flex', flexDirection: 'column', gap: 14,
       }}>
-        <Field label={t('newTitle')}    value={title}    onChange={setTitle}    placeholder={t('newPlaceholder')} />
-        <Field label={t('newSubject')}  value={subject}  onChange={setSubject}  placeholder="Biology / Maths / …" />
-        <Field label={t('newLecturer')} value={lecturer} onChange={setLecturer} placeholder="Dr. …" />
-        <Field label={t('newLocation')} value={location} onChange={setLocation} placeholder="Hall A / Lab 3 / …" />
+        <Field label={t('newTitle')}    value={title}    onChange={setTitle}    placeholder={t('newPlaceholder')} tokens={s} />
+        <Field label={t('newSubject')}  value={subject}  onChange={setSubject}  placeholder="Biology / Maths / …" tokens={s} />
+        <Field label={t('newLecturer')} value={lecturer} onChange={setLecturer} placeholder="Dr. …" tokens={s} />
+        <Field label={t('newLocation')} value={location} onChange={setLocation} placeholder="Hall A / Lab 3 / …" tokens={s} />
 
         {err && <p style={{ color: '#d66', fontSize: 13, margin: 0 }}>{err}</p>}
 
