@@ -3,12 +3,27 @@ import Stripe from 'stripe'
 import { createClient } from '@/lib/supabase/server'
 import { PLANS, type Plan } from '@/types'
 
+// Map plan key → env var with Price ID
+const PRICE_ID_MAP: Record<Exclude<Plan, 'free'>, string | undefined> = {
+  day:   process.env.STRIPE_PRICE_DAY,
+  month: process.env.STRIPE_PRICE_MONTH,
+  year:  process.env.STRIPE_PRICE_YEAR,
+}
+
 export async function POST(req: Request) {
   try {
     const { plan } = await req.json() as { plan: Plan }
     if (!plan || !PLANS[plan] || plan === 'free') {
       return NextResponse.json({ error: 'invalid plan' }, { status: 400 })
     }
+    const priceId = PRICE_ID_MAP[plan]
+    if (!priceId) {
+      return NextResponse.json(
+        { error: `price ID not configured for plan "${plan}" — check STRIPE_PRICE_${plan.toUpperCase()} env var` },
+        { status: 500 }
+      )
+    }
+
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'not authenticated' }, { status: 401 })
@@ -23,12 +38,7 @@ export async function POST(req: Request) {
       payment_method_types: isSub ? ['card'] : ['card', 'fpx', 'grabpay'],
       customer_email: user.email ?? undefined,
       line_items: [{
-        price_data: {
-          currency: 'myr',
-          product_data: { name: `Cotton Candy — ${p.name}` },
-          unit_amount: p.priceRM * 100,
-          ...(isSub ? { recurring: { interval: plan === 'year' ? 'year' : 'month' } as any } : {}),
-        },
+        price: priceId,  // reference Stripe Price by ID
         quantity: 1,
       }],
       success_url: `${origin}/dashboard?welcome=1`,
