@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useLang } from '@/lib/i18n/LangProvider'
 
@@ -136,6 +137,9 @@ export default function Home() {
           </a>
         </div>
       </section>
+
+      {/* ANIMATED DEMO SECTION */}
+      <DemoSection lang={lang} />
 
       {/* AI MODELS SECTION */}
       <section id="ai" style={{ padding: '80px 20px', textAlign: 'center', maxWidth: 1040, margin: '0 auto' }}>
@@ -618,6 +622,428 @@ function PricingCard({
       }}>
         {ctaText}
       </Link>
+    </div>
+  )
+}
+
+// ============ ANIMATED DEMO SECTION ============
+function DemoSection({ lang }: { lang: string }) {
+  const L = (en: string, bm: string) => lang === 'bm' ? bm : en
+  const [step, setStep] = useState(1)
+  const [seconds, setSeconds] = useState(258) // 4:18
+  const [words, setWords] = useState(142)
+  const [nbCount, setNbCount] = useState(12)
+  const autoTimerRef = useRef<any>(null)
+  const tickerRef = useRef<any>(null)
+  const wordTickerRef = useRef<any>(null)
+
+  // Auto-cycle steps every 5.5s
+  useEffect(() => {
+    autoTimerRef.current = setInterval(() => {
+      setStep((s) => (s >= 3 ? 1 : s + 1))
+    }, 5500)
+    return () => clearInterval(autoTimerRef.current)
+  }, [])
+
+  // Timer only ticks on step 1
+  useEffect(() => {
+    if (step === 1) {
+      tickerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
+      wordTickerRef.current = setInterval(() => {
+        setWords((w) => w + 2 + Math.floor(Math.random() * 3))
+      }, 1200)
+    }
+    if (step === 3) {
+      // Notebook count animates
+      setNbCount(12)
+      const t1 = setTimeout(() => setNbCount(13), 600)
+      const t2 = setTimeout(() => setNbCount(14), 1300)
+      const t3 = setTimeout(() => setNbCount(15), 2000)
+      return () => {
+        clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+      }
+    }
+    return () => {
+      if (tickerRef.current) clearInterval(tickerRef.current)
+      if (wordTickerRef.current) clearInterval(wordTickerRef.current)
+    }
+  }, [step])
+
+  const pad = (n: number) => (n < 10 ? '0' + n : '' + n)
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const sec = seconds % 60
+
+  const onChipClick = (n: number) => {
+    clearInterval(autoTimerRef.current)
+    setStep(n)
+    autoTimerRef.current = setInterval(() => {
+      setStep((s) => (s >= 3 ? 1 : s + 1))
+    }, 5500)
+  }
+
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 8,
+    padding: '10px 18px 10px 12px',
+    background: active ? '#1d1d1f' : '#fff',
+    border: `0.5px solid ${active ? '#1d1d1f' : 'rgba(0,0,0,0.08)'}`,
+    borderRadius: 100,
+    fontSize: 13, fontWeight: 500,
+    color: active ? '#fff' : 'rgba(29,29,31,0.55)',
+    cursor: 'pointer',
+    transition: 'all 0.25s',
+    letterSpacing: '-0.01em',
+    boxShadow: active ? '0 4px 14px rgba(29,29,31,0.2)' : 'none',
+  })
+  const chipNumStyle = (active: boolean): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 22, height: 22, borderRadius: '50%',
+    fontSize: 11, fontWeight: 700,
+    background: active ? 'rgba(255,255,255,0.2)' : 'rgba(90,143,245,0.12)',
+    color: active ? '#fff' : '#5A8FF5',
+  })
+
+  return (
+    <section style={{
+      background: 'linear-gradient(180deg, #fff 0%, #FAFAFB 100%)',
+      padding: '80px 20px',
+      textAlign: 'center',
+    }}>
+      <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#5A8FF5', marginBottom: 10 }}>
+          {L('See it in action', 'Lihat ia berfungsi')}
+        </div>
+        <h2 style={{
+          fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 600,
+          lineHeight: 1.08, letterSpacing: '-0.03em',
+          margin: '0 0 14px',
+        }}>
+          {L('From voice to organized notes', 'Dari suara kepada nota tersusun')}<br />
+          {L('in three taps.', 'dalam tiga tap.')}
+        </h2>
+        <p style={{
+          fontSize: 'clamp(15px, 2vw, 18px)', fontWeight: 400,
+          color: 'rgba(29,29,31,0.65)',
+          maxWidth: 560, margin: '0 auto 60px',
+          lineHeight: 1.5, letterSpacing: '-0.01em',
+        }}>
+          {L(
+            'Watch how Cotton Candy turns a messy bilingual lecture into clean study notes — then files them into a notebook. No clicking. No typing.',
+            'Lihat bagaimana Cotton Candy tukar kuliah rojak jadi nota tersusun — kemudian simpan ke notebook. Tanpa klik. Tanpa taip.'
+          )}
+        </p>
+
+        {/* Step navigation */}
+        <div style={{
+          display: 'flex', justifyContent: 'center',
+          gap: 10, marginBottom: 30, flexWrap: 'wrap',
+        }}>
+          <button onClick={() => onChipClick(1)} style={chipStyle(step === 1)}>
+            <span style={chipNumStyle(step === 1)}>1</span>
+            {L('Record lecture', 'Rakam kuliah')}
+          </button>
+          <button onClick={() => onChipClick(2)} style={chipStyle(step === 2)}>
+            <span style={chipNumStyle(step === 2)}>2</span>
+            {L('AI organizes', 'AI menyusun')}
+          </button>
+          <button onClick={() => onChipClick(3)} style={chipStyle(step === 3)}>
+            <span style={chipNumStyle(step === 3)}>3</span>
+            {L('Save to notebook', 'Simpan ke notebook')}
+          </button>
+        </div>
+
+        {/* Device frame */}
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <div style={{
+            background: '#f2f2f4', borderRadius: 28, padding: 14,
+            boxShadow: '0 30px 80px rgba(29,29,31,0.12), 0 10px 30px rgba(29,29,31,0.08)',
+            border: '0.5px solid rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ display: 'flex', gap: 6, padding: '0 8px 12px' }}>
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FF6B6B' }} />
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FFD166' }} />
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#06D6A0' }} />
+            </div>
+            <div style={{
+              background: '#fff', borderRadius: 16, overflow: 'hidden',
+              minHeight: 400, position: 'relative',
+            }}>
+              {step === 1 && <Step1 lang={lang} h={h} m={m} sec={sec} pad={pad} words={words} />}
+              {step === 2 && <Step2 lang={lang} />}
+              {step === 3 && <Step3 lang={lang} nbCount={nbCount} />}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes cc-demo-pulse {
+          0% { opacity: 0.8; transform: scale(1); }
+          100% { opacity: 0; transform: scale(1.5); }
+        }
+        @keyframes cc-demo-blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0.35; }
+        }
+        @keyframes cc-demo-typein {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes cc-demo-spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes cc-demo-fadeup {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes cc-demo-fly {
+          0%   { transform: translateX(0) scale(1); opacity: 1; }
+          50%  { transform: translateX(50%) scale(0.9); opacity: 0.7; }
+          100% { transform: translateX(calc(100% + 14px)) scale(0.85); opacity: 0; }
+        }
+      `}</style>
+    </section>
+  )
+}
+
+function Step1({ lang, h, m, sec, pad, words }: {
+  lang: string; h: number; m: number; sec: number;
+  pad: (n: number) => string; words: number
+}) {
+  const L = (en: string, bm: string) => lang === 'bm' ? bm : en
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 2, textAlign: 'left' }}>
+        Biology — Mitosis
+      </div>
+      <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
+        Dr. Aziz · Hall B · 🇲🇾 {L('Malay', 'Melayu')}
+      </div>
+
+      <div style={{
+        background: '#FFFBFC', border: '0.5px solid rgba(0,0,0,0.06)',
+        borderRadius: 16, padding: 18,
+        display: 'flex', alignItems: 'center', gap: 14,
+        marginBottom: 14, textAlign: 'left',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: 'radial-gradient(circle at 30% 28%, #FFCFDB, #FF8FA8 55%, #E56A88)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, position: 'relative',
+        }}>
+          <span style={{ width: 10, height: 10, background: '#fff', borderRadius: '50%' }} />
+          <span style={{
+            position: 'absolute', inset: -6, borderRadius: '50%',
+            border: '2px solid rgba(255,143,168,0.5)',
+            animation: 'cc-demo-pulse 2s ease-out infinite',
+          }} />
+          <span style={{
+            position: 'absolute', inset: -6, borderRadius: '50%',
+            border: '2px solid rgba(255,143,168,0.5)',
+            animation: 'cc-demo-pulse 2s ease-out infinite',
+            animationDelay: '1s',
+          }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontSize: 28, fontWeight: 300,
+            letterSpacing: '-0.04em',
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}>
+            <span>{pad(h)}</span>
+            <span style={{ animation: 'cc-demo-blink 1s steps(1) infinite' }}>:</span>
+            <span>{pad(m)}</span>
+            <span style={{ animation: 'cc-demo-blink 1s steps(1) infinite' }}>:</span>
+            <span>{pad(sec)}</span>
+          </div>
+          <div style={{
+            fontSize: 11, color: 'rgba(29,29,31,0.5)', marginTop: 4,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: '#E53935',
+              animation: 'cc-demo-blink 1s steps(1) infinite',
+            }} />
+            {L('Listening', 'Mendengar')} · <span style={{ fontVariantNumeric: 'tabular-nums' }}>{words}</span> {L('words', 'patah')}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        background: '#fff', border: '0.5px solid rgba(0,0,0,0.05)',
+        borderRadius: 14, padding: '16px 18px',
+        minHeight: 180, textAlign: 'left',
+        fontSize: 13, color: 'rgba(29,29,31,0.85)', lineHeight: 1.8,
+      }}>
+        <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.4)', letterSpacing: 0.8, marginBottom: 8 }}>
+          📝 {L('TRANSCRIPT (live)', 'TRANSKRIP (langsung)')}
+        </div>
+        {[
+          { text: '- OK students, today kita akan belajar tentang mitosis.', flag: '🇲🇾', delay: 0.3 },
+          { text: '- Mitosis is the process where a cell divides into two identical daughter cells.', flag: '🇬🇧', delay: 1.2 },
+          { text: '- Ada empat fasa — prophase, metaphase, anaphase, telophase.', flag: '🇲🇾', delay: 2.2 },
+          { text: '- Any questions about chromosome alignment?', flag: '🇬🇧', delay: 3.2 },
+        ].map((row, i) => (
+          <div key={i} style={{
+            opacity: 0, animation: 'cc-demo-typein 0.5s ease-out forwards',
+            animationDelay: `${row.delay}s`,
+          }}>
+            {row.text} <span style={{ opacity: 0.6, fontSize: 12 }}>{row.flag}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Step2({ lang }: { lang: string }) {
+  const L = (en: string, bm: string) => lang === 'bm' ? bm : en
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 2, textAlign: 'left' }}>
+        Biology — Mitosis
+      </div>
+      <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
+        {L('AI organizing your notes…', 'AI menyusun nota anda…')}
+      </div>
+
+      <div style={{
+        textAlign: 'center', padding: '30px 0 22px',
+        border: '2px dashed rgba(212,83,126,0.35)',
+        borderRadius: 16,
+        background: 'linear-gradient(180deg, #FFFBFC, #FFF5F7)',
+        marginBottom: 14,
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, #FF6B9D, #C471F5, #5A8FF5, #FF6B9D)',
+          margin: '0 auto 12px',
+          animation: 'cc-demo-spin 2.5s linear infinite',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ width: 38, height: 38, background: '#FFFBFC', borderRadius: '50%' }} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 3 }}>
+          {L('Gemini 2.5 Flash is thinking', 'Gemini 2.5 Flash sedang berfikir')}
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.5)' }}>
+          {L('Extracting topics · key points · formulas · summary', 'Extract topik · key points · formula · ringkasan')}
+        </div>
+      </div>
+
+      {[
+        { t: `✨ ${L('Summary', 'Ringkasan')}`, b: L(
+          'Class covered mitosis — the 4-phase process of cell division that produces two genetically identical daughter cells.',
+          'Kelas membincangkan mitosis — proses pembahagian sel 4-fasa yang menghasilkan dua sel anak yang identikal.'
+        ), delay: 0.4 },
+        { t: `📌 ${L('Topics covered', 'Topik diliputi')}`, b:
+          '1. Introduction to cell division · 2. Four phases of mitosis · 3. Chromosome alignment',
+          delay: 0.8 },
+        { t: `🔑 ${L('Key points', 'Key points')}`, b: L(
+          'Mitosis produces 2 identical daughter cells · Four phases: prophase, metaphase, anaphase, telophase · Chromatids separate during anaphase.',
+          'Mitosis menghasilkan 2 sel anak identikal · Empat fasa: prophase, metaphase, anaphase, telophase · Chromatid berpisah semasa anaphase.'
+        ), delay: 1.2 },
+      ].map((card, i) => (
+        <div key={i} style={{
+          background: '#fff', border: '0.5px solid rgba(0,0,0,0.06)',
+          borderRadius: 14, padding: '14px 16px', textAlign: 'left',
+          marginBottom: 8, opacity: 0,
+          animation: 'cc-demo-fadeup 0.5s ease-out forwards',
+          animationDelay: `${card.delay}s`,
+        }}>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+            marginBottom: 4, letterSpacing: '-0.01em',
+          }}>
+            {card.t}
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.65)', lineHeight: 1.55 }}>
+            {card.b}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Step3({ lang, nbCount }: { lang: string; nbCount: number }) {
+  const L = (en: string, bm: string) => lang === 'bm' ? bm : en
+  return (
+    <div style={{ padding: '24px 28px' }}>
+      <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 2, textAlign: 'left' }}>
+        {L('Add to notebook', 'Tambah ke notebook')}
+      </div>
+      <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
+        {L('Organize by subject or semester', 'Susun ikut subjek atau semester')}
+      </div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 14, height: 330,
+      }}>
+        <div style={{
+          background: '#FAFAFB', border: '0.5px solid rgba(0,0,0,0.06)',
+          borderRadius: 14, padding: 14, textAlign: 'left', overflow: 'hidden',
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
+            letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10,
+          }}>
+            {L('Recent lectures', 'Kuliah terkini')}
+          </div>
+          {[
+            { title: 'Biology — Mitosis', meta: `18 ${L('min · 4 topics', 'min · 4 topik')}`, d: 0.3 },
+            { title: 'Biology — Meiosis', meta: `22 ${L('min · 6 topics', 'min · 6 topik')}`, d: 1.0 },
+            { title: 'Biology — DNA',     meta: `30 ${L('min · 8 topics', 'min · 8 topik')}`, d: 1.7 },
+          ].map((lec, i) => (
+            <div key={i} style={{
+              background: '#fff', border: '0.5px solid rgba(0,0,0,0.05)',
+              borderRadius: 10, padding: '8px 10px', marginBottom: 6,
+              fontSize: 12,
+              animation: 'cc-demo-fly 2s ease-in-out forwards',
+              animationDelay: `${lec.d}s`,
+            }}>
+              <div style={{ fontWeight: 500, color: '#1d1d1f', marginBottom: 1 }}>{lec.title}</div>
+              <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.5)' }}>{lec.meta}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          background: '#FAFAFB', border: '0.5px solid rgba(0,0,0,0.06)',
+          borderRadius: 14, padding: 14, textAlign: 'left', overflow: 'hidden',
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
+            letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10,
+          }}>
+            {L('Notebook', 'Notebook')}
+          </div>
+          <div style={{
+            background: 'linear-gradient(135deg, #FFE5EC, #E5F0FF)',
+            borderRadius: 12, padding: 12,
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 4 }}>📘</div>
+            <div style={{
+              fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+              letterSpacing: '-0.015em',
+            }}>
+              Biology Sem 2
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.6)', marginTop: 2 }}>
+              <span style={{ fontWeight: 700, color: '#5A8FF5' }}>{nbCount}</span> {L('lectures · exam-ready', 'kuliah · siap ujian')}
+            </div>
+          </div>
+          <div style={{
+            fontSize: 10, color: 'rgba(29,29,31,0.45)',
+            marginTop: 14, textAlign: 'center',
+          }}>
+            {L('Export whole notebook as one PDF', 'Eksport semua notebook sebagai satu PDF')}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

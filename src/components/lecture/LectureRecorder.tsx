@@ -219,6 +219,16 @@ export default function LectureRecorder({ id }: { id: string }) {
   const tickRef = useRef<any>(null)
   const recLangRef = useRef<string>('en-US')
   const lectureRef = useRef<Lecture | null>(null)
+  const aiSectionRef = useRef<HTMLDivElement | null>(null)
+
+  // Auto-scroll to AI section whenever loader or result appears
+  useEffect(() => {
+    if (aiProcessing || aiResult) {
+      setTimeout(() => {
+        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+    }
+  }, [aiProcessing, aiResult])
 
   // Load preferred recording language
   useEffect(() => {
@@ -423,8 +433,19 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     }
-    await save(true)
-    await runAI()
+    // Show loader INSTANTLY before save() so user sees feedback
+    setAiResult(null)
+    setAiError(null)
+    setAiUsedProvider(null)
+    setAiProcessing(true)
+
+    try {
+      await save(true)
+      await runAI()
+    } catch (e: any) {
+      setAiError(e.message || 'Failed')
+      setAiProcessing(false)
+    }
   }
 
   const exportMd = () => {
@@ -585,21 +606,59 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* AI SECTION (processing / error / result) — wrapped for scroll target */}
+      <div ref={aiSectionRef} style={{ scrollMarginTop: 16 }}>
+
       {/* AI PROCESSING */}
       {aiProcessing && (
         <div className="fade-in" style={{
-          background: s.soft, padding: 20, borderRadius: 18,
+          background: `linear-gradient(135deg, ${s.soft}, #fff)`,
+          padding: '28px 24px', borderRadius: 22,
           border: `2px dashed ${s.primaryDark}`, marginBottom: 14, textAlign: 'center',
+          boxShadow: '0 10px 30px rgba(212, 83, 126, 0.08)',
         }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🤖</div>
-          <div style={{ fontWeight: 700, color: s.dark, marginBottom: 4 }}>
+          {/* Animated AI orb */}
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            margin: '0 auto 14px',
+            background: `conic-gradient(from 0deg, ${s.primary}, ${s.primaryDark}, ${s.primary})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            animation: 'cc-spin 2.5s linear infinite',
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%',
+              background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22,
+            }}>🤖</div>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 17, color: s.dark, marginBottom: 4 }}>
             {lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
           </div>
-          <div style={{ fontSize: 12, color: s.gray }}>
-            {lang === 'bm' ? 'Biasanya 10-20 saat.' : 'Usually 10-20 seconds.'}
+          <div style={{ fontSize: 13, color: s.gray, marginBottom: 14 }}>
+            {lang === 'bm'
+              ? 'Extracting topik, key points, formula, soalan, dan ringkasan.'
+              : 'Extracting topics, key points, formulas, questions, and summary.'}
           </div>
+
+          {/* Indeterminate progress bar */}
           <div style={{
-            fontSize: 10, color: s.gray, marginTop: 8, opacity: 0.7,
+            maxWidth: 300, margin: '0 auto',
+            height: 4, borderRadius: 999, background: 'rgba(212, 83, 126, 0.12)',
+            overflow: 'hidden', position: 'relative',
+          }}>
+            <div style={{
+              position: 'absolute',
+              height: '100%', width: '40%',
+              borderRadius: 999,
+              background: `linear-gradient(90deg, ${s.primary}, ${s.primaryDark})`,
+              animation: 'cc-slide 1.4s ease-in-out infinite',
+            }} />
+          </div>
+
+          <div style={{
+            fontSize: 11, color: s.gray, marginTop: 14, opacity: 0.7,
             display: 'inline-flex', alignItems: 'center', gap: 6,
           }}>
             <AILogo provider={aiProvider} size={11} />
@@ -607,6 +666,16 @@ export default function LectureRecorder({ id }: { id: string }) {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes cc-spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes cc-slide {
+          0%   { left: -40%; }
+          100% { left: 100%; }
+        }
+      `}</style>
 
       {/* AI ERROR */}
       {aiError && !aiProcessing && (
@@ -673,6 +742,8 @@ export default function LectureRecorder({ id }: { id: string }) {
           )}
         </div>
       )}
+
+      </div>{/* end AI SECTION wrapper */}
 
       {/* RAW TRANSCRIPT */}
       <div style={{
