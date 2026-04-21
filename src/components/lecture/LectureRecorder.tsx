@@ -229,6 +229,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [enhancing, setEnhancing] = useState(false)
   const [enhanceProgress, setEnhanceProgress] = useState<{ done: number; total: number } | null>(null)
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
+  const [audioCaptureOk, setAudioCaptureOk] = useState<boolean | null>(null)
+  const [aiFellBack, setAiFellBack] = useState<boolean>(false)
 
   // Auto-scroll to AI section whenever loader or result appears
   useEffect(() => {
@@ -373,31 +375,68 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
-  // Start MediaRecorder in parallel for Whisper enhancement.
-  // Uses timeslicing so long lectures auto-chunk at the recorder level.
-  const startAudioCapture = async () => {
+  // Start MediaRecorder for Whisper enhancement. Sets audioCaptureOk for UI indicator.
+  // IMPORTANT: On Chrome Android, Web Speech API and MediaRecorder can compete for mic.
+  // We explicitly grab getUserMedia FIRST, hold the stream, then let Web Speech start.
+  const startAudioCapture = async (): Promise<boolean> => {
     try {
-      // Reuse getUserMedia stream (Web Speech uses microphone too but
-      // grabbing a separate stream here is safer cross-browser)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!navigator.mediaDevices?.getUserMedia) {
+        console.warn('[audio] getUserMedia not supported in this browser')
+        setAudioCaptureOk(false)
+        return false
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        console.warn('[audio] MediaRecorder not supported in this browser')
+        setAudioCaptureOk(false)
+        return false
+      }
+
+      // Request with echo cancellation off — we want raw audio for better Whisper accuracy
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
       mediaStreamRef.current = stream
       audioChunksRef.current = []
 
-      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : ''
+      // Pick best supported mime type — Chrome Android prefers webm/opus
+      const mimeCandidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ]
+      const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
+
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
 
       rec.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
+          console.log(`[audio] chunk received: ${(e.data.size / 1024).toFixed(0)}KB, total chunks: ${audioChunksRef.current.length}`)
+        }
       }
-      // 9-minute timeslice: each dataavailable emission = one ~3-4MB chunk,
-      // keeping us well under Whisper's 25MB limit even at higher bitrates.
+      rec.onerror = (e) => {
+        console.error('[audio] MediaRecorder error:', e)
+        setAudioCaptureOk(false)
+      }
+      rec.onstart = () => {
+        console.log('[audio] MediaRecorder started, mime:', mime || 'default')
+        setAudioCaptureOk(true)
+      }
+
+      // 9-minute timeslice — auto-chunk for long lectures
       rec.start(9 * 60 * 1000)
       mediaRecRef.current = rec
-    } catch (e) {
-      console.warn('[audio] MediaRecorder not available — Whisper enhancement disabled:', e)
+      return true
+    } catch (e: any) {
+      console.warn('[audio] startAudioCapture failed:', e.name, e.message)
+      setAudioCaptureOk(false)
       mediaRecRef.current = null
+      return false
     }
   }
 
@@ -423,18 +462,27 @@ export default function LectureRecorder({ id }: { id: string }) {
     })
   }
 
-  const toggle = () => {
+  const toggle = async () => {
     if (recording) {
       stopRecognition()
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     } else {
-      setAiResult(null); setAiError(null); setEnhanceError(null)
+      setAiResult(null); setAiError(null); setEnhanceError(null); setAiFellBack(false)
+      setAudioCaptureOk(null)
+
+      // 1. Start audio capture FIRST — grabs mic exclusively for MediaRecorder
+      const audioOk = await startAudioCapture()
+      console.log('[toggle] audio capture ready:', audioOk)
+
+      // 2. Small delay to let mic settle before Web Speech attaches
+      await new Promise(r => setTimeout(r, 150))
+
+      // 3. Start Web Speech API for live preview
       startRef.current = Date.now()
       recRef.current = startRecognition(recLangRef.current)
-      // Parallel: start audio capture for post-hoc Whisper
-      startAudioCapture()
+
       tickRef.current = setInterval(() => {
         setElapsed(accumRef.current + Math.floor((Date.now() - startRef.current) / 1000))
       }, 500)
@@ -473,7 +521,7 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   const runAI = async () => {
     if (!lecture) return
-    setAiProcessing(true); setAiError(null); setAiUsedProvider(null)
+    setAiProcessing(true); setAiError(null); setAiUsedProvider(null); setAiFellBack(false)
     try {
       const res = await fetch('/api/ai-summarize', {
         method: 'POST',
@@ -482,7 +530,11 @@ export default function LectureRecorder({ id }: { id: string }) {
       })
       const json = await res.json()
       if (!res.ok || !json.ok) setAiError(json.error || 'AI processing failed')
-      else { setAiResult(json.data as AISummary); setAiUsedProvider(json.usedProvider || null) }
+      else {
+        setAiResult(json.data as AISummary)
+        setAiUsedProvider(json.usedProvider || null)
+        setAiFellBack(!!json.fellBack)
+      }
     } catch (e: any) { setAiError(e.message || 'Network error') }
     finally { setAiProcessing(false) }
   }
@@ -678,11 +730,26 @@ export default function LectureRecorder({ id }: { id: string }) {
                 }}>
                   {secondsToClock(elapsed)}
                 </div>
-                <div style={{ fontSize: 11, color: s.gray, marginTop: 4 }}>
-                  {recording
-                    ? <><span style={{ color: '#E53935' }}>●</span> {t('recListening')}</>
-                    : t('recDuration')
-                  } · {wordCount} {t('recWords')}
+                <div style={{ fontSize: 11, color: s.gray, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>
+                    {recording
+                      ? <><span style={{ color: '#E53935' }}>●</span> {t('recListening')}</>
+                      : t('recDuration')
+                    } · {wordCount} {t('recWords')}
+                  </span>
+                  {recording && audioCaptureOk !== null && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 500,
+                      background: audioCaptureOk ? 'rgba(52, 168, 83, 0.1)' : 'rgba(229, 57, 53, 0.1)',
+                      color: audioCaptureOk ? '#2C8545' : '#C62828',
+                    }}>
+                      {audioCaptureOk
+                        ? <>● {lang === 'bm' ? 'Audio direkod' : 'Audio ok'}</>
+                        : <>✗ {lang === 'bm' ? 'Audio gagal' : 'Audio off'}</>
+                      }
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -875,7 +942,22 @@ export default function LectureRecorder({ id }: { id: string }) {
       {/* AI RESULT */}
       {aiResult && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
-          {aiUsedProvider && (
+          {aiFellBack && aiUsedProvider && (
+            <div style={{
+              padding: '10px 14px', marginBottom: 10,
+              background: 'rgba(184, 134, 11, 0.08)',
+              border: '0.5px solid rgba(184, 134, 11, 0.2)',
+              borderRadius: 10,
+              fontSize: 12, color: '#8a6d0f',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span>ℹ</span>
+              {lang === 'bm'
+                ? `AI pilihan anda sibuk — auto-fallback ke ${aiUsedProvider}. Nota tersusun dengan jayanya.`
+                : `Your chosen AI was busy — auto-fell back to ${aiUsedProvider}. Notes organized successfully.`}
+            </div>
+          )}
+          {aiUsedProvider && !aiFellBack && (
             <div style={{
               fontSize: 11, color: s.gray, textAlign: 'right', marginBottom: 6, opacity: 0.7,
               display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5,

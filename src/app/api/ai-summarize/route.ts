@@ -36,12 +36,13 @@ Duration: ${Math.round((lecture.duration_seconds || 0) / 60)} min
 RAW TRANSCRIPT:
 ${truncated}`
 
-    // Priority: request body > user profile > default 'auto'
+    // Priority order: request body > lecture-specific > user profile default > 'auto'
     const provider: AIProvider = requestedProvider
+      || (lecture.ai_provider as AIProvider)
       || (profile?.ai_provider as AIProvider)
       || 'auto'
 
-    const { result, usedProvider } = await callAI(provider, userMessage)
+    const { result, usedProvider, fellBack } = await callAI(provider, userMessage)
 
     await supabase.from('lectures').update({
       summary: JSON.stringify(result),
@@ -49,7 +50,7 @@ ${truncated}`
       updated_at: new Date().toISOString(),
     }).eq('id', lectureId)
 
-    return NextResponse.json({ ok: true, data: result, usedProvider })
+    return NextResponse.json({ ok: true, data: result, usedProvider, fellBack, requestedProvider: provider })
   } catch (e: any) {
     console.error('ai-summarize error:', e)
     return NextResponse.json({ error: e.message || 'unknown error' }, { status: 502 })

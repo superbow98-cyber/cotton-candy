@@ -21,7 +21,7 @@ export const PROVIDER_ORDER: AIProvider[] = [
   'gemini-flash-lite',
 ]
 
-export const DEFAULT_PROVIDER: AIProvider = 'gemini-flash'
+export const DEFAULT_PROVIDER: AIProvider = 'auto'
 
 export const PROVIDER_META: Record<AIProvider, {
   label: string
@@ -160,34 +160,56 @@ async function callGemini(userMessage: string, model: string): Promise<AISummary
   catch { throw new Error('Gemini: malformed JSON') }
 }
 
+// Retry helper — waits and retries once on transient errors (503, 429, network)
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  try {
+    return await fn()
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    const isTransient = /503|429|overload|unavailable|timeout|network|fetch failed/i.test(msg)
+    if (!isTransient) throw e
+    console.warn(`[${label}] transient error, retrying in 2s:`, msg.slice(0, 120))
+    await new Promise(r => setTimeout(r, 2000))
+    return fn()
+  }
+}
+
 // ---------- Main dispatcher ----------
-// Auto fallback order: Gemini Flash → Groq → Gemini Flash-Lite (Gemini first as default preference)
+// Every single-provider call now has retry + auto-fallback.
+// User's chosen provider is attempted first, then fallback chain.
 export async function callAI(
   provider: AIProvider,
   userMessage: string
-): Promise<{ result: AISummary; usedProvider: string }> {
-  if (provider === 'gemini-flash') {
-    return { result: await callGemini(userMessage, 'gemini-2.5-flash'), usedProvider: 'gemini-flash' }
-  }
-  if (provider === 'groq') {
-    return { result: await callGroq(userMessage), usedProvider: 'groq' }
-  }
-  if (provider === 'gemini-flash-lite') {
-    return { result: await callGemini(userMessage, 'gemini-2.5-flash-lite'), usedProvider: 'gemini-flash-lite' }
-  }
-
-  // Auto: Gemini Flash → Groq → Gemini Flash-Lite
-  const chain: Array<{ name: string; fn: () => Promise<AISummary> }> = [
+): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
+  // Build chain: chosen provider first, then other providers as fallback
+  const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
     { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash') },
     { name: 'groq',              fn: () => callGroq(userMessage) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite') },
   ]
+
+  // For specific providers, put the chosen one first + others as fallback
+  let chain: typeof allProviders
+  if (provider === 'gemini-flash') {
+    chain = [allProviders[0], allProviders[1], allProviders[2]]
+  } else if (provider === 'groq') {
+    chain = [allProviders[1], allProviders[0], allProviders[2]]
+  } else if (provider === 'gemini-flash-lite') {
+    chain = [allProviders[2], allProviders[1], allProviders[0]]
+  } else {
+    // 'auto' — default order: Gemini → Groq → Flash-Lite
+    chain = allProviders
+  }
+
   const errors: string[] = []
-  for (const { name, fn } of chain) {
+  for (let i = 0; i < chain.length; i++) {
+    const { name, fn } = chain[i]
     try {
-      return { result: await fn(), usedProvider: name }
+      const result = await withRetry(fn, name)
+      return { result, usedProvider: name, fellBack: i > 0 }
     } catch (e: any) {
-      errors.push(`${name}: ${e.message}`)
+      errors.push(`${name}: ${String(e.message).slice(0, 100)}`)
+      console.warn(`[callAI] ${name} failed:`, e.message)
     }
   }
   throw new Error(`All providers failed. ${errors.join(' | ')}`)
