@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
 import { type Lecture, type TimelineEntry, PLANS } from '@/types'
 import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, secondsToClock } from '@/lib/export'
+import { correctScientificTerms, detectSubject, countCorrections } from '@/lib/scientific-terms'
 
 type Line = { id: string; t: number; text: string; lang?: string; starred?: boolean; topic?: boolean; type?: TimelineEntry['type'] }
 
@@ -51,6 +52,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
   const recLangRef = useRef<string>('en-US')
+  const lectureRef = useRef<Lecture | null>(null)
 
   // Load preferred recording language from localStorage
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (!data) { router.replace('/dashboard/lectures'); return }
       const lec = data as Lecture
       setLecture(lec)
+      lectureRef.current = lec
       if (lec.transcript_md) {
         const parsed: Line[] = []
         let idx = 0
@@ -134,10 +137,16 @@ export default function LectureRecorder({ id }: { id: string }) {
         }
         if (finalText.trim()) {
           const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
+          // Apply scientific term correction using subject hint from lecture metadata
+          const subjectHint = detectSubject(
+            lectureRef.current?.title || '',
+            lectureRef.current?.subject || ''
+          ) ?? undefined
+          const corrected = correctScientificTerms(finalText.trim(), subjectHint)
           setLines((prev) => [...prev, {
             id: `l${Date.now()}${Math.random()}`,
             t: now,
-            text: finalText.trim(),
+            text: corrected,
             lang: recLangRef.current,
           }])
           setInterim('')
@@ -251,6 +260,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         updated_at: new Date().toISOString(),
       }).eq('id', lecture.id)
       setLecture({ ...lecture, transcript_md: md, timeline, keywords, word_count: wordCount, duration_seconds: elapsed })
+      lectureRef.current = { ...lecture, transcript_md: md, timeline, keywords, word_count: wordCount, duration_seconds: elapsed }
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
   }
@@ -277,6 +287,7 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   const wordCount = linesToMd(lines).replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
   const currentLang = RECOGNITION_LANGS.find(l => l.code === recLang) || RECOGNITION_LANGS[0]
+  const detectedSubject = detectSubject(lecture?.title || '', lecture?.subject || '')
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -310,6 +321,17 @@ export default function LectureRecorder({ id }: { id: string }) {
             </strong>
           </span>
           <span style={{ fontSize: 10, opacity: 0.7 }}>
+            {detectedSubject && (
+              <>
+                <span style={{
+                  background: s.soft, color: s.primaryDark,
+                  padding: '2px 6px', borderRadius: 4, marginRight: 6,
+                  fontWeight: 600,
+                }}>
+                  ✨ {lang === 'bm' ? 'Kamus' : 'Dict'}: {detectedSubject}
+                </span>
+              </>
+            )}
             {lang === 'bm' ? 'Tukar bila pensyarah swap bahasa' : 'Switch when lecturer swaps language'}
             {' · '}
             {lang === 'bm' ? 'shortcut' : 'shortcut'}: E/M/C/T/A/I
