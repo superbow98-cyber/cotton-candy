@@ -9,6 +9,7 @@ import { type Lecture, PLANS } from '@/types'
 import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, secondsToClock } from '@/lib/export'
 import { correctScientificTerms, detectSubject } from '@/lib/scientific-terms'
 import { PROVIDER_ORDER, PROVIDER_META, DEFAULT_PROVIDER, type AIProvider } from '@/lib/ai-providers'
+import { transcribeOne, whisperTextToLines } from '@/lib/whisper'
 
 type Line = { id: string; t: number; text: string; lang?: string }
 
@@ -221,6 +222,14 @@ export default function LectureRecorder({ id }: { id: string }) {
   const lectureRef = useRef<Lecture | null>(null)
   const aiSectionRef = useRef<HTMLDivElement | null>(null)
 
+  // --- Whisper enhancement (MediaRecorder parallel, no storage) ---
+  const mediaRecRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const [enhancing, setEnhancing] = useState(false)
+  const [enhanceProgress, setEnhanceProgress] = useState<{ done: number; total: number } | null>(null)
+  const [enhanceError, setEnhanceError] = useState<string | null>(null)
+
   // Auto-scroll to AI section whenever loader or result appears
   useEffect(() => {
     if (aiProcessing || aiResult) {
@@ -364,6 +373,56 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
+  // Start MediaRecorder in parallel for Whisper enhancement.
+  // Uses timeslicing so long lectures auto-chunk at the recorder level.
+  const startAudioCapture = async () => {
+    try {
+      // Reuse getUserMedia stream (Web Speech uses microphone too but
+      // grabbing a separate stream here is safer cross-browser)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      audioChunksRef.current = []
+
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : ''
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      // 9-minute timeslice: each dataavailable emission = one ~3-4MB chunk,
+      // keeping us well under Whisper's 25MB limit even at higher bitrates.
+      rec.start(9 * 60 * 1000)
+      mediaRecRef.current = rec
+    } catch (e) {
+      console.warn('[audio] MediaRecorder not available — Whisper enhancement disabled:', e)
+      mediaRecRef.current = null
+    }
+  }
+
+  const stopAudioCapture = (): Promise<Blob[]> => {
+    return new Promise((resolve) => {
+      const rec = mediaRecRef.current
+      if (!rec || rec.state === 'inactive') {
+        // Cleanup stream
+        mediaStreamRef.current?.getTracks().forEach(t => t.stop())
+        mediaStreamRef.current = null
+        resolve([])
+        return
+      }
+      rec.onstop = () => {
+        const chunks = audioChunksRef.current.slice()
+        audioChunksRef.current = []
+        mediaRecRef.current = null
+        mediaStreamRef.current?.getTracks().forEach(t => t.stop())
+        mediaStreamRef.current = null
+        resolve(chunks)
+      }
+      rec.stop()
+    })
+  }
+
   const toggle = () => {
     if (recording) {
       stopRecognition()
@@ -371,9 +430,11 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     } else {
-      setAiResult(null); setAiError(null)
+      setAiResult(null); setAiError(null); setEnhanceError(null)
       startRef.current = Date.now()
       recRef.current = startRecognition(recLangRef.current)
+      // Parallel: start audio capture for post-hoc Whisper
+      startAudioCapture()
       tickRef.current = setInterval(() => {
         setElapsed(accumRef.current + Math.floor((Date.now() - startRef.current) / 1000))
       }, 500)
@@ -433,12 +494,51 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     }
-    // Show loader INSTANTLY before save() so user sees feedback
+
+    // Stop audio capture and collect chunks
+    const chunks = await stopAudioCapture()
+
     setAiResult(null)
     setAiError(null)
     setAiUsedProvider(null)
-    setAiProcessing(true)
+    setEnhanceError(null)
 
+    // --- Step 1: enhance transcript with Whisper (if audio captured) ---
+    if (chunks.length > 0) {
+      setEnhancing(true)
+      setEnhanceProgress({ done: 0, total: chunks.length })
+      try {
+        const texts: string[] = []
+        // Sequential to respect rate limits + clear progress UI
+        for (let i = 0; i < chunks.length; i++) {
+          const result = await transcribeOne(chunks[i])
+          texts.push(result.text || '')
+          setEnhanceProgress({ done: i + 1, total: chunks.length })
+        }
+        const combined = texts.join('\n').trim()
+
+        if (combined.length > 20) {
+          // Replace Web Speech lines with Whisper-derived lines
+          const whisperLines = whisperTextToLines(combined, elapsed)
+          if (whisperLines.length > 0) {
+            setLines(whisperLines)
+          }
+        }
+      } catch (e: any) {
+        console.warn('[whisper] Enhancement failed, keeping Web Speech transcript:', e)
+        setEnhanceError(
+          lang === 'bm'
+            ? 'Whisper gagal — guna transkrip live sahaja.'
+            : 'Whisper enhance failed — using live transcript.',
+        )
+      } finally {
+        setEnhancing(false)
+        setEnhanceProgress(null)
+      }
+    }
+
+    // --- Step 2: save + run AI ---
+    setAiProcessing(true)
     try {
       await save(true)
       await runAI()
@@ -484,56 +584,52 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* LANGUAGE SWITCHER */}
+      {/* AUTO-DETECT LANGUAGE BANNER (replaces manual pills) */}
       <div style={{
-        background: '#fff', padding: '12px 16px', borderRadius: 16,
-        border: `1px solid ${s.border}`, marginBottom: 14,
+        background: '#fff',
+        border: '0.5px solid rgba(0,0,0,0.06)',
+        borderRadius: 12,
+        padding: '12px 16px',
+        marginBottom: 14,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 10,
       }}>
-        <div style={{
-          fontSize: 11, color: s.gray, marginBottom: 8, letterSpacing: 0.5,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          flexWrap: 'wrap', gap: 6,
-        }}>
-          <span>
-            🎤 {lang === 'bm' ? 'BAHASA SEDANG DENGAR' : 'LISTENING LANGUAGE'}:
-            <strong style={{ color: s.dark, marginLeft: 6 }}>{currentLang.flag} {currentLang.sub}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          <span style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: 'linear-gradient(135deg, #FFB7C5, #D4537E)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
           </span>
-          <span style={{ fontSize: 10, opacity: 0.7 }}>
-            {detectedSubject && (
-              <span style={{
-                background: s.soft, color: s.primaryDark,
-                padding: '2px 6px', borderRadius: 4, marginRight: 6, fontWeight: 600,
-              }}>
-                ✨ {lang === 'bm' ? 'Kamus' : 'Dict'}: {detectedSubject}
-              </span>
-            )}
-            shortcut: E/M/C/T/A/I
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#1d1d1f', letterSpacing: '-0.01em' }}>
+              {lang === 'bm' ? 'Auto-detect bahasa' : 'Auto-detect language'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', marginTop: 1 }}>
+              {lang === 'bm'
+                ? 'Cakap rojak BM, EN, 中文, Tamil, Arab — Whisper handle semua.'
+                : 'Speak rojak BM, EN, 中文, Tamil, Arabic — Whisper handles all.'}
+            </div>
+          </div>
+        </div>
+        {detectedSubject && (
+          <span style={{
+            fontSize: 10.5, fontWeight: 600,
+            background: 'rgba(29,29,31,0.06)',
+            color: 'rgba(29,29,31,0.65)',
+            padding: '3px 9px', borderRadius: 100,
+            letterSpacing: '-0.005em',
+            whiteSpace: 'nowrap',
+          }}>
+            {lang === 'bm' ? 'Kamus' : 'Dict'}: {detectedSubject}
           </span>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {RECOGNITION_LANGS.map((l) => {
-            const active = l.code === recLang
-            return (
-              <button
-                key={l.code}
-                onClick={() => swapLanguage(l.code)}
-                title={`${l.sub} (${l.key.toUpperCase()})`}
-                style={{
-                  background: active ? s.primary : s.soft,
-                  color: active ? s.dark : s.gray,
-                  border: `1.5px solid ${active ? s.primaryDark : s.border}`,
-                  borderRadius: 999, padding: '6px 12px',
-                  fontSize: 13, fontWeight: active ? 700 : 500,
-                  cursor: 'pointer', transition: 'all 0.1s',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{l.flag}</span>
-                <span>{l.label}</span>
-              </button>
-            )
-          })}
-        </div>
+        )}
       </div>
 
       {/* RECORDER CARD — record | [timer + AI chip] | finish */}
@@ -584,7 +680,7 @@ export default function LectureRecorder({ id }: { id: string }) {
                 </div>
                 <div style={{ fontSize: 11, color: s.gray, marginTop: 4 }}>
                   {recording
-                    ? <>🔴 {t('recListening')} · {currentLang.flag} {currentLang.sub}</>
+                    ? <><span style={{ color: '#E53935' }}>●</span> {t('recListening')}</>
                     : t('recDuration')
                   } · {wordCount} {t('recWords')}
                 </div>
@@ -610,6 +706,74 @@ export default function LectureRecorder({ id }: { id: string }) {
           </Button>
         </div>
       </div>
+
+      {/* WHISPER ENHANCE LOADER */}
+      {enhancing && (
+        <div className="fade-in" style={{
+          background: 'linear-gradient(135deg, #FFFBFC, #fff)',
+          padding: '22px 22px',
+          borderRadius: 14,
+          border: '0.5px solid rgba(212, 83, 126, 0.25)',
+          marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 16,
+        }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: '50%',
+            background: 'conic-gradient(from 0deg, #FF6B9D, #C471F5, #5A8FF5, #FF6B9D)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            animation: 'cc-whisper-spin 2.5s linear infinite',
+            flexShrink: 0,
+          }}>
+            <div style={{ width: 32, height: 32, background: '#fff', borderRadius: '50%' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 14, fontWeight: 600, color: '#1d1d1f',
+              letterSpacing: '-0.015em', marginBottom: 3,
+            }}>
+              {lang === 'bm' ? 'Whisper sedang perbaiki transkrip…' : 'Whisper is enhancing your transcript…'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', marginBottom: 10 }}>
+              {lang === 'bm'
+                ? 'Auto-detect bahasa, betulkan rojak, ~95% tepat.'
+                : 'Auto-detecting languages, fixing rojak, ~95% accurate.'}
+              {enhanceProgress && enhanceProgress.total > 1 && (
+                <> · {enhanceProgress.done}/{enhanceProgress.total}</>
+              )}
+            </div>
+            <div style={{
+              height: 3, borderRadius: 999,
+              background: 'rgba(212, 83, 126, 0.12)', overflow: 'hidden',
+              position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute', height: '100%',
+                width: enhanceProgress ? `${(enhanceProgress.done / enhanceProgress.total) * 100}%` : '40%',
+                borderRadius: 999,
+                background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
+                transition: 'width 0.4s ease',
+                animation: enhanceProgress ? 'none' : 'cc-whisper-slide 1.4s ease-in-out infinite',
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WHISPER ENHANCE ERROR (non-blocking — we fall back to Web Speech) */}
+      {enhanceError && !enhancing && (
+        <div style={{
+          background: '#fff9e6',
+          border: '0.5px solid rgba(184, 134, 11, 0.25)',
+          borderRadius: 10,
+          padding: '10px 14px',
+          marginBottom: 12,
+          fontSize: 12, color: '#8a6d0f',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span>⚠</span>
+          {enhanceError}
+        </div>
+      )}
 
       {/* AI SECTION (processing / error / result) — wrapped for scroll target */}
       <div ref={aiSectionRef} style={{ scrollMarginTop: 16 }}>
@@ -679,6 +843,13 @@ export default function LectureRecorder({ id }: { id: string }) {
         @keyframes cc-slide {
           0%   { left: -40%; }
           100% { left: 100%; }
+        }
+        @keyframes cc-whisper-spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes cc-whisper-slide {
+          0%   { left: -40%; width: 40%; }
+          100% { left: 100%; width: 40%; }
         }
       `}</style>
 
