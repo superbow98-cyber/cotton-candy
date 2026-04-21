@@ -30,44 +30,39 @@ export default function Button({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    fontWeight: 700,
-    borderRadius: 999,
-    border: '2px solid transparent',
+    gap: 6,
+    fontWeight: 500,
+    borderRadius: 9,
+    border: 'none',
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.55 : 1,
-    transition: 'transform 0.06s ease, box-shadow 0.06s ease, background 0.15s ease',
-    letterSpacing: 0.2,
+    transition: 'all 0.15s ease',
+    letterSpacing: '-0.01em',
     userSelect: 'none',
+    fontFamily: 'inherit',
   }
   const sizes: Record<Size, React.CSSProperties> = {
-    sm: { padding: '8px 16px', fontSize: 13 },
-    md: { padding: '12px 22px', fontSize: 15 },
-    lg: { padding: '16px 32px', fontSize: 17 },
+    sm: { padding: '7px 13px', fontSize: 12.5 },
+    md: { padding: '9px 16px', fontSize: 13 },
+    lg: { padding: '12px 22px', fontSize: 14 },
   }
   const variants: Record<Variant, React.CSSProperties> = {
     primary: {
-      background: s.primary,
-      color: s.dark,
-      borderColor: s.primaryDark,
-      boxShadow: `0 6px 0 ${s.primaryDark}`,
+      background: '#1d1d1f',
+      color: '#fff',
     },
     ghost: {
       background: 'transparent',
-      color: s.dark,
-      borderColor: 'transparent',
+      color: '#1d1d1f',
     },
     dark: {
-      background: s.dark,
+      background: '#1d1d1f',
       color: '#fff',
-      borderColor: s.dark,
-      boxShadow: `0 6px 0 #000`,
     },
     outline: {
       background: '#fff',
-      color: s.dark,
-      borderColor: s.primaryDark,
-      boxShadow: `0 4px 0 ${s.primaryDark}`,
+      color: '#1d1d1f',
+      border: '0.5px solid rgba(0,0,0,0.08)',
     },
   }
 
@@ -78,9 +73,16 @@ export default function Button({
       disabled={disabled}
       className={className}
       style={{ ...base, ...sizes[size], ...variants[variant], ...style }}
-      onMouseDown={(e) => { if (!disabled) (e.currentTarget.style.transform = 'translateY(2px)') }}
-      onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)' }}
+      onMouseEnter={(e) => {
+        if (disabled) return
+        if (variant === 'primary' || variant === 'dark') e.currentTarget.style.background = '#000'
+        else if (variant === 'outline') e.currentTarget.style.background = 'rgba(0,0,0,0.03)'
+        else if (variant === 'ghost') e.currentTarget.style.background = 'rgba(0,0,0,0.04)'
+      }}
+      onMouseLeave={(e) => {
+        if (disabled) return
+        e.currentTarget.style.background = variants[variant].background as string
+      }}
     >
       {children}
     </button>

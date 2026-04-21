@@ -470,9 +470,12 @@ export default function LectureRecorder({ id }: { id: string }) {
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
         <div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(22px, 4vw, 32px)', margin: 0 }}>{lecture.title}</h1>
-          <div style={{ fontSize: 12, color: s.gray, marginTop: 4 }}>
-            {lecture.subject} {lecture.lecturer && `· ${lecture.lecturer}`} {lecture.location && `· ${lecture.location}`}
+          <h1 style={{
+            fontSize: 'clamp(20px, 3vw, 24px)', margin: 0,
+            fontWeight: 600, letterSpacing: '-0.025em', color: '#1d1d1f',
+          }}>{lecture.title}</h1>
+          <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.55)', marginTop: 2 }}>
+            {[lecture.subject, lecture.lecturer, lecture.location].filter(Boolean).join(' · ') || '—'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -572,8 +575,10 @@ export default function LectureRecorder({ id }: { id: string }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
               <div>
                 <div style={{
-                  fontSize: 28, fontFamily: 'Georgia, serif', fontWeight: 700, lineHeight: 1,
+                  fontSize: 32, fontWeight: 300, lineHeight: 1,
+                  letterSpacing: '-0.04em',
                   fontVariantNumeric: 'tabular-nums',
+                  color: '#1d1d1f',
                 }}>
                   {secondsToClock(elapsed)}
                 </div>
@@ -728,7 +733,7 @@ export default function LectureRecorder({ id }: { id: string }) {
           )}
           {aiResult.formulas?.length > 0 && (
             <Section icon="📐" title={lang === 'bm' ? 'Formula' : 'Formulas'} s={s}>
-              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8, fontFamily: 'Georgia, serif' }}>
+              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}>
                 {aiResult.formulas.map((f, i) => <li key={i}>{f}</li>)}
               </ul>
             </Section>
@@ -747,14 +752,17 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       {/* RAW TRANSCRIPT */}
       <div style={{
-        background: '#fff', padding: 22, borderRadius: 20,
-        border: `1px solid ${s.border}`, minHeight: 200,
+        background: '#fff', padding: '18px 20px', borderRadius: 14,
+        border: '0.5px solid rgba(0,0,0,0.06)', minHeight: 200,
       }}>
-        <div style={{ fontSize: 11, color: s.gray, letterSpacing: 1, marginBottom: 12 }}>
-          📝 {lang === 'bm' ? 'TRANSKRIP' : 'TRANSCRIPT'}
+        <div style={{
+          fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
+          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12,
+        }}>
+          {lang === 'bm' ? 'Transkrip' : 'Transcript'}
         </div>
         {lines.length === 0 && !interim && (
-          <div style={{ color: s.gray, fontStyle: 'italic', padding: 20, textAlign: 'center' }}>
+          <div style={{ color: 'rgba(29,29,31,0.5)', fontStyle: 'italic', padding: 20, textAlign: 'center', fontSize: 13 }}>
             {recording ? '…' : t('recStart')}
           </div>
         )}
@@ -762,16 +770,16 @@ export default function LectureRecorder({ id }: { id: string }) {
           {lines.map((l) => {
             const langInfo = l.lang ? RECOGNITION_LANGS.find(x => x.code === l.lang) : null
             return (
-              <div key={l.id} className="fade-in" style={{ padding: '4px 0' }}>
+              <div key={l.id} className="fade-in" style={{ padding: '4px 0', fontSize: 13, color: 'rgba(29,29,31,0.85)', lineHeight: 1.75 }}>
                 - {l.text}
-                <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
+                <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginLeft: 6 }}>
                   {l.t ? `[${secondsToClock(l.t)}]` : ''}{langInfo && ` ${langInfo.flag}`}
                 </span>
               </div>
             )
           })}
           {interim && (
-            <div style={{ color: s.gray, fontStyle: 'italic', padding: '4px 0' }}>{interim}…</div>
+            <div style={{ color: 'rgba(29,29,31,0.5)', fontStyle: 'italic', padding: '4px 0', fontSize: 13 }}>{interim}…</div>
           )}
         </div>
       </div>
@@ -779,7 +787,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       {!aiProcessing && !aiResult && !recording && lines.length > 0 && !aiError && (
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <Button onClick={runAI} variant="outline">
-            🤖 {lang === 'bm' ? 'Susun nota dengan AI' : 'Organize with AI'}
+            {lang === 'bm' ? 'Susun nota dengan AI' : 'Organize with AI'}
           </Button>
         </div>
       )}
@@ -792,12 +800,14 @@ function Section({ icon, title, children, s }: {
 }) {
   return (
     <section style={{
-      background: '#fff', padding: 20, borderRadius: 18,
-      border: `1px solid ${s.border}`, marginBottom: 12,
+      background: '#fff', padding: '16px 18px', borderRadius: 14,
+      border: '0.5px solid rgba(0,0,0,0.06)', marginBottom: 10,
     }}>
       <h3 style={{
-        fontFamily: 'Georgia, serif', fontSize: 17, fontWeight: 700,
-        margin: '0 0 12px', color: s.dark,
+        fontSize: 12, fontWeight: 600,
+        color: 'rgba(29,29,31,0.55)',
+        textTransform: 'uppercase', letterSpacing: '0.5px',
+        margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6,
       }}>
         {icon} {title}
       </h3>
