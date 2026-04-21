@@ -5,6 +5,7 @@ import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
 import { type Lecture, type Profile, PLANS } from '@/types'
+import { getRecordingTypeMeta } from '@/lib/recording-types'
 import { Icon } from '@/components/ui/Icon'
 
 // AI logo resolver — small brand chip
@@ -171,11 +172,13 @@ export default function DashboardHome() {
               : 'No lectures yet. Click "New lecture" to get started.'}
           </div>
         ) : (
-          lectures.map((l, i) => (
+          lectures.map((l, i) => {
+            const typeMeta = getRecordingTypeMeta(l.recording_type)
+            return (
             <Link key={l.id} href={`/dashboard/lectures/${l.id}`} style={{
               display: 'grid',
-              gridTemplateColumns: '1fr auto auto',
-              alignItems: 'center', gap: 14,
+              gridTemplateColumns: '1fr auto auto auto',
+              alignItems: 'center', gap: 10,
               padding: '12px 0',
               borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)',
               textDecoration: 'none', color: 'inherit',
@@ -196,6 +199,15 @@ export default function DashboardHome() {
                   {l.subject && <><span style={{ width: 2, height: 2, borderRadius: '50%', background: 'rgba(29,29,31,0.3)' }} />{l.subject}</>}
                 </div>
               </div>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '2px 8px', borderRadius: 6,
+                fontSize: 10.5, fontWeight: 500,
+                background: typeMeta.bg, color: typeMeta.color,
+                whiteSpace: 'nowrap',
+              }}>
+                {typeMeta.label[lang as 'en' | 'bm'] || typeMeta.label.en}
+              </span>
               {l.ai_provider && (
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -221,7 +233,8 @@ export default function DashboardHome() {
                 {fmtDate(l.created_at)}
               </div>
             </Link>
-          ))
+            )
+          })
         )}
       </div>
 

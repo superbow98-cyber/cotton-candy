@@ -10,6 +10,7 @@ import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, seconds
 import { correctScientificTerms, detectSubject } from '@/lib/scientific-terms'
 import { PROVIDER_ORDER, PROVIDER_META, DEFAULT_PROVIDER, type AIProvider } from '@/lib/ai-providers'
 import { transcribeOne, whisperTextToLines } from '@/lib/whisper'
+import { getRecordingTypeMeta, SECTION_LABELS } from '@/lib/recording-types'
 
 type Line = { id: string; t: number; text: string; lang?: string }
 
@@ -966,38 +967,42 @@ export default function LectureRecorder({ id }: { id: string }) {
             </div>
           )}
           {aiResult.summary && (
-            <Section icon="✨" title={lang === 'bm' ? 'Ringkasan' : 'Summary'} s={s}>
+            <Section icon="✨" title={SECTION_LABELS.summary[lang as 'en' | 'bm']} s={s}>
               <p style={{ margin: 0, lineHeight: 1.7, fontSize: 15 }}>{aiResult.summary}</p>
             </Section>
           )}
-          {aiResult.topics?.length > 0 && (
-            <Section icon="📌" title={lang === 'bm' ? 'Topik diliputi' : 'Topics covered'} s={s}>
-              <ol style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
-                {aiResult.topics.map((t, i) => <li key={i}>{t}</li>)}
-              </ol>
-            </Section>
-          )}
-          {aiResult.keyPoints?.length > 0 && (
-            <Section icon="🔑" title={lang === 'bm' ? 'Key points' : 'Key points'} s={s}>
-              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8 }}>
-                {aiResult.keyPoints.map((k, i) => <li key={i}>{k}</li>)}
-              </ul>
-            </Section>
-          )}
-          {aiResult.formulas?.length > 0 && (
-            <Section icon="📐" title={lang === 'bm' ? 'Formula' : 'Formulas'} s={s}>
-              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}>
-                {aiResult.formulas.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </Section>
-          )}
-          {aiResult.questions?.length > 0 && (
-            <Section icon="❓" title={lang === 'bm' ? 'Soalan' : 'Questions'} s={s}>
-              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8 }}>
-                {aiResult.questions.map((q, i) => <li key={i}>{q}</li>)}
-              </ul>
-            </Section>
-          )}
+          {/* Dynamic sections from recording type config */}
+          {(() => {
+            const typeMeta = getRecordingTypeMeta(lecture?.recording_type)
+            return typeMeta.sections
+              .filter(key => key !== 'summary')  // already rendered above
+              .map(key => {
+                const items = (aiResult as any)[key] as string[] | undefined
+                if (!items || items.length === 0) return null
+                const label = SECTION_LABELS[key]?.[lang as 'en' | 'bm'] || key
+                const isFormula = key === 'formulas'
+                const isQuotes = key === 'quotes'
+                const Listing = (
+                  <ul style={{
+                    margin: 0, paddingLeft: 24, lineHeight: 1.8,
+                    ...(isFormula ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 } : {}),
+                    ...(isQuotes ? { fontStyle: 'italic', listStyle: 'none', paddingLeft: 0 } : {}),
+                  }}>
+                    {items.map((it, i) => (
+                      <li key={i} style={isQuotes ? { borderLeft: '2px solid rgba(0,0,0,0.1)', paddingLeft: 12, marginBottom: 8 } : undefined}>
+                        {isQuotes ? `"${it}"` : it}
+                      </li>
+                    ))}
+                  </ul>
+                )
+                return (
+                  <Section key={key} icon="" title={label} s={s}>
+                    {Listing}
+                  </Section>
+                )
+              })
+              .filter(Boolean)
+          })()}
         </div>
       )}
 

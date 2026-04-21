@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useLang } from '@/lib/i18n/LangProvider'
-import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
 import { type Lecture } from '@/types'
+import { RECORDING_TYPES, getRecordingTypeMeta, type RecordingType } from '@/lib/recording-types'
 import { Icon } from '@/components/ui/Icon'
 
 function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
@@ -40,12 +40,27 @@ const aiShort: Record<string, string> = {
   'auto': 'Auto',
 }
 
+// Type tag component — colored pill matching recording-types config
+function TypeTag({ type, lang }: { type: string | null; lang: string }) {
+  const meta = getRecordingTypeMeta(type || 'lecture')
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 8px', borderRadius: 6,
+      fontSize: 10.5, fontWeight: 500,
+      letterSpacing: '-0.005em',
+      background: meta.bg, color: meta.color,
+    }}>
+      {meta.label[lang as 'en' | 'bm'] || meta.label.en}
+    </span>
+  )
+}
+
 export default function LecturesList() {
   const { lang } = useLang()
-  const { tokens: s } = useTheme()
   const [all, setAll] = useState<Lecture[]>([])
   const [q, setQ] = useState('')
-  const [activeSubject, setActiveSubject] = useState<string>('__all__')
+  const [activeType, setActiveType] = useState<string>('__all__')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -60,22 +75,20 @@ export default function LecturesList() {
     })()
   }, [])
 
-  const subjects = useMemo(() => {
+  // Counts per type for filter pills
+  const typeCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     all.forEach((l) => {
-      const k = l.subject?.trim() || (lang === 'bm' ? 'Tanpa subjek' : 'Unsorted')
-      counts[k] = (counts[k] || 0) + 1
+      const t = l.recording_type || 'lecture'
+      counts[t] = (counts[t] || 0) + 1
     })
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])
-  }, [all, lang])
+    return counts
+  }, [all])
 
   const filtered = useMemo(() => {
     let list = all
-    if (activeSubject !== '__all__') {
-      list = list.filter((l) => {
-        const s = l.subject?.trim() || (lang === 'bm' ? 'Tanpa subjek' : 'Unsorted')
-        return s === activeSubject
-      })
+    if (activeType !== '__all__') {
+      list = list.filter((l) => (l.recording_type || 'lecture') === activeType)
     }
     if (q) {
       const lc = q.toLowerCase()
@@ -86,7 +99,7 @@ export default function LecturesList() {
       )
     }
     return list
-  }, [all, q, activeSubject, lang])
+  }, [all, q, activeType])
 
   const fmtDate = (iso: string) => {
     const d = new Date(iso)
@@ -113,7 +126,7 @@ export default function LecturesList() {
             {lang === 'bm' ? 'Kuliah' : 'Lectures'}
           </h1>
           <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.55)', marginTop: 2 }}>
-            {lang === 'bm' ? 'Semua rakaman anda, tersusun.' : 'All your recordings, organized.'}
+            {lang === 'bm' ? 'Semua rakaman anda, mengikut jenis.' : 'All your recordings, by type.'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -131,7 +144,6 @@ export default function LecturesList() {
                 border: '0.5px solid rgba(0,0,0,0.08)',
                 borderRadius: 9, fontSize: 13,
                 color: '#1d1d1f',
-                letterSpacing: '-0.005em',
                 outline: 'none', fontFamily: 'inherit',
               }}
             />
@@ -148,20 +160,22 @@ export default function LecturesList() {
         </div>
       </div>
 
-      {/* FILTER PILLS */}
-      {subjects.length > 0 && (
+      {/* FILTER PILLS BY TYPE */}
+      {all.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
           <FilterPill
-            active={activeSubject === '__all__'}
-            onClick={() => setActiveSubject('__all__')}
+            active={activeType === '__all__'}
+            onClick={() => setActiveType('__all__')}
             label={`${lang === 'bm' ? 'Semua' : 'All'} · ${all.length}`}
           />
-          {subjects.map(([sub, count]) => (
+          {RECORDING_TYPES.filter(t => (typeCounts[t.id] || 0) > 0).map((t) => (
             <FilterPill
-              key={sub}
-              active={activeSubject === sub}
-              onClick={() => setActiveSubject(sub)}
-              label={`${sub} · ${count}`}
+              key={t.id}
+              active={activeType === t.id}
+              onClick={() => setActiveType(t.id)}
+              label={`${t.label[lang as 'en' | 'bm'] || t.label.en} · ${typeCounts[t.id]}`}
+              accentBg={t.bg}
+              accentColor={t.color}
             />
           ))}
         </div>
@@ -178,14 +192,15 @@ export default function LecturesList() {
           padding: '12px 16px',
           borderBottom: '0.5px solid rgba(0,0,0,0.05)',
           display: 'grid',
-          gridTemplateColumns: '1fr 120px 80px 80px',
+          gridTemplateColumns: '1fr 100px 110px 80px 80px',
           gap: 14,
           fontSize: 11, fontWeight: 600,
           color: 'rgba(29,29,31,0.5)',
           textTransform: 'uppercase', letterSpacing: '0.5px',
         }}>
           <span>{lang === 'bm' ? 'Tajuk' : 'Title'}</span>
-          <span>{lang === 'bm' ? 'Model AI' : 'AI model'}</span>
+          <span>{lang === 'bm' ? 'Jenis' : 'Type'}</span>
+          <span>{lang === 'bm' ? 'AI' : 'AI'}</span>
           <span>{lang === 'bm' ? 'Tempoh' : 'Duration'}</span>
           <span>{lang === 'bm' ? 'Tarikh' : 'Date'}</span>
         </div>
@@ -196,7 +211,7 @@ export default function LecturesList() {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'rgba(29,29,31,0.5)', fontSize: 13 }}>
-            {q || activeSubject !== '__all__'
+            {q || activeType !== '__all__'
               ? (lang === 'bm' ? 'Takda kuliah sepadan.' : 'No lectures match.')
               : (lang === 'bm' ? 'Belum ada kuliah.' : 'No lectures yet.')}
           </div>
@@ -204,14 +219,14 @@ export default function LecturesList() {
           filtered.map((l, i) => (
             <Link key={l.id} href={`/dashboard/lectures/${l.id}`} style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 120px 80px 80px',
+              gridTemplateColumns: '1fr 100px 110px 80px 80px',
               gap: 14,
               padding: '12px 16px',
               borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)',
               fontSize: 13,
               alignItems: 'center',
               textDecoration: 'none', color: 'inherit',
-            }} className="cc-lecture-row">
+            }} className="cc-session-row">
               <div style={{ minWidth: 0 }}>
                 <div style={{
                   fontWeight: 500, color: '#1d1d1f',
@@ -222,6 +237,9 @@ export default function LecturesList() {
                 <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.5)', marginTop: 2 }}>
                   {[l.lecturer, l.location, l.subject].filter(Boolean).join(' · ') || '—'}
                 </div>
+              </div>
+              <div>
+                <TypeTag type={l.recording_type} lang={lang} />
               </div>
               <div>
                 {l.ai_provider ? (
@@ -252,11 +270,12 @@ export default function LecturesList() {
 
       <style jsx>{`
         @media (max-width: 768px) {
-          :global(.cc-lecture-row) {
+          :global(.cc-session-row) {
             grid-template-columns: 1fr auto !important;
           }
-          :global(.cc-lecture-row) > *:nth-child(3),
-          :global(.cc-lecture-row) > *:nth-child(4) {
+          :global(.cc-session-row) > *:nth-child(3),
+          :global(.cc-session-row) > *:nth-child(4),
+          :global(.cc-session-row) > *:nth-child(5) {
             display: none;
           }
         }
@@ -265,13 +284,16 @@ export default function LecturesList() {
   )
 }
 
-function FilterPill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function FilterPill({ active, onClick, label, accentBg, accentColor }: {
+  active: boolean; onClick: () => void; label: string;
+  accentBg?: string; accentColor?: string;
+}) {
   return (
     <button onClick={onClick} style={{
       padding: '5px 11px',
-      background: active ? '#1d1d1f' : '#fff',
+      background: active ? '#1d1d1f' : (accentBg || '#fff'),
       border: `0.5px solid ${active ? '#1d1d1f' : 'rgba(0,0,0,0.08)'}`,
-      color: active ? '#fff' : 'rgba(29,29,31,0.7)',
+      color: active ? '#fff' : (accentColor || 'rgba(29,29,31,0.7)'),
       borderRadius: 7,
       fontSize: 11.5, fontWeight: 500,
       cursor: 'pointer', letterSpacing: '-0.005em',

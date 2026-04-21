@@ -4,7 +4,18 @@ import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { createClient } from '@/lib/supabase/client'
 import { PLANS } from '@/types'
+import { RECORDING_TYPES, type RecordingType } from '@/lib/recording-types'
 import { Icon } from '@/components/ui/Icon'
+
+// Type icons map
+const TYPE_ICONS: Record<RecordingType, JSX.Element> = {
+  lecture: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+  meeting: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  sv: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>,
+  postmortem: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>,
+  interview: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
+  custom: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+}
 
 // Field defined OUTSIDE parent to avoid losing input focus on re-render
 function Field({
@@ -14,12 +25,12 @@ function Field({
   placeholder?: string; hint?: string;
 }) {
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 14 }}>
       <label style={{
         display: 'block',
         fontSize: 11.5, fontWeight: 500,
         color: 'rgba(29,29,31,0.55)',
-        letterSpacing: '-0.005em', marginBottom: 6,
+        marginBottom: 6,
       }}>{label}</label>
       <input
         value={value}
@@ -30,7 +41,7 @@ function Field({
           background: '#f5f5f7',
           border: '0.5px solid rgba(0,0,0,0.08)',
           borderRadius: 10, fontSize: 13.5,
-          color: '#1d1d1f', letterSpacing: '-0.005em',
+          color: '#1d1d1f',
           fontFamily: 'inherit', outline: 'none',
           transition: 'all 0.15s',
         }}
@@ -53,14 +64,32 @@ function Field({
 }
 
 export default function NewLecture() {
-  const { t, lang } = useLang()
+  const { lang } = useLang()
   const router = useRouter()
+  const [type, setType] = useState<RecordingType>('lecture')
   const [title, setTitle] = useState('')
   const [subject, setSubject] = useState('')
   const [lecturer, setLecturer] = useState('')
   const [location, setLocation] = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // Field labels adapt to type
+  const isMeeting = type === 'meeting' || type === 'sv'
+  const isPostmortem = type === 'postmortem'
+  const isInterview = type === 'interview'
+
+  const labels = {
+    title:    lang === 'bm' ? 'Tajuk' : 'Title',
+    subject:  isMeeting    ? (lang === 'bm' ? 'Projek / Topik' : 'Project / Topic')
+            : isPostmortem ? (lang === 'bm' ? 'Acara' : 'Event')
+            : isInterview  ? (lang === 'bm' ? 'Tema' : 'Theme')
+            : (lang === 'bm' ? 'Subjek' : 'Subject'),
+    person:   isMeeting    ? (lang === 'bm' ? 'Hadirin (pilihan)' : 'Attendees (optional)')
+            : isInterview  ? (lang === 'bm' ? 'Interviewee (pilihan)' : 'Interviewee (optional)')
+            : (lang === 'bm' ? 'Pensyarah (pilihan)' : 'Lecturer (optional)'),
+    location: lang === 'bm' ? 'Lokasi (pilihan)' : 'Location (optional)',
+  }
 
   const start = async () => {
     setLoading(true)
@@ -79,17 +108,18 @@ export default function NewLecture() {
       }
       const { count } = await query
       if ((count ?? 0) >= limits.lectureLimit) {
-        setErr(t('limitReached'))
+        setErr(lang === 'bm' ? 'Had pelan tercapai. Upgrade untuk teruskan.' : 'Plan limit reached. Upgrade to continue.')
         setLoading(false)
         return
       }
 
       const { data, error } = await sb.from('lectures').insert({
         user_id: user.id,
-        title: title.trim() || 'Untitled Lecture',
+        title: title.trim() || `Untitled ${type}`,
         subject: subject.trim() || null,
         lecturer: lecturer.trim() || null,
         location: location.trim() || null,
+        recording_type: type,
         status: 'recording',
         lang,
       }).select('id').maybeSingle()
@@ -102,7 +132,7 @@ export default function NewLecture() {
   }
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
       {/* HEADER */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
@@ -113,44 +143,98 @@ export default function NewLecture() {
         </h1>
         <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.55)', marginTop: 2 }}>
           {lang === 'bm'
-            ? 'Isi sedikit butiran, kemudian mula rakam.'
-            : 'Fill in a few details, then start recording.'}
+            ? 'Pilih jenis rakaman — AI akan susun nota mengikut jenis.'
+            : "Pick what you're capturing — AI adapts notes accordingly."}
         </div>
       </div>
 
-      {/* FORM CARD */}
+      {/* TYPE PICKER */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: 8, marginBottom: 20,
+      }}>
+        {RECORDING_TYPES.map((t) => {
+          const active = t.id === type
+          return (
+            <button
+              key={t.id}
+              onClick={() => setType(t.id)}
+              style={{
+                background: active ? 'rgba(29,29,31,0.025)' : '#fff',
+                border: active ? '1.5px solid #1d1d1f' : '0.5px solid rgba(0,0,0,0.08)',
+                borderRadius: 12, padding: '12px',
+                textAlign: 'left', cursor: 'pointer',
+                position: 'relative',
+                transition: 'all 0.15s',
+                fontFamily: 'inherit',
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: 7,
+                background: t.bg,
+                color: t.color,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 8,
+              }}>
+                <span style={{ width: 14, height: 14, display: 'inline-flex' }}>
+                  {TYPE_ICONS[t.id]}
+                </span>
+              </div>
+              <div style={{
+                fontSize: 13, fontWeight: 600,
+                letterSpacing: '-0.015em',
+                color: '#1d1d1f', marginBottom: 1,
+              }}>
+                {t.label[lang as 'en' | 'bm'] || t.label.en}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.55)', lineHeight: 1.35 }}>
+                {t.desc[lang as 'en' | 'bm'] || t.desc.en}
+              </div>
+              {active && (
+                <span style={{
+                  position: 'absolute', top: 10, right: 10,
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: '#1d1d1f', color: '#fff',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* FORM */}
       <div style={{
         background: '#fff',
         border: '0.5px solid rgba(0,0,0,0.06)',
-        borderRadius: 14,
-        padding: '22px 24px',
+        borderRadius: 14, padding: '22px 24px',
       }}>
-        <Field
-          label={lang === 'bm' ? 'Tajuk' : 'Title'}
-          value={title}
-          onChange={setTitle}
-          placeholder={lang === 'bm' ? 'Biologi — Mitosis' : 'Biology — Mitosis'}
+        <Field label={labels.title}    value={title}    onChange={setTitle}
+          placeholder={
+            type === 'meeting'    ? 'Q4 Strategy Sync' :
+            type === 'sv'         ? (lang === 'bm' ? 'SV Meeting — Bab 3' : 'SV Meeting — Chapter 3') :
+            type === 'postmortem' ? (lang === 'bm' ? 'Postmortem — Career Fair' : 'Postmortem — Career Fair') :
+            type === 'interview'  ? (lang === 'bm' ? 'Temubual dengan Dr. X' : 'Interview with Dr. X') :
+            type === 'custom'     ? (lang === 'bm' ? 'Sesi rakaman' : 'Recording session') :
+            'Biology — Mitosis'
+          }
         />
-        <Field
-          label={lang === 'bm' ? 'Subjek' : 'Subject'}
-          value={subject}
-          onChange={setSubject}
-          placeholder={lang === 'bm' ? 'Biologi / Kimia / Fizik' : 'Biology / Chemistry / Physics'}
-          hint={lang === 'bm'
-            ? 'Membantu kamus saintifik faham istilah yang betul.'
-            : 'Helps our scientific dictionary understand the right terms.'}
+        <Field label={labels.subject}  value={subject}  onChange={setSubject}
+          placeholder={type === 'meeting' ? 'Engineering · Q4' : 'Biology'}
+          hint={type === 'lecture' ? (lang === 'bm' ? 'Membantu kamus saintifik faham istilah.' : 'Helps the scientific dictionary understand terms.') : undefined}
         />
-        <Field
-          label={lang === 'bm' ? 'Pensyarah (pilihan)' : 'Lecturer (optional)'}
-          value={lecturer}
-          onChange={setLecturer}
-          placeholder="Dr. Aziz"
+        <Field label={labels.person}   value={lecturer} onChange={setLecturer}
+          placeholder={
+            type === 'meeting' ? 'Sarah, Kumar +4' :
+            type === 'interview' ? 'Dr. Aziz' :
+            'Dr. Aziz'
+          }
         />
-        <Field
-          label={lang === 'bm' ? 'Lokasi (pilihan)' : 'Location (optional)'}
-          value={location}
-          onChange={setLocation}
-          placeholder={lang === 'bm' ? 'Dewan B' : 'Hall B'}
+        <Field label={labels.location} value={location} onChange={setLocation}
+          placeholder={type === 'meeting' ? 'Zoom · Bilik 3.2' : 'Hall B'}
         />
 
         {err && (
@@ -180,6 +264,7 @@ export default function NewLecture() {
             opacity: loading ? 0.6 : 1,
             fontFamily: 'inherit',
             transition: 'background 0.15s',
+            marginTop: 4,
           }}
           onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = '#000' }}
           onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = '#1d1d1f' }}

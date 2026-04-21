@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { callAI, type AIProvider } from '@/lib/ai-providers'
+import { callAI, buildSystemPrompt, type AIProvider } from '@/lib/ai-providers'
+import { getRecordingTypeMeta } from '@/lib/recording-types'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -15,7 +16,6 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'not authenticated' }, { status: 401 })
 
-    // Fetch lecture + user preference
     const [{ data: lecture }, { data: profile }] = await Promise.all([
       supabase.from('lectures').select('*').eq('id', lectureId).eq('user_id', user.id).maybeSingle(),
       supabase.from('profiles').select('ai_provider').eq('id', user.id).maybeSingle(),
@@ -28,29 +28,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'transcript too short to summarize' }, { status: 400 })
     }
 
+    // Get recording type meta — drives sections + system prompt
+    const typeMeta = getRecordingTypeMeta(lecture.recording_type || 'lecture')
+    const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint)
+
     const truncated = transcript.slice(0, 32000)
-    const userMessage = `Lecture title: ${lecture.title || 'Untitled'}
+    const userMessage = `Recording type: ${typeMeta.label.en}
+Title: ${lecture.title || 'Untitled'}
 Subject: ${lecture.subject || 'Unknown'}
 Duration: ${Math.round((lecture.duration_seconds || 0) / 60)} min
 
 RAW TRANSCRIPT:
 ${truncated}`
 
-    // Priority order: request body > lecture-specific > user profile default > 'auto'
     const provider: AIProvider = requestedProvider
       || (lecture.ai_provider as AIProvider)
       || (profile?.ai_provider as AIProvider)
       || 'auto'
 
-    const { result, usedProvider, fellBack } = await callAI(provider, userMessage)
+    const { result, usedProvider, fellBack } = await callAI(provider, userMessage, systemPrompt)
 
     await supabase.from('lectures').update({
       summary: JSON.stringify(result),
-      keywords: result.topics,
+      keywords: result.topics || [],
       updated_at: new Date().toISOString(),
     }).eq('id', lectureId)
 
-    return NextResponse.json({ ok: true, data: result, usedProvider, fellBack, requestedProvider: provider })
+    return NextResponse.json({
+      ok: true,
+      data: result,
+      usedProvider,
+      fellBack,
+      requestedProvider: provider,
+      recordingType: typeMeta.id,
+    })
   } catch (e: any) {
     console.error('ai-summarize error:', e)
     return NextResponse.json({ error: e.message || 'unknown error' }, { status: 502 })

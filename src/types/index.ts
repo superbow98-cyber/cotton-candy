@@ -40,6 +40,7 @@ export interface Lecture {
   status: 'draft' | 'recording' | 'finished' | 'archived'
   lang: Lang
   ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
+  recording_type: 'lecture' | 'meeting' | 'sv' | 'postmortem' | 'interview' | 'custom' | null
   created_at: string
   updated_at: string
 }

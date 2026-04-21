@@ -6,11 +6,32 @@
 export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite'
 
 export type AISummary = {
-  topics: string[]
-  keyPoints: string[]
-  formulas: string[]
-  questions: string[]
+  // Common
   summary: string
+  // Lecture
+  topics?: string[]
+  keyPoints?: string[]
+  formulas?: string[]
+  questions?: string[]
+  // Meeting
+  attendees?: string[]
+  decisions?: string[]
+  actionItems?: string[]
+  openQuestions?: string[]
+  // SV / Pre-viva
+  feedback?: string[]
+  requiredFixes?: string[]
+  discussionPoints?: string[]
+  nextMilestones?: string[]
+  // Postmortem
+  whatWorked?: string[]
+  whatDidntWork?: string[]
+  lessonsLearned?: string[]
+  // Interview
+  keyAnswers?: string[]
+  quotes?: string[]
+  followUpQuestions?: string[]
+  themes?: string[]
 }
 
 // Order matters — this is the dropdown display order
@@ -60,42 +81,100 @@ export const PROVIDER_META: Record<AIProvider, {
   },
 }
 
-export const SYSTEM_PROMPT = `You are a helpful assistant that organizes raw lecture transcripts into clean study notes.
+// Field schema map per section
+const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: string }> = {
+  summary:           { type: 'string', description: '2-3 sentence TL;DR in the primary language used' },
+  topics:            { type: 'array',  description: '3-8 main topics covered (2-6 word phrases)' },
+  keyPoints:         { type: 'array',  description: '5-15 critical points (complete short sentences)' },
+  formulas:          { type: 'array',  description: 'Math formulas, equations, dates, numbers, laws (empty if none)' },
+  questions:         { type: 'array',  description: 'Questions raised in the session (empty if none)' },
+  attendees:         { type: 'array',  description: 'People mentioned by name as participants' },
+  decisions:         { type: 'array',  description: 'Decisions explicitly made (clear yes/no outcomes)' },
+  actionItems:       { type: 'array',  description: 'Tasks assigned, format: "Owner: task by deadline" if owner stated' },
+  openQuestions:     { type: 'array',  description: 'Questions left unresolved' },
+  feedback:          { type: 'array',  description: "Supervisor's feedback on the work" },
+  requiredFixes:     { type: 'array',  description: 'Must-do revisions or corrections' },
+  discussionPoints: { type: 'array',  description: 'Points discussed about methodology/findings' },
+  nextMilestones:    { type: 'array',  description: 'Upcoming deadlines or milestones' },
+  whatWorked:        { type: 'array',  description: 'Genuine wins, not generic platitudes' },
+  whatDidntWork:     { type: 'array',  description: "Specific issues or failures (be candid)" },
+  lessonsLearned:    { type: 'array',  description: 'Reusable lessons for future events' },
+  keyAnswers:        { type: 'array',  description: 'Most important answers from the interviewee' },
+  quotes:            { type: 'array',  description: '3-5 verbatim quotes (light cleanup ok)' },
+  followUpQuestions: { type: 'array',  description: 'Suggested follow-up questions for next interview' },
+  themes:            { type: 'array',  description: 'Recurring themes across responses' },
+}
 
-Input: a messy, live-transcribed lecture in any mix of English, Bahasa Malaysia, Chinese, Tamil, or Arabic.
+// Build a system prompt tailored to the recording type.
+// `sections` is the list of fields the AI should emit, in order.
+// `typeHint` is the type-specific guidance from RECORDING_TYPES.
+export function buildSystemPrompt(sections: string[], typeHint: string): string {
+  const schemaLines = sections.map((s) => {
+    const meta = SECTION_SCHEMA[s] || { type: 'array', description: 'list of items' }
+    if (meta.type === 'string') {
+      return `  "${s}": "${meta.description}"`
+    }
+    return `  "${s}": ["${meta.description}", ...]`
+  }).join(',\n')
+
+  return `You are a helpful assistant that organizes raw recorded transcripts into clean, structured notes.
+
+${typeHint}
+
+Input: a transcript that may mix English, Bahasa Malaysia, Chinese, Tamil, or Arabic.
 
 Output: STRICT JSON with this exact schema (no markdown, no extra text, just valid JSON):
 {
-  "topics": ["topic 1", "topic 2", ...],
-  "keyPoints": ["key point 1", "key point 2", ...],
-  "formulas": ["formula or important fact 1", ...],
-  "questions": ["question raised in class 1", ...],
-  "summary": "2-3 sentence TL;DR of the whole lecture in the primary language used."
+${schemaLines}
 }
 
-Rules:
-- "topics": 3-8 main topics covered, short phrases (2-6 words each)
-- "keyPoints": 5-15 critical points students must remember, complete short sentences
-- "formulas": mathematical formulas, chemical equations, dates, numbers, laws (empty array if none)
-- "questions": questions asked BY STUDENTS or posed by lecturer for students to think about (empty array if none)
-- "summary": 2-3 sentences, same primary language as the lecture (if BM → write BM, if EN → write EN)
-- If the transcript is very short (<100 words), fill with best-effort even if arrays have fewer items
-- DO NOT invent facts not in the transcript. If transcript is gibberish/too short, return empty arrays and note in summary.
-- Fix scientific terms that look misspelled from speech recognition (e.g. "my toe corner dia" → "Mitochondria")
+Universal rules:
+- Use the same primary language as the transcript (if BM-heavy → BM, if EN-heavy → EN)
+- DO NOT invent facts not in the transcript. If transcript is gibberish/too short, return mostly empty arrays
+- Fix obvious speech-recognition errors (e.g. "my toe corner dia" → "Mitochondria")
+- Keep each list item concise: short complete sentences or phrases
+- Empty arrays are valid — better than fabricating content
 - Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
+}
+
+// Default backwards-compat (for callers that don't pass type)
+export const SYSTEM_PROMPT = buildSystemPrompt(
+  ['summary', 'topics', 'keyPoints', 'formulas', 'questions'],
+  'This is a generic recording.',
+)
 
 function validateResult(raw: any): AISummary {
+  const arr = (v: any, max: number) =>
+    Array.isArray(v) ? v.slice(0, max).map(String).filter(Boolean) : undefined
+  const str = (v: any, max: number) =>
+    typeof v === 'string' ? v.slice(0, max) : ''
+
   return {
-    topics:    Array.isArray(raw?.topics)    ? raw.topics.slice(0, 12).map(String)    : [],
-    keyPoints: Array.isArray(raw?.keyPoints) ? raw.keyPoints.slice(0, 20).map(String) : [],
-    formulas:  Array.isArray(raw?.formulas)  ? raw.formulas.slice(0, 12).map(String)  : [],
-    questions: Array.isArray(raw?.questions) ? raw.questions.slice(0, 10).map(String) : [],
-    summary:   typeof raw?.summary === 'string' ? raw.summary.slice(0, 1200) : '',
+    summary:           str(raw?.summary, 1200),
+    topics:            arr(raw?.topics, 12),
+    keyPoints:         arr(raw?.keyPoints, 20),
+    formulas:          arr(raw?.formulas, 12),
+    questions:         arr(raw?.questions, 10),
+    attendees:         arr(raw?.attendees, 20),
+    decisions:         arr(raw?.decisions, 15),
+    actionItems:       arr(raw?.actionItems, 20),
+    openQuestions:     arr(raw?.openQuestions, 10),
+    feedback:          arr(raw?.feedback, 15),
+    requiredFixes:     arr(raw?.requiredFixes, 15),
+    discussionPoints: arr(raw?.discussionPoints, 15),
+    nextMilestones:    arr(raw?.nextMilestones, 10),
+    whatWorked:        arr(raw?.whatWorked, 15),
+    whatDidntWork:     arr(raw?.whatDidntWork, 15),
+    lessonsLearned:    arr(raw?.lessonsLearned, 15),
+    keyAnswers:        arr(raw?.keyAnswers, 15),
+    quotes:            arr(raw?.quotes, 8),
+    followUpQuestions: arr(raw?.followUpQuestions, 10),
+    themes:            arr(raw?.themes, 10),
   }
 }
 
 // ---------- Groq ----------
-async function callGroq(userMessage: string): Promise<AISummary> {
+async function callGroq(userMessage: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY not configured')
 
@@ -105,7 +184,7 @@ async function callGroq(userMessage: string): Promise<AISummary> {
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
       temperature: 0.2,
@@ -128,7 +207,7 @@ async function callGroq(userMessage: string): Promise<AISummary> {
 }
 
 // ---------- Gemini ----------
-async function callGemini(userMessage: string, model: string): Promise<AISummary> {
+async function callGemini(userMessage: string, model: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured')
 
@@ -137,7 +216,7 @@ async function callGemini(userMessage: string, model: string): Promise<AISummary
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { role: 'system', parts: [{ text: SYSTEM_PROMPT }] },
+      systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userMessage }] }],
       generationConfig: {
         temperature: 0.2,
@@ -177,15 +256,17 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
 // ---------- Main dispatcher ----------
 // Every single-provider call now has retry + auto-fallback.
 // User's chosen provider is attempted first, then fallback chain.
+// `systemPrompt` is type-aware (built via buildSystemPrompt).
 export async function callAI(
   provider: AIProvider,
-  userMessage: string
+  userMessage: string,
+  systemPrompt: string = SYSTEM_PROMPT,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
   // Build chain: chosen provider first, then other providers as fallback
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash') },
-    { name: 'groq',              fn: () => callGroq(userMessage) },
-    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite') },
+    { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash', systemPrompt) },
+    { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
+    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
   ]
 
   // For specific providers, put the chosen one first + others as fallback
