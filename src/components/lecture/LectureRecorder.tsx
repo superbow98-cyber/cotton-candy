@@ -8,7 +8,27 @@ import { createClient } from '@/lib/supabase/client'
 import { type Lecture, type TimelineEntry, PLANS } from '@/types'
 import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, secondsToClock } from '@/lib/export'
 
-type Line = { id: string; t: number; text: string; starred?: boolean; topic?: boolean; type?: TimelineEntry['type'] }
+type Line = { id: string; t: number; text: string; lang?: string; starred?: boolean; topic?: boolean; type?: TimelineEntry['type'] }
+
+// ---------- Recognition languages (Malaysia rojak support) ----------
+type RecognitionLang = {
+  code: string
+  label: string
+  flag: string
+  sub: string
+  key: string
+}
+
+const RECOGNITION_LANGS: RecognitionLang[] = [
+  { code: 'en-US',  label: 'EN',  flag: '🇬🇧', sub: 'English',   key: 'e' },
+  { code: 'ms-MY',  label: 'BM',  flag: '🇲🇾', sub: 'Malay',     key: 'm' },
+  { code: 'zh-CN',  label: '中文', flag: '🇨🇳', sub: 'Chinese',   key: 'c' },
+  { code: 'ta-MY',  label: 'த',   flag: '🇮🇳', sub: 'Tamil',     key: 't' },
+  { code: 'ar-SA',  label: 'ع',    flag: '🇸🇦', sub: 'Arabic',    key: 'a' },
+  { code: 'en-IN',  label: 'EN+', flag: '🌏', sub: 'Indian EN',  key: 'i' },
+]
+
+const STORAGE_KEY = 'cc:recLang'
 
 export default function LectureRecorder({ id }: { id: string }) {
   const { t, lang } = useLang()
@@ -24,12 +44,34 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [supported, setSupported] = useState(true)
   const [permission, setPermission] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [recLang, setRecLang] = useState<string>('en-US')
 
   const recRef = useRef<any>(null)
   const startRef = useRef<number>(0)
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
+  const recLangRef = useRef<string>('en-US')
 
+  // Load preferred recording language from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved && RECOGNITION_LANGS.some(l => l.code === saved)) {
+        setRecLang(saved)
+        recLangRef.current = saved
+      } else {
+        const initial = lang === 'bm' ? 'ms-MY' : 'en-US'
+        setRecLang(initial)
+        recLangRef.current = initial
+      }
+    } catch {
+      const initial = lang === 'bm' ? 'ms-MY' : 'en-US'
+      setRecLang(initial)
+      recLangRef.current = initial
+    }
+  }, [lang])
+
+  // Load lecture data
   useEffect(() => {
     (async () => {
       const sb = createClient()
@@ -59,14 +101,30 @@ export default function LectureRecorder({ id }: { id: string }) {
     })()
   }, [id, router])
 
-  const startRecognition = useCallback(() => {
+  // Keyboard shortcuts — press E/M/C/T/A/I to swap language during recording
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
+      const key = e.key.toLowerCase()
+      const match = RECOGNITION_LANGS.find(l => l.key === key)
+      if (match) {
+        e.preventDefault()
+        swapLanguage(match.code)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording])
+
+  const startRecognition = useCallback((langCode: string) => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) { setSupported(false); return }
+    if (!SR) { setSupported(false); return null }
     try {
       const r = new SR()
       r.continuous = true
       r.interimResults = true
-      r.lang = lang === 'bm' ? 'ms-MY' : 'en-US'
+      r.lang = langCode
       r.onresult = (e: any) => {
         let finalText = '', interimText = ''
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -76,7 +134,12 @@ export default function LectureRecorder({ id }: { id: string }) {
         }
         if (finalText.trim()) {
           const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-          setLines((prev) => [...prev, { id: `l${Date.now()}${Math.random()}`, t: now, text: finalText.trim() }])
+          setLines((prev) => [...prev, {
+            id: `l${Date.now()}${Math.random()}`,
+            t: now,
+            text: finalText.trim(),
+            lang: recLangRef.current,
+          }])
           setInterim('')
         } else {
           setInterim(interimText)
@@ -86,21 +149,40 @@ export default function LectureRecorder({ id }: { id: string }) {
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setPermission(false)
       }
       r.onend = () => {
+        // Auto-restart if still recording (handle drops)
         if (recRef.current && recording) {
           try { r.start() } catch {}
         }
       }
       r.start()
-      recRef.current = r
+      return r
     } catch {
       setSupported(false)
+      return null
     }
-  }, [lang, recording])
+  }, [recording])
 
   const stopRecognition = () => {
     if (recRef.current) {
       try { recRef.current.onend = null; recRef.current.stop() } catch {}
       recRef.current = null
+    }
+  }
+
+  // Swap language WITHOUT interrupting recording — hot-swap the recognition instance
+  const swapLanguage = (newCode: string) => {
+    if (!RECOGNITION_LANGS.some(l => l.code === newCode)) return
+    setRecLang(newCode)
+    recLangRef.current = newCode
+    try { localStorage.setItem(STORAGE_KEY, newCode) } catch {}
+
+    // If currently recording, restart recognition with new language
+    if (recording && recRef.current) {
+      stopRecognition()
+      // Small delay to let browser release the mic
+      setTimeout(() => {
+        recRef.current = startRecognition(newCode)
+      }, 120)
     }
   }
 
@@ -112,7 +194,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       setRecording(false)
     } else {
       startRef.current = Date.now()
-      startRecognition()
+      recRef.current = startRecognition(recLangRef.current)
       tickRef.current = setInterval(() => {
         setElapsed(accumRef.current + Math.floor((Date.now() - startRef.current) / 1000))
       }, 500)
@@ -194,6 +276,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   if (!lecture) return <div style={{ color: s.gray, padding: 20 }}>{t('loading')}</div>
 
   const wordCount = linesToMd(lines).replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
+  const currentLang = RECOGNITION_LANGS.find(l => l.code === recLang) || RECOGNITION_LANGS[0]
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -210,6 +293,60 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* LANGUAGE SWITCHER BAR */}
+      <div style={{
+        background: '#fff', padding: '12px 16px', borderRadius: 16,
+        border: `1px solid ${s.border}`, marginBottom: 14,
+      }}>
+        <div style={{
+          fontSize: 11, color: s.gray, marginBottom: 8, letterSpacing: 0.5,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexWrap: 'wrap', gap: 6,
+        }}>
+          <span>
+            🎤 {lang === 'bm' ? 'BAHASA SEDANG DENGAR' : 'LISTENING LANGUAGE'}:
+            <strong style={{ color: s.dark, marginLeft: 6 }}>
+              {currentLang.flag} {currentLang.sub}
+            </strong>
+          </span>
+          <span style={{ fontSize: 10, opacity: 0.7 }}>
+            {lang === 'bm' ? 'Tukar bila pensyarah swap bahasa' : 'Switch when lecturer swaps language'}
+            {' · '}
+            {lang === 'bm' ? 'shortcut' : 'shortcut'}: E/M/C/T/A/I
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {RECOGNITION_LANGS.map((l) => {
+            const active = l.code === recLang
+            return (
+              <button
+                key={l.code}
+                onClick={() => swapLanguage(l.code)}
+                title={`${l.sub} (${l.key.toUpperCase()})`}
+                style={{
+                  background: active ? s.primary : s.soft,
+                  color: active ? s.dark : s.gray,
+                  border: `1.5px solid ${active ? s.primaryDark : s.border}`,
+                  borderRadius: 999,
+                  padding: '6px 12px',
+                  fontSize: 13,
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.1s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{l.flag}</span>
+                <span>{l.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* RECORDER CARD */}
       <div style={{
         background: '#fff', borderRadius: 24, padding: 22,
         border: `1px solid ${s.border}`, marginBottom: 18,
@@ -247,7 +384,10 @@ export default function LectureRecorder({ id }: { id: string }) {
                 {secondsToClock(elapsed)}
               </div>
               <div style={{ fontSize: 12, color: s.gray, marginTop: 4 }}>
-                {recording ? `🔴 ${t('recListening')}` : t('recDuration')} · {wordCount} {t('recWords')}
+                {recording
+                  ? <>🔴 {t('recListening')} · {currentLang.flag} <strong>{currentLang.sub}</strong></>
+                  : t('recDuration')
+                } · {wordCount} {t('recWords')}
               </div>
             </div>
           </div>
@@ -280,21 +420,34 @@ export default function LectureRecorder({ id }: { id: string }) {
           </div>
         )}
         <div className="transcript-md">
-          {lines.map((l) => (
-            <div key={l.id} className="fade-in" style={{
-              padding: '4px 0',
-              borderLeft: l.topic ? `3px solid ${s.primaryDark}` : l.starred ? `3px solid #f2b35a` : 'none',
-              paddingLeft: (l.topic || l.starred) ? 12 : 0,
-            }}>
-              {l.topic ? (
-                <span className="topic">## {secondsToClock(l.t)} — {l.text}</span>
-              ) : l.starred ? (
-                <><span className="star">⭐</span> {l.text} <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>[{secondsToClock(l.t)}]</span></>
-              ) : (
-                <>- {l.text} <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>[{secondsToClock(l.t)}]</span></>
-              )}
-            </div>
-          ))}
+          {lines.map((l) => {
+            const langInfo = l.lang ? RECOGNITION_LANGS.find(x => x.code === l.lang) : null
+            return (
+              <div key={l.id} className="fade-in" style={{
+                padding: '4px 0',
+                borderLeft: l.topic ? `3px solid ${s.primaryDark}` : l.starred ? `3px solid #f2b35a` : 'none',
+                paddingLeft: (l.topic || l.starred) ? 12 : 0,
+              }}>
+                {l.topic ? (
+                  <span className="topic">## {secondsToClock(l.t)} — {l.text}</span>
+                ) : l.starred ? (
+                  <>
+                    <span className="star">⭐</span> {l.text}
+                    <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
+                      [{secondsToClock(l.t)}]{langInfo && ` ${langInfo.flag}`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    - {l.text}
+                    <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
+                      [{secondsToClock(l.t)}]{langInfo && ` ${langInfo.flag}`}
+                    </span>
+                  </>
+                )}
+              </div>
+            )
+          })}
           {interim && (
             <div style={{ color: s.gray, fontStyle: 'italic', padding: '4px 0' }}>
               {interim}…
