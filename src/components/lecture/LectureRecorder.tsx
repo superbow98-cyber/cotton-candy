@@ -5,13 +5,20 @@ import Button from '@/components/ui/Button'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
-import { type Lecture, type TimelineEntry, PLANS } from '@/types'
+import { type Lecture, PLANS } from '@/types'
 import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, secondsToClock } from '@/lib/export'
-import { correctScientificTerms, detectSubject, countCorrections } from '@/lib/scientific-terms'
+import { correctScientificTerms, detectSubject } from '@/lib/scientific-terms'
 
-type Line = { id: string; t: number; text: string; lang?: string; starred?: boolean; topic?: boolean; type?: TimelineEntry['type'] }
+type Line = { id: string; t: number; text: string; lang?: string }
 
-// ---------- Recognition languages (Malaysia rojak support) ----------
+type AISummary = {
+  topics: string[]
+  keyPoints: string[]
+  formulas: string[]
+  questions: string[]
+  summary: string
+}
+
 type RecognitionLang = {
   code: string
   label: string
@@ -38,13 +45,15 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [recording, setRecording] = useState(false)
   const [interim, setInterim] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [supported, setSupported] = useState(true)
   const [permission, setPermission] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [aiProcessing, setAiProcessing] = useState(false)
+  const [aiResult, setAiResult] = useState<AISummary | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
   const [recLang, setRecLang] = useState<string>('en-US')
 
   const recRef = useRef<any>(null)
@@ -54,7 +63,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const recLangRef = useRef<string>('en-US')
   const lectureRef = useRef<Lecture | null>(null)
 
-  // Load preferred recording language from localStorage
+  // Load preferred recording language
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -89,22 +98,27 @@ export default function LectureRecorder({ id }: { id: string }) {
         let idx = 0
         for (const raw of lec.transcript_md.split('\n')) {
           if (!raw.trim()) continue
-          const isStar = raw.startsWith('- ⭐ ')
-          const isTopic = raw.startsWith('## ')
-          const text = raw.replace(/^- (⭐ )?/, '').replace(/^## \d\d:\d\d:\d\d — /, '').trim()
-          parsed.push({ id: `r${idx++}`, t: 0, text, starred: isStar, topic: isTopic })
+          const text = raw.replace(/^-\s*/, '').trim()
+          if (text) parsed.push({ id: `r${idx++}`, t: 0, text })
         }
         setLines(parsed)
       }
-      setTimeline((lec.timeline as TimelineEntry[]) || [])
       setElapsed(lec.duration_seconds || 0)
       accumRef.current = lec.duration_seconds || 0
+      if (lec.summary) {
+        try {
+          const parsed = JSON.parse(lec.summary)
+          if (parsed && typeof parsed === 'object' && 'topics' in parsed) {
+            setAiResult(parsed as AISummary)
+          }
+        } catch {}
+      }
       const { data: prof } = await sb.from('profiles').select('plan').eq('id', user.id).maybeSingle()
       setPlan((prof?.plan || 'free') as keyof typeof PLANS)
     })()
   }, [id, router])
 
-  // Keyboard shortcuts — press E/M/C/T/A/I to swap language during recording
+  // Keyboard shortcuts for language swap
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
@@ -137,7 +151,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         }
         if (finalText.trim()) {
           const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-          // Apply scientific term correction using subject hint from lecture metadata
           const subjectHint = detectSubject(
             lectureRef.current?.title || '',
             lectureRef.current?.subject || ''
@@ -158,7 +171,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setPermission(false)
       }
       r.onend = () => {
-        // Auto-restart if still recording (handle drops)
         if (recRef.current && recording) {
           try { r.start() } catch {}
         }
@@ -178,17 +190,13 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
-  // Swap language WITHOUT interrupting recording — hot-swap the recognition instance
   const swapLanguage = (newCode: string) => {
     if (!RECOGNITION_LANGS.some(l => l.code === newCode)) return
     setRecLang(newCode)
     recLangRef.current = newCode
     try { localStorage.setItem(STORAGE_KEY, newCode) } catch {}
-
-    // If currently recording, restart recognition with new language
     if (recording && recRef.current) {
       stopRecognition()
-      // Small delay to let browser release the mic
       setTimeout(() => {
         recRef.current = startRecognition(newCode)
       }, 120)
@@ -202,6 +210,8 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     } else {
+      setAiResult(null) // clear previous summary if re-recording
+      setAiError(null)
       startRef.current = Date.now()
       recRef.current = startRecognition(recLangRef.current)
       tickRef.current = setInterval(() => {
@@ -211,38 +221,16 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
-  const addMark = (type: TimelineEntry['type']) => {
-    const last = lines[lines.length - 1]
-    if (!last) return
-    const entry: TimelineEntry = {
-      t: secondsToClock(last.t),
-      seconds: last.t,
-      event: last.text.slice(0, 80),
-      type,
-    }
-    setTimeline((prev) => [...prev, entry])
-    if (type === 'topic' || type === 'note') {
-      setLines((prev) => prev.map((l, i) => i === prev.length - 1
-        ? { ...l, starred: type === 'note', topic: type === 'topic', type } : l))
-    }
-  }
-
+  // Autosave during recording
   useEffect(() => {
     if (!recording) return
     const h = setInterval(() => save(false), 15000)
     return () => clearInterval(h)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording, lines, timeline, elapsed])
+  }, [recording, lines, elapsed])
 
-  const linesToMd = (ll: Line[]) => {
-    const parts: string[] = []
-    for (const l of ll) {
-      if (l.topic) parts.push(`\n## ${secondsToClock(l.t)} — ${l.text}\n`)
-      else if (l.starred) parts.push(`- ⭐ ${l.text}`)
-      else parts.push(`- ${l.text}`)
-    }
-    return parts.join('\n')
-  }
+  const linesToMd = (ll: Line[]) =>
+    ll.map((l) => `- ${l.text}`).join('\n')
 
   const save = async (finish: boolean) => {
     if (!lecture) return
@@ -253,34 +241,71 @@ export default function LectureRecorder({ id }: { id: string }) {
       const keywords = extractKeywords(md, 12)
       const sb = createClient()
       await sb.from('lectures').update({
-        transcript_md: md, timeline, word_count: wordCount,
+        transcript_md: md, word_count: wordCount,
         duration_seconds: elapsed, keywords,
         status: finish ? 'finished' : 'recording',
         ended_at: finish ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       }).eq('id', lecture.id)
-      setLecture({ ...lecture, transcript_md: md, timeline, keywords, word_count: wordCount, duration_seconds: elapsed })
-      lectureRef.current = { ...lecture, transcript_md: md, timeline, keywords, word_count: wordCount, duration_seconds: elapsed }
+      const updated = { ...lecture, transcript_md: md, keywords, word_count: wordCount, duration_seconds: elapsed }
+      setLecture(updated)
+      lectureRef.current = updated
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
   }
 
+  const runAI = async () => {
+    if (!lecture) return
+    setAiProcessing(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/ai-summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lectureId: lecture.id }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) {
+        setAiError(json.error || 'AI processing failed')
+      } else {
+        setAiResult(json.data as AISummary)
+      }
+    } catch (e: any) {
+      setAiError(e.message || 'Network error')
+    } finally {
+      setAiProcessing(false)
+    }
+  }
+
   const finishLecture = async () => {
-    if (recording) toggle()
+    if (recording) {
+      stopRecognition()
+      accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      setRecording(false)
+    }
     await save(true)
+    await runAI()
   }
 
   const exportMd = () => {
     if (!lecture) return
-    const md = lectureToMarkdown({ ...lecture, transcript_md: linesToMd(lines), timeline })
+    let md = lectureToMarkdown({ ...lecture, transcript_md: linesToMd(lines) })
+    if (aiResult) {
+      md = buildRichMarkdown(lecture, linesToMd(lines), aiResult)
+    }
     downloadText(`${(lecture.title || 'lecture').replace(/[^\w-]+/g, '_')}.md`, md, 'text/markdown')
   }
+
   const exportPdf = () => {
     if (!lecture) return
-    lectureToPdf(
-      { ...lecture, transcript_md: linesToMd(lines), timeline },
-      { watermark: PLANS[plan].watermark, theme: s }
-    )
+    const lec = {
+      ...lecture,
+      transcript_md: aiResult
+        ? buildRichMarkdown(lecture, linesToMd(lines), aiResult)
+        : linesToMd(lines),
+    }
+    lectureToPdf(lec, { watermark: PLANS[plan].watermark, theme: s })
   }
 
   if (!lecture) return <div style={{ color: s.gray, padding: 20 }}>{t('loading')}</div>
@@ -304,7 +329,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* LANGUAGE SWITCHER BAR */}
+      {/* LANGUAGE SWITCHER */}
       <div style={{
         background: '#fff', padding: '12px 16px', borderRadius: 16,
         border: `1px solid ${s.border}`, marginBottom: 14,
@@ -322,19 +347,16 @@ export default function LectureRecorder({ id }: { id: string }) {
           </span>
           <span style={{ fontSize: 10, opacity: 0.7 }}>
             {detectedSubject && (
-              <>
-                <span style={{
-                  background: s.soft, color: s.primaryDark,
-                  padding: '2px 6px', borderRadius: 4, marginRight: 6,
-                  fontWeight: 600,
-                }}>
-                  ✨ {lang === 'bm' ? 'Kamus' : 'Dict'}: {detectedSubject}
-                </span>
-              </>
+              <span style={{
+                background: s.soft, color: s.primaryDark,
+                padding: '2px 6px', borderRadius: 4, marginRight: 6,
+                fontWeight: 600,
+              }}>
+                ✨ {lang === 'bm' ? 'Kamus' : 'Dict'}: {detectedSubject}
+              </span>
             )}
             {lang === 'bm' ? 'Tukar bila pensyarah swap bahasa' : 'Switch when lecturer swaps language'}
-            {' · '}
-            {lang === 'bm' ? 'shortcut' : 'shortcut'}: E/M/C/T/A/I
+            {' · '}shortcut: E/M/C/T/A/I
           </span>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -349,15 +371,10 @@ export default function LectureRecorder({ id }: { id: string }) {
                   background: active ? s.primary : s.soft,
                   color: active ? s.dark : s.gray,
                   border: `1.5px solid ${active ? s.primaryDark : s.border}`,
-                  borderRadius: 999,
-                  padding: '6px 12px',
-                  fontSize: 13,
-                  fontWeight: active ? 700 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.1s',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
+                  borderRadius: 999, padding: '6px 12px',
+                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  cursor: 'pointer', transition: 'all 0.1s',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
                 }}
               >
                 <span style={{ fontSize: 14 }}>{l.flag}</span>
@@ -368,7 +385,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* RECORDER CARD */}
+      {/* RECORDER CARD — clean, minimal, no tag buttons */}
       <div style={{
         background: '#fff', borderRadius: 24, padding: 22,
         border: `1px solid ${s.border}`, marginBottom: 18,
@@ -384,17 +401,17 @@ export default function LectureRecorder({ id }: { id: string }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <button
               onClick={toggle}
               className={recording ? 'pulse-rec' : ''}
-              disabled={!supported}
+              disabled={!supported || aiProcessing}
               style={{
                 width: 72, height: 72, borderRadius: '50%',
                 background: recording ? '#D94A4A' : s.primary,
                 border: `3px solid ${recording ? '#B33535' : s.primaryDark}`,
-                cursor: supported ? 'pointer' : 'not-allowed',
+                cursor: (!supported || aiProcessing) ? 'not-allowed' : 'pointer',
                 color: '#fff', fontSize: 28,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
@@ -413,29 +430,109 @@ export default function LectureRecorder({ id }: { id: string }) {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <Button variant="outline" size="sm" onClick={() => addMark('topic')}>📌 {t('recTopic')}</Button>
-            <Button variant="outline" size="sm" onClick={() => addMark('note')}>⭐ {t('recStar')}</Button>
-            <Button variant="outline" size="sm" onClick={() => addMark('formula')}>🔢 {t('recFormula')}</Button>
-            <Button variant="outline" size="sm" onClick={() => addMark('question')}>❓ {t('recQuestion')}</Button>
-          </div>
-        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          <Button size="md" variant="dark" onClick={finishLecture} disabled={saving}>
-            ✓ {t('recStop')}
-          </Button>
-          <Button size="md" variant="ghost" onClick={() => save(false)} disabled={saving}>
-            {saving ? t('loading') : '💾 ' + t('save')}
+          <Button
+            size="md"
+            variant="dark"
+            onClick={finishLecture}
+            disabled={saving || aiProcessing || (!recording && lines.length === 0)}
+          >
+            {aiProcessing
+              ? (lang === 'bm' ? '🤖 AI sedang susun…' : '🤖 AI organizing…')
+              : `✓ ${t('recStop')}`
+            }
           </Button>
         </div>
       </div>
 
+      {/* AI PROCESSING STATE */}
+      {aiProcessing && (
+        <div className="fade-in" style={{
+          background: s.soft, padding: 20, borderRadius: 18,
+          border: `2px dashed ${s.primaryDark}`, marginBottom: 14,
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>🤖</div>
+          <div style={{ fontWeight: 700, color: s.dark, marginBottom: 4 }}>
+            {lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
+          </div>
+          <div style={{ fontSize: 12, color: s.gray }}>
+            {lang === 'bm'
+              ? 'Biasanya 10-20 saat. Sedang extract topik, key points, formula, soalan, dan ringkasan.'
+              : 'Usually 10-20 seconds. Extracting topics, key points, formulas, questions, and summary.'}
+          </div>
+        </div>
+      )}
+
+      {/* AI ERROR STATE */}
+      {aiError && !aiProcessing && (
+        <div style={{
+          background: '#FDE8E8', padding: 14, borderRadius: 14,
+          border: '1px solid #F4B4B4', marginBottom: 14,
+          fontSize: 13, color: '#B94141',
+        }}>
+          ⚠ {aiError}
+          <button
+            onClick={runAI}
+            style={{
+              marginLeft: 10, padding: '4px 12px',
+              background: '#B94141', color: '#fff',
+              border: 'none', borderRadius: 999,
+              fontSize: 12, cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            {lang === 'bm' ? 'Cuba lagi' : 'Retry'}
+          </button>
+        </div>
+      )}
+
+      {/* AI RESULT — organized sections */}
+      {aiResult && !aiProcessing && (
+        <div className="fade-in" style={{ marginBottom: 14 }}>
+          {aiResult.summary && (
+            <Section icon="✨" title={lang === 'bm' ? 'Ringkasan (TL;DR)' : 'Summary (TL;DR)'} s={s}>
+              <p style={{ margin: 0, lineHeight: 1.7, fontSize: 15 }}>{aiResult.summary}</p>
+            </Section>
+          )}
+          {aiResult.topics?.length > 0 && (
+            <Section icon="📌" title={lang === 'bm' ? 'Topik diliputi' : 'Topics covered'} s={s}>
+              <ol style={{ margin: 0, paddingLeft: 24, lineHeight: 2 }}>
+                {aiResult.topics.map((t, i) => <li key={i}>{t}</li>)}
+              </ol>
+            </Section>
+          )}
+          {aiResult.keyPoints?.length > 0 && (
+            <Section icon="🔑" title={lang === 'bm' ? 'Key points' : 'Key points'} s={s}>
+              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8 }}>
+                {aiResult.keyPoints.map((k, i) => <li key={i}>{k}</li>)}
+              </ul>
+            </Section>
+          )}
+          {aiResult.formulas?.length > 0 && (
+            <Section icon="📐" title={lang === 'bm' ? 'Formula / Fakta penting' : 'Formulas / Key facts'} s={s}>
+              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8, fontFamily: 'Georgia, serif' }}>
+                {aiResult.formulas.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </Section>
+          )}
+          {aiResult.questions?.length > 0 && (
+            <Section icon="❓" title={lang === 'bm' ? 'Soalan dibangkit' : 'Questions raised'} s={s}>
+              <ul style={{ margin: 0, paddingLeft: 24, lineHeight: 1.8 }}>
+                {aiResult.questions.map((q, i) => <li key={i}>{q}</li>)}
+              </ul>
+            </Section>
+          )}
+        </div>
+      )}
+
+      {/* RAW TRANSCRIPT */}
       <div style={{
         background: '#fff', padding: 22, borderRadius: 20,
-        border: `1px solid ${s.border}`, minHeight: 300,
+        border: `1px solid ${s.border}`, minHeight: 200,
       }}>
-        <div style={{ fontSize: 11, color: s.gray, letterSpacing: 1, marginBottom: 12 }}>TRANSCRIPT</div>
+        <div style={{ fontSize: 11, color: s.gray, letterSpacing: 1, marginBottom: 12 }}>
+          📝 {lang === 'bm' ? 'TRANSKRIP MENTAH' : 'RAW TRANSCRIPT'}
+        </div>
         {lines.length === 0 && !interim && (
           <div style={{ color: s.gray, fontStyle: 'italic', padding: 20, textAlign: 'center' }}>
             {recording ? '…' : t('recStart')}
@@ -445,28 +542,11 @@ export default function LectureRecorder({ id }: { id: string }) {
           {lines.map((l) => {
             const langInfo = l.lang ? RECOGNITION_LANGS.find(x => x.code === l.lang) : null
             return (
-              <div key={l.id} className="fade-in" style={{
-                padding: '4px 0',
-                borderLeft: l.topic ? `3px solid ${s.primaryDark}` : l.starred ? `3px solid #f2b35a` : 'none',
-                paddingLeft: (l.topic || l.starred) ? 12 : 0,
-              }}>
-                {l.topic ? (
-                  <span className="topic">## {secondsToClock(l.t)} — {l.text}</span>
-                ) : l.starred ? (
-                  <>
-                    <span className="star">⭐</span> {l.text}
-                    <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
-                      [{secondsToClock(l.t)}]{langInfo && ` ${langInfo.flag}`}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    - {l.text}
-                    <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
-                      [{secondsToClock(l.t)}]{langInfo && ` ${langInfo.flag}`}
-                    </span>
-                  </>
-                )}
+              <div key={l.id} className="fade-in" style={{ padding: '4px 0' }}>
+                - {l.text}
+                <span style={{ fontSize: 11, color: s.gray, marginLeft: 6 }}>
+                  {l.t ? `[${secondsToClock(l.t)}]` : ''}{langInfo && ` ${langInfo.flag}`}
+                </span>
               </div>
             )
           })}
@@ -478,25 +558,75 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
-      {timeline.length > 0 && (
-        <div style={{
-          background: '#fff', padding: 22, borderRadius: 20,
-          border: `1px solid ${s.border}`, marginTop: 14,
-        }}>
-          <div style={{ fontSize: 11, color: s.gray, letterSpacing: 1, marginBottom: 12 }}>TIMELINE</div>
-          {timeline.map((e, i) => (
-            <div key={i} style={{ padding: '6px 0', fontSize: 13 }}>
-              <strong style={{ color: s.primaryDark, marginRight: 8 }}>{e.t}</strong>
-              {e.type === 'formula' && '🔢 '}
-              {e.type === 'question' && '❓ '}
-              {e.type === 'example' && '💡 '}
-              {e.type === 'note' && '⭐ '}
-              {e.type === 'topic' && '📌 '}
-              {e.event}
-            </div>
-          ))}
+      {/* Manual AI retry button (when not processing and no result yet but has transcript) */}
+      {!aiProcessing && !aiResult && !recording && lines.length > 0 && !aiError && (
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <Button onClick={runAI} variant="outline">
+            🤖 {lang === 'bm' ? 'Susun nota dengan AI' : 'Organize with AI'}
+          </Button>
         </div>
       )}
     </div>
   )
+}
+
+// ------- Sub-components -------
+function Section({ icon, title, children, s }: {
+  icon: string
+  title: string
+  children: React.ReactNode
+  s: any
+}) {
+  return (
+    <section style={{
+      background: '#fff', padding: 20, borderRadius: 18,
+      border: `1px solid ${s.border}`, marginBottom: 12,
+    }}>
+      <h3 style={{
+        fontFamily: 'Georgia, serif', fontSize: 17, fontWeight: 700,
+        margin: '0 0 12px', color: s.dark,
+      }}>
+        {icon} {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+// ------- Rich markdown builder (for export) -------
+function buildRichMarkdown(lecture: Lecture, transcript: string, ai: AISummary): string {
+  const lines: string[] = []
+  lines.push(`# ${lecture.title}`, '')
+  if (lecture.subject)  lines.push(`**Subject:** ${lecture.subject}  `)
+  if (lecture.lecturer) lines.push(`**Lecturer:** ${lecture.lecturer}  `)
+  if (lecture.location) lines.push(`**Location:** ${lecture.location}  `)
+  lines.push(`**Date:** ${new Date(lecture.started_at).toLocaleString()}  `)
+  lines.push(`**Duration:** ${Math.round((lecture.duration_seconds || 0) / 60)} min  `)
+  lines.push('')
+  if (ai.summary) {
+    lines.push('## ✨ Summary', '', ai.summary, '')
+  }
+  if (ai.topics?.length) {
+    lines.push('## 📌 Topics covered', '')
+    ai.topics.forEach((t, i) => lines.push(`${i + 1}. ${t}`))
+    lines.push('')
+  }
+  if (ai.keyPoints?.length) {
+    lines.push('## 🔑 Key points', '')
+    ai.keyPoints.forEach((k) => lines.push(`- ${k}`))
+    lines.push('')
+  }
+  if (ai.formulas?.length) {
+    lines.push('## 📐 Formulas / Key facts', '')
+    ai.formulas.forEach((f) => lines.push(`- ${f}`))
+    lines.push('')
+  }
+  if (ai.questions?.length) {
+    lines.push('## ❓ Questions raised', '')
+    ai.questions.forEach((q) => lines.push(`- ${q}`))
+    lines.push('')
+  }
+  lines.push('---', '', '## 📝 Raw transcript', '', transcript || '_No transcript_', '')
+  lines.push('---', '', '_Generated by Cotton Candy 🍭_')
+  return lines.join('\n')
 }
