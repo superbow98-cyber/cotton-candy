@@ -1,10 +1,9 @@
 // ============================================================
-// Cotton Candy — Multi-provider AI abstraction
-// Supported: Groq (Llama 3.3 70B), Gemini 2.5 Flash, Gemini Flash-Lite
-// Auto mode: try Groq → Gemini Flash → Gemini Flash-Lite
+// Cotton Candy — Multi-provider AI (Gemini Flash prioritized)
+// Order: Gemini 2.5 Flash → Auto → Groq → Gemini Flash-Lite
 // ============================================================
 
-export type AIProvider = 'groq' | 'gemini-flash' | 'gemini-flash-lite' | 'auto'
+export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite'
 
 export type AISummary = {
   topics: string[]
@@ -14,37 +13,50 @@ export type AISummary = {
   summary: string
 }
 
-export const PROVIDER_META: Record<Exclude<AIProvider, 'auto'>, {
+// Order matters — this is the dropdown display order
+export const PROVIDER_ORDER: AIProvider[] = [
+  'gemini-flash',
+  'auto',
+  'groq',
+  'gemini-flash-lite',
+]
+
+export const DEFAULT_PROVIDER: AIProvider = 'gemini-flash'
+
+export const PROVIDER_META: Record<AIProvider, {
   label: string
-  icon: string
-  desc: string
+  shortLabel: string
+  descEn: string
   descBm: string
-  rpd: number
-  model: string
+  logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite'
 }> = {
-  'groq': {
-    label: 'Groq Llama 3.3 70B',
-    icon: '🚀',
-    desc: 'Fastest · 1,000/day · Best overall quality',
-    descBm: 'Pantas · 1,000/hari · Kualiti terbaik',
-    rpd: 1000,
-    model: 'llama-3.3-70b-versatile',
-  },
   'gemini-flash': {
     label: 'Gemini 2.5 Flash',
-    icon: '💎',
-    desc: 'Excellent · 250/day · Long context (1M)',
-    descBm: 'Hebat · 250/hari · Context panjang (1M)',
-    rpd: 250,
-    model: 'gemini-2.5-flash',
+    shortLabel: 'Gemini Flash',
+    descEn: 'Handles very long lectures and nuanced topics.',
+    descBm: 'Kendalikan kuliah panjang dan topik kompleks.',
+    logoKey: 'gemini',
+  },
+  'auto': {
+    label: 'Auto',
+    shortLabel: 'Auto',
+    descEn: 'Picks the best available AI. Never fails.',
+    descBm: 'Pilih AI terbaik yang ada. Tidak pernah gagal.',
+    logoKey: 'auto',
+  },
+  'groq': {
+    label: 'Groq · Llama 3.3 70B',
+    shortLabel: 'Groq',
+    descEn: 'Lightning fast. Great for dense technical lectures.',
+    descBm: 'Sangat pantas. Bagus untuk kuliah teknikal padat.',
+    logoKey: 'groq',
   },
   'gemini-flash-lite': {
     label: 'Gemini 2.5 Flash-Lite',
-    icon: '⚡',
-    desc: 'High volume · 1,000/day · Simple & fast',
-    descBm: 'Volume tinggi · 1,000/hari · Ringkas',
-    rpd: 1000,
-    model: 'gemini-2.5-flash-lite',
+    shortLabel: 'Flash-Lite',
+    descEn: 'Best for short recaps, daily tutorials, simple notes.',
+    descBm: 'Terbaik untuk ringkasan pendek, tutorial harian.',
+    logoKey: 'gemini-lite',
   },
 }
 
@@ -68,7 +80,7 @@ Rules:
 - "questions": questions asked BY STUDENTS or posed by lecturer for students to think about (empty array if none)
 - "summary": 2-3 sentences, same primary language as the lecture (if BM → write BM, if EN → write EN)
 - If the transcript is very short (<100 words), fill with best-effort even if arrays have fewer items
-- DO NOT invent facts not in the transcript. If transcript is gibberish/too short, return empty arrays and a note in summary like "Lecture too short to summarize properly."
+- DO NOT invent facts not in the transcript. If transcript is gibberish/too short, return empty arrays and note in summary.
 - Fix scientific terms that look misspelled from speech recognition (e.g. "my toe corner dia" → "Mitochondria")
 - Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
 
@@ -89,10 +101,7 @@ async function callGroq(userMessage: string): Promise<AISummary> {
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
@@ -114,14 +123,11 @@ async function callGroq(userMessage: string): Promise<AISummary> {
   const content = json?.choices?.[0]?.message?.content
   if (!content) throw new Error('Groq: empty response')
 
-  let parsed
-  try { parsed = JSON.parse(content) }
+  try { return validateResult(JSON.parse(content)) }
   catch { throw new Error('Groq: malformed JSON') }
-
-  return validateResult(parsed)
 }
 
-// ---------- Gemini (generic) ----------
+// ---------- Gemini ----------
 async function callGemini(userMessage: string, model: string): Promise<AISummary> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured')
@@ -131,13 +137,8 @@ async function callGemini(userMessage: string, model: string): Promise<AISummary
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: {
-        role: 'system',
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      contents: [
-        { role: 'user', parts: [{ text: userMessage }] },
-      ],
+      systemInstruction: { role: 'system', parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
       generationConfig: {
         temperature: 0.2,
         maxOutputTokens: 2000,
@@ -155,47 +156,38 @@ async function callGemini(userMessage: string, model: string): Promise<AISummary
   const content = json?.candidates?.[0]?.content?.parts?.[0]?.text
   if (!content) throw new Error('Gemini: empty response')
 
-  let parsed
-  try { parsed = JSON.parse(content) }
+  try { return validateResult(JSON.parse(content)) }
   catch { throw new Error('Gemini: malformed JSON') }
-
-  return validateResult(parsed)
 }
 
 // ---------- Main dispatcher ----------
+// Auto fallback order: Gemini Flash → Groq → Gemini Flash-Lite (Gemini first as default preference)
 export async function callAI(
   provider: AIProvider,
   userMessage: string
 ): Promise<{ result: AISummary; usedProvider: string }> {
-  // Explicit single-provider call
-  if (provider === 'groq') {
-    const result = await callGroq(userMessage)
-    return { result, usedProvider: 'groq' }
-  }
   if (provider === 'gemini-flash') {
-    const result = await callGemini(userMessage, 'gemini-2.5-flash')
-    return { result, usedProvider: 'gemini-flash' }
+    return { result: await callGemini(userMessage, 'gemini-2.5-flash'), usedProvider: 'gemini-flash' }
+  }
+  if (provider === 'groq') {
+    return { result: await callGroq(userMessage), usedProvider: 'groq' }
   }
   if (provider === 'gemini-flash-lite') {
-    const result = await callGemini(userMessage, 'gemini-2.5-flash-lite')
-    return { result, usedProvider: 'gemini-flash-lite' }
+    return { result: await callGemini(userMessage, 'gemini-2.5-flash-lite'), usedProvider: 'gemini-flash-lite' }
   }
 
-  // Auto fallback: Groq → Gemini Flash → Gemini Flash-Lite
-  const order: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'groq',              fn: () => callGroq(userMessage) },
+  // Auto: Gemini Flash → Groq → Gemini Flash-Lite
+  const chain: Array<{ name: string; fn: () => Promise<AISummary> }> = [
     { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash') },
+    { name: 'groq',              fn: () => callGroq(userMessage) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite') },
   ]
-
   const errors: string[] = []
-  for (const { name, fn } of order) {
+  for (const { name, fn } of chain) {
     try {
-      const result = await fn()
-      return { result, usedProvider: name }
+      return { result: await fn(), usedProvider: name }
     } catch (e: any) {
       errors.push(`${name}: ${e.message}`)
-      // continue to next provider
     }
   }
   throw new Error(`All providers failed. ${errors.join(' | ')}`)
