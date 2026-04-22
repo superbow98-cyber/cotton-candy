@@ -1,21 +1,20 @@
 // src/app/api/transcribe/route.ts
-// POST audio blob -> forward to Groq Whisper -> return transcript.
-// Audio NEVER persisted. Blob exists only in serverless function memory for
-// duration of the request, then garbage-collected.
+// POST audio blob → check cap → Whisper → track usage. Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { checkAudioCap } from '@/lib/audio-usage'
+import { type Plan } from '@/types'
 
-export const runtime = 'nodejs'        // Need Node runtime for form parsing
-export const maxDuration = 60          // Vercel max for Hobby plan
-export const dynamic = 'force-dynamic' // No caching
+export const runtime = 'nodejs'
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3' // Best accuracy, handles code-switching
+const MODEL = 'whisper-large-v3'
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth check
     const sb = await createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) {
@@ -27,26 +26,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 })
     }
 
-    // Parse incoming multipart form
+    // --- CAP CHECK ---
+    const { data: profile } = await sb.from('profiles')
+      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const plan = (profile?.plan || 'free') as Plan
+    const check = checkAudioCap(
+      plan,
+      profile?.audio_seconds_used || 0,
+      profile?.audio_reset_at || null,
+      profile?.plan_upgraded_at || null,
+    )
+
+    if (!check.allowed) {
+      return NextResponse.json({
+        error: check.reason || 'Audio cap reached',
+        capReached: true,
+        usage: check,
+      }, { status: 402 })  // 402 Payment Required
+    }
+
+    // Parse audio
     const form = await req.formData()
     const audio = form.get('audio') as File | null
     if (!audio) {
       return NextResponse.json({ error: 'No audio file in request' }, { status: 400 })
     }
 
-    // Size check — Groq Whisper hard limit is 25MB per call
     if (audio.size > 25 * 1024 * 1024) {
       return NextResponse.json({
         error: 'Audio chunk too large. Please chunk on client side.',
       }, { status: 413 })
     }
 
-    // Forward to Groq Whisper
+    // --- WHISPER CALL ---
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
     groqForm.append('response_format', 'verbose_json')
-    // No "language" param — let Whisper auto-detect for rojak handling
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -64,14 +83,38 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await groqRes.json()
-    // data.text = full transcript
-    // data.segments = [{ start, end, text, language? }]
-    // data.language = auto-detected primary language
+
+    // --- TRACK USAGE ---
+    // Use Whisper's returned duration (most accurate). Fallback to last segment end.
+    const audioSeconds = Math.ceil(
+      data.duration
+        || (data.segments?.[data.segments.length - 1]?.end || 0)
+        || 0
+    )
+
+    if (audioSeconds > 0) {
+      await sb.from('profiles')
+        .update({
+          audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds,
+        })
+        .eq('id', user.id)
+    }
+
+    // Recalculate usage for response
+    const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
+    const newCheck = checkAudioCap(
+      plan,
+      newUsage,
+      profile?.audio_reset_at || null,
+      profile?.plan_upgraded_at || null,
+    )
 
     return NextResponse.json({
       text: data.text || '',
       segments: data.segments || [],
       language: data.language || 'auto',
+      audioSeconds,
+      usage: newCheck,
     })
   } catch (e: any) {
     console.error('[transcribe] Unexpected:', e)

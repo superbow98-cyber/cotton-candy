@@ -16,17 +16,39 @@ export function shouldChunk(audioBlob: Blob): boolean {
   return audioBlob.size > 20 * 1024 * 1024 // 20MB safety margin
 }
 
+export type AudioUsageInfo = {
+  allowed: boolean
+  usedSeconds: number
+  capSeconds: number
+  remainingSeconds: number
+  percentUsed: number
+  reason?: string
+}
+
 export type TranscribeResponse = {
   text: string
   segments?: Array<{ start: number; end: number; text: string }>
   language?: string
   error?: string
+  capReached?: boolean
+  usage?: AudioUsageInfo
+  audioSeconds?: number
 }
 
 /**
  * POST one audio blob to /api/transcribe.
  * Server forwards to Groq Whisper, returns JSON. No storage.
+ * Throws CapReachedError if user's audio cap is reached.
  */
+export class CapReachedError extends Error {
+  usage?: AudioUsageInfo
+  constructor(msg: string, usage?: AudioUsageInfo) {
+    super(msg)
+    this.name = 'CapReachedError'
+    this.usage = usage
+  }
+}
+
 export async function transcribeOne(audioBlob: Blob, signal?: AbortSignal): Promise<TranscribeResponse> {
   const form = new FormData()
   form.append('audio', audioBlob, 'chunk.webm')
@@ -41,6 +63,9 @@ export async function transcribeOne(audioBlob: Blob, signal?: AbortSignal): Prom
     data = JSON.parse(text)
   } catch {
     throw new Error(`Transcribe failed (${res.status}): ${text.slice(0, 200)}`)
+  }
+  if (res.status === 402 || data.capReached) {
+    throw new CapReachedError(data.error || 'Audio cap reached', data.usage)
   }
   if (!res.ok || data.error) {
     throw new Error(data.error || `Transcribe failed (${res.status})`)

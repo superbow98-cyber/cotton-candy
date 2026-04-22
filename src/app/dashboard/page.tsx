@@ -41,6 +41,9 @@ export default function DashboardHome() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [stats, setStats] = useState({ count: 0, mins: 0, notebooks: 0 })
+  const [audioUsage, setAudioUsage] = useState<{
+    usedSeconds: number; capSeconds: number; percentUsed: number
+  } | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -58,6 +61,15 @@ export default function DashboardHome() {
       const { data: nbooks } = await sb.from('notebooks').select('id').eq('user_id', user.id)
       const mins = Math.round((weekLect || []).reduce((a: number, l: any) => a + (l.duration_seconds || 0), 0) / 60)
       setStats({ count: weekLect?.length || 0, mins, notebooks: nbooks?.length || 0 })
+
+      // Fetch audio usage
+      try {
+        const res = await fetch('/api/usage')
+        if (res.ok) {
+          const { usage } = await res.json()
+          if (usage) setAudioUsage(usage)
+        }
+      } catch {}
     })()
   }, [])
 
@@ -124,9 +136,13 @@ export default function DashboardHome() {
           sub={`${plan.lectureLimit === 9999 ? (lang === 'bm' ? 'Tak terhad' : 'Unlimited') : `${plan.lectureLimit} ${lang === 'bm' ? 'tersedia' : 'available'}`}`}
         />
         <StatCard
-          label={lang === 'bm' ? 'Minit direkod' : 'Minutes recorded'}
-          value={stats.mins}
-          sub={`~${(stats.mins / 60).toFixed(1)} ${lang === 'bm' ? 'jam' : 'hours'}`}
+          label={lang === 'bm' ? 'Kuota audio' : 'Audio quota'}
+          value={audioUsage
+            ? `${(audioUsage.usedSeconds / 3600).toFixed(1)} / ${(audioUsage.capSeconds / 3600).toFixed(1)}`
+            : '—'}
+          sub={audioUsage
+            ? `${audioUsage.percentUsed}% ${lang === 'bm' ? 'digunakan' : 'used'}`
+            : (lang === 'bm' ? 'Memuatkan…' : 'Loading…')}
         />
         <StatCard
           label={lang === 'bm' ? 'Notebook' : 'Notebooks'}

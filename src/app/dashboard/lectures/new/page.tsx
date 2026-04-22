@@ -99,6 +99,21 @@ export default function NewLecture() {
       const { data: { user } } = await sb.auth.getUser()
       if (!user) throw new Error('not signed in')
 
+      // Check plan limits + audio cap
+      const usageRes = await fetch('/api/usage')
+      if (usageRes.ok) {
+        const { usage } = await usageRes.json()
+        if (usage && !usage.allowed) {
+          setErr(
+            lang === 'bm'
+              ? `Had audio (${(usage.capSeconds / 3600).toFixed(1)} jam) tercapai. Upgrade untuk teruskan.`
+              : `Audio cap (${(usage.capSeconds / 3600).toFixed(1)}h) reached. Upgrade to continue.`
+          )
+          setLoading(false)
+          return
+        }
+      }
+
       const { data: prof } = await sb.from('profiles').select('plan, plan_upgraded_at').eq('id', user.id).maybeSingle()
       const plan = (prof?.plan || 'free') as keyof typeof PLANS
       const limits = PLANS[plan]
@@ -108,7 +123,7 @@ export default function NewLecture() {
       }
       const { count } = await query
       if ((count ?? 0) >= limits.lectureLimit) {
-        setErr(lang === 'bm' ? 'Had pelan tercapai. Upgrade untuk teruskan.' : 'Plan limit reached. Upgrade to continue.')
+        setErr(lang === 'bm' ? 'Had kuliah tercapai. Upgrade untuk teruskan.' : 'Lecture limit reached. Upgrade to continue.')
         setLoading(false)
         return
       }

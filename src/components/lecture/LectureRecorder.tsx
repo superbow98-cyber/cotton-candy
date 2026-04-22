@@ -9,7 +9,7 @@ import { type Lecture, PLANS } from '@/types'
 import { lectureToMarkdown, lectureToPdf, downloadText, extractKeywords, secondsToClock } from '@/lib/export'
 import { correctScientificTerms, detectSubject } from '@/lib/scientific-terms'
 import { PROVIDER_ORDER, PROVIDER_META, DEFAULT_PROVIDER, type AIProvider } from '@/lib/ai-providers'
-import { transcribeOne, whisperTextToLines } from '@/lib/whisper'
+import { transcribeOne, whisperTextToLines, CapReachedError, type AudioUsageInfo } from '@/lib/whisper'
 import { getRecordingTypeMeta, SECTION_LABELS } from '@/lib/recording-types'
 
 type Line = { id: string; t: number; text: string; lang?: string }
@@ -232,6 +232,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
   const [audioCaptureOk, setAudioCaptureOk] = useState<boolean | null>(null)
   const [aiFellBack, setAiFellBack] = useState<boolean>(false)
+  const [usage, setUsage] = useState<AudioUsageInfo | null>(null)
+  const [capReachedDuringRec, setCapReachedDuringRec] = useState(false)
 
   // Auto-scroll to AI section whenever loader or result appears
   useEffect(() => {
@@ -257,6 +259,20 @@ export default function LectureRecorder({ id }: { id: string }) {
       setRecLang(initial); recLangRef.current = initial
     }
   }, [lang])
+
+  // Fetch current audio usage from server
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const res = await fetch('/api/usage')
+        if (res.ok) {
+          const { usage: u } = await res.json()
+          if (u) setUsage(u)
+        }
+      } catch {}
+    }
+    fetchUsage()
+  }, [])
 
   // Load lecture + AI provider preference
   useEffect(() => {
@@ -485,7 +501,26 @@ export default function LectureRecorder({ id }: { id: string }) {
       recRef.current = startRecognition(recLangRef.current)
 
       tickRef.current = setInterval(() => {
-        setElapsed(accumRef.current + Math.floor((Date.now() - startRef.current) / 1000))
+        const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
+        setElapsed(nowElapsed)
+
+        // Check per-lecture minute cap (plan limit)
+        const perLectureMax = PLANS[plan].minutesPerLecture * 60
+        if (nowElapsed >= perLectureMax) {
+          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-stopping')
+          toggle()  // stops recording
+          return
+        }
+
+        // Check global audio cap (remaining audio budget)
+        if (usage && usage.allowed) {
+          const projected = (usage.usedSeconds || 0) + nowElapsed
+          if (projected >= usage.capSeconds) {
+            console.log('[cap] Global audio cap reached — auto-stopping')
+            setCapReachedDuringRec(true)
+            toggle()
+          }
+        }
       }, 500)
       setRecording(true)
     }
@@ -562,16 +597,30 @@ export default function LectureRecorder({ id }: { id: string }) {
       setEnhanceProgress({ done: 0, total: chunks.length })
       try {
         const texts: string[] = []
-        // Sequential to respect rate limits + clear progress UI
         for (let i = 0; i < chunks.length; i++) {
-          const result = await transcribeOne(chunks[i])
-          texts.push(result.text || '')
-          setEnhanceProgress({ done: i + 1, total: chunks.length })
+          try {
+            const result = await transcribeOne(chunks[i])
+            texts.push(result.text || '')
+            if (result.usage) setUsage(result.usage)
+            setEnhanceProgress({ done: i + 1, total: chunks.length })
+          } catch (chunkErr: any) {
+            if (chunkErr instanceof CapReachedError) {
+              // Cap hit mid-transcription — save what we have + show banner
+              console.warn('[whisper] Cap reached mid-transcription, chunk', i + 1, '/', chunks.length)
+              if (chunkErr.usage) setUsage(chunkErr.usage)
+              setEnhanceError(
+                lang === 'bm'
+                  ? `Had audio tercapai selepas ${i} chunk. Transkrip separa tersimpan.`
+                  : `Audio cap reached after ${i} chunk${i === 1 ? '' : 's'}. Partial transcript saved.`,
+              )
+              break  // stop processing more chunks
+            }
+            throw chunkErr  // other errors bubble up
+          }
         }
         const combined = texts.join('\n').trim()
 
         if (combined.length > 20) {
-          // Replace Web Speech lines with Whisper-derived lines
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
             setLines(whisperLines)
@@ -684,6 +733,110 @@ export default function LectureRecorder({ id }: { id: string }) {
           </span>
         )}
       </div>
+
+      {/* AUDIO USAGE BAR — shows remaining cap for current plan */}
+      {usage && (
+        <div style={{
+          background: usage.percentUsed >= 90 ? 'rgba(229,57,53,0.04)'
+                    : usage.percentUsed >= 75 ? 'rgba(186,117,23,0.05)'
+                    : '#fff',
+          border: `0.5px solid ${
+            usage.percentUsed >= 90 ? 'rgba(229,57,53,0.25)'
+            : usage.percentUsed >= 75 ? 'rgba(186,117,23,0.25)'
+            : 'rgba(0,0,0,0.06)'
+          }`,
+          borderRadius: 12,
+          padding: '10px 14px',
+          marginBottom: 14,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 6, gap: 10,
+          }}>
+            <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.6)', fontWeight: 500, letterSpacing: '-0.005em' }}>
+              {lang === 'bm' ? 'Kuota audio' : 'Audio quota'}
+            </div>
+            <div style={{
+              fontSize: 11.5, fontWeight: 600,
+              color: usage.percentUsed >= 90 ? '#C62828'
+                  : usage.percentUsed >= 75 ? '#8a6d0f'
+                  : 'rgba(29,29,31,0.7)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {(usage.usedSeconds / 3600).toFixed(1)} / {(usage.capSeconds / 3600).toFixed(1)} {lang === 'bm' ? 'jam' : 'h'}
+              <span style={{ marginLeft: 6, fontWeight: 500, opacity: 0.7 }}>
+                · {usage.percentUsed}%
+              </span>
+            </div>
+          </div>
+          <div style={{
+            height: 4, borderRadius: 100,
+            background: 'rgba(0,0,0,0.05)', overflow: 'hidden', position: 'relative',
+          }}>
+            <div style={{
+              position: 'absolute', top: 0, left: 0,
+              height: '100%', width: `${usage.percentUsed}%`,
+              borderRadius: 100,
+              background: usage.percentUsed >= 90 ? 'linear-gradient(90deg, #E53935, #C62828)'
+                        : usage.percentUsed >= 75 ? 'linear-gradient(90deg, #F0B030, #BA7517)'
+                        : 'linear-gradient(90deg, #FFB7C5, #D4537E)',
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+          {usage.percentUsed >= 90 && !capReachedDuringRec && (
+            <div style={{
+              fontSize: 11, color: '#C62828', marginTop: 6,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span>⚠</span>
+              {lang === 'bm'
+                ? `Hampir habis (${((usage.capSeconds - usage.usedSeconds) / 60).toFixed(0)} min lagi). Pertimbangkan upgrade.`
+                : `Almost full (${((usage.capSeconds - usage.usedSeconds) / 60).toFixed(0)} min left). Consider upgrading.`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CAP REACHED BANNER — shown when recording auto-stopped */}
+      {capReachedDuringRec && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FDE8E8, #fff)',
+          border: '0.5px solid rgba(229,57,53,0.3)',
+          borderRadius: 12,
+          padding: '14px 16px',
+          marginBottom: 14,
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+        }}>
+          <span style={{
+            width: 24, height: 24, borderRadius: '50%',
+            background: '#E53935', color: '#fff',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, fontSize: 14, fontWeight: 700,
+          }}>!</span>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+              marginBottom: 3, letterSpacing: '-0.015em',
+            }}>
+              {lang === 'bm' ? 'Had audio tercapai' : 'Audio cap reached'}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.65)', lineHeight: 1.5 }}>
+              {lang === 'bm'
+                ? 'Rakaman dihentikan automatik. Upgrade pelan untuk rakam lebih.'
+                : 'Recording auto-stopped. Upgrade your plan to record more.'}
+            </div>
+            <a href="/pricing" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              marginTop: 8, fontSize: 12, fontWeight: 500,
+              color: '#1d1d1f', textDecoration: 'none',
+              padding: '6px 12px', borderRadius: 7,
+              background: '#fff', border: '0.5px solid rgba(0,0,0,0.12)',
+            }}>
+              {lang === 'bm' ? 'Lihat pelan' : 'View plans'} →
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* RECORDER CARD — record | [timer + AI chip] | finish */}
       <div style={{
