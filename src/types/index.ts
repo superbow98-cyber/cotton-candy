@@ -180,6 +180,7 @@ export const PLANS: Record<Plan, {
   durationHours: number | null
   lectureLimit: number
   minutesPerLecture: number
+  maxAudioHours: number  // NEW: hard cap on total audio processed per plan period
   notebookLimit: number
   pdfExport: boolean
   mdExport: boolean
@@ -189,25 +190,25 @@ export const PLANS: Record<Plan, {
 }> = {
   free: {
     name: 'Free', priceRM: 0, durationHours: null,
-    lectureLimit: 3, minutesPerLecture: 60, notebookLimit: 1,
+    lectureLimit: 3, minutesPerLecture: 15, maxAudioHours: 0.75, notebookLimit: 1,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: true,
     stripeMode: 'payment',
   },
   day: {
-    name: 'Day Pass', priceRM: 7, durationHours: 24,
-    lectureLimit: 10, minutesPerLecture: 180, notebookLimit: 3,
+    name: 'Day Pass', priceRM: 8, durationHours: 24,
+    lectureLimit: 10, minutesPerLecture: 45, maxAudioHours: 4, notebookLimit: 3,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
     stripeMode: 'payment',
   },
   month: {
-    name: 'Monthly', priceRM: 19, durationHours: 24 * 30,
-    lectureLimit: 100, minutesPerLecture: 240, notebookLimit: 20,
+    name: 'Monthly', priceRM: 25, durationHours: 24 * 30,
+    lectureLimit: 30, minutesPerLecture: 60, maxAudioHours: 12, notebookLimit: 20,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
     stripeMode: 'payment',
   },
   year: {
-    name: 'Yearly', priceRM: 149, durationHours: 24 * 365,
-    lectureLimit: 9999, minutesPerLecture: 480, notebookLimit: 9999,
+    name: 'Yearly', priceRM: 100, durationHours: 24 * 365,
+    lectureLimit: 200, minutesPerLecture: 60, maxAudioHours: 60, notebookLimit: 50,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
     stripeMode: 'payment',
   },
