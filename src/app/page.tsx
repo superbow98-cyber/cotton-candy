@@ -76,7 +76,12 @@ export default function Home() {
           color: '#1d1d1f',
           margin: '0 0 14px',
         }}>
-          {L('Record lectures.', 'Rakam kuliah.')}<br/>
+          {L('Record', 'Rakam')} <WordRotator
+            words={lang === 'bm'
+              ? ['kuliah', 'mesyuarat', 'perjumpaan']
+              : ['lectures', 'meetings', 'gatherings']}
+            interval={2500}
+          />.<br/>
           {L('Watch them grow into', 'Tonton ia berubah jadi')}
         </h1>
 
@@ -502,6 +507,46 @@ function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; 
         {desc}
       </div>
     </div>
+  )
+}
+
+// Cycles through words with fade + slide-up animation (Apple-style).
+// Width adapts automatically via inline-block + measured span.
+function WordRotator({ words, interval = 2500 }: { words: string[]; interval?: number }) {
+  const [i, setI] = useState(0)
+  const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    const switchWord = () => {
+      // Phase 1: fade out + slide up (150ms)
+      setVisible(false)
+      // Phase 2: swap word + slide in from below
+      setTimeout(() => {
+        setI((prev) => (prev + 1) % words.length)
+        setVisible(true)
+      }, 200)
+    }
+    const id = setInterval(switchWord, interval)
+    return () => clearInterval(id)
+  }, [words.length, interval])
+
+  return (
+    <span style={{
+      display: 'inline-block',
+      position: 'relative',
+      verticalAlign: 'baseline',
+      background: 'linear-gradient(135deg, #FF6B9D 0%, #C471F5 50%, #5A8FF5 100%)',
+      WebkitBackgroundClip: 'text',
+      backgroundClip: 'text',
+      color: 'transparent',
+      fontWeight: 700,
+      transition: 'opacity 200ms ease-out, transform 200ms ease-out',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(-8px)',
+      whiteSpace: 'nowrap',
+    }}>
+      {words[i]}
+    </span>
   )
 }
 
