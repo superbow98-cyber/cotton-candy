@@ -1,5 +1,12 @@
 // src/app/api/transcribe/route.ts
-// POST audio blob → check cap → Whisper → track usage. Audio NEVER persisted.
+// POST audio blob → check cap → 3-tier STT chain → track usage. Audio NEVER persisted.
+//
+// STT Chain:
+//   1st: Groq Whisper Turbo    (RM 0.19/hr) — cheapest primary
+//   2nd: Grok STT (xAI)         (RM 0.47/hr) — highest accuracy fallback
+//   3rd: Groq Whisper v3        (RM 0.53/hr) — most proven last resort
+//
+// Language: AUTO-DETECT (no explicit language parameter passed)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -10,8 +17,137 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
+// ============================================================
+// STT PROVIDERS
+// ============================================================
+
+type Provider = 'groq-whisper-turbo' | 'grok-stt' | 'groq-whisper-v3'
+
+interface STTResult {
+  text: string
+  duration: number              // seconds of audio
+  language: string              // detected language
+  segments?: any[]
+  usedProvider: Provider
+  usedFallback: boolean
+}
+
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3'
+const GROK_URL = 'https://api.x.ai/v1/stt'
+
+/**
+ * Try 3 STT providers in order, return first success.
+ * Auto-detects language (no explicit language param).
+ */
+async function transcribeWithFallback(audio: File): Promise<STTResult> {
+  const groqKey = process.env.GROQ_API_KEY
+  const xaiKey = process.env.XAI_API_KEY
+  const attempts: string[] = []
+
+  // === 1st: Groq Whisper Turbo (cheapest) ===
+  if (groqKey) {
+    try {
+      const result = await callGroq(audio, groqKey, 'whisper-large-v3-turbo')
+      return { ...result, usedProvider: 'groq-whisper-turbo', usedFallback: false }
+    } catch (err: any) {
+      console.warn('[STT] Turbo failed, trying Grok STT:', err.message)
+      attempts.push(`Turbo: ${err.message}`)
+    }
+  }
+
+  // === 2nd: Grok STT (xAI) ===
+  if (xaiKey) {
+    try {
+      const result = await callGrokSTT(audio, xaiKey)
+      return { ...result, usedProvider: 'grok-stt', usedFallback: true }
+    } catch (err: any) {
+      console.warn('[STT] Grok STT failed, trying Whisper v3:', err.message)
+      attempts.push(`Grok: ${err.message}`)
+    }
+  }
+
+  // === 3rd: Groq Whisper v3 (most proven) ===
+  if (groqKey) {
+    try {
+      const result = await callGroq(audio, groqKey, 'whisper-large-v3')
+      return { ...result, usedProvider: 'groq-whisper-v3', usedFallback: true }
+    } catch (err: any) {
+      attempts.push(`v3: ${err.message}`)
+    }
+  }
+
+  throw new Error(`All STT providers failed. Attempts: ${attempts.join(' | ')}`)
+}
+
+/**
+ * Groq Whisper — shared for Turbo + v3
+ * NOTE: No `language` param = auto-detect!
+ */
+async function callGroq(audio: File, apiKey: string, model: string): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
+  const form = new FormData()
+  form.append('file', audio, 'audio.webm')
+  form.append('model', model)
+  // NO language param = Whisper auto-detects language
+  form.append('response_format', 'verbose_json')
+
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => 'unknown')
+    throw new Error(`Groq ${model} ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  return {
+    text: data.text || '',
+    duration: Math.ceil(
+      data.duration
+      || (data.segments?.[data.segments.length - 1]?.end || 0)
+      || 0
+    ),
+    language: data.language || 'auto',
+    segments: data.segments || [],
+  }
+}
+
+/**
+ * Grok STT — xAI Speech-to-Text
+ * NOTE: No `language` param = auto-detect (25+ langs)
+ */
+async function callGrokSTT(audio: File, apiKey: string): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
+  const form = new FormData()
+  form.append('file', audio, 'audio.webm')
+  form.append('model', 'grok-stt')
+  // NO language param = Grok auto-detects
+  form.append('format', 'json')
+
+  const res = await fetch(GROK_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => 'unknown')
+    throw new Error(`Grok STT ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  return {
+    text: data.text || '',
+    duration: Math.ceil(data.duration || 0),
+    language: data.language || 'auto',
+    segments: data.segments || [],
+  }
+}
+
+// ============================================================
+// MAIN HANDLER
+// ============================================================
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,14 +157,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const apiKey = process.env.GROQ_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 })
-    }
-
     // --- CAP CHECK ---
     const { data: profile } = await sb.from('profiles')
-      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at')
+      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at, lang')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -45,7 +176,7 @@ export async function POST(req: NextRequest) {
         error: check.reason || 'Audio cap reached',
         capReached: true,
         usage: check,
-      }, { status: 402 })  // 402 Payment Required
+      }, { status: 402 })
     }
 
     // Parse audio
@@ -61,37 +192,21 @@ export async function POST(req: NextRequest) {
       }, { status: 413 })
     }
 
-    // --- WHISPER CALL ---
-    const groqForm = new FormData()
-    groqForm.append('file', audio, 'audio.webm')
-    groqForm.append('model', MODEL)
-    groqForm.append('response_format', 'verbose_json')
-
-    const groqRes = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: groqForm,
-    })
-
-    if (!groqRes.ok) {
-      const errText = await groqRes.text()
-      console.error('[transcribe] Groq error:', groqRes.status, errText)
+    // --- TRANSCRIBE WITH 3-TIER FALLBACK ---
+    let sttResult: STTResult
+    try {
+      sttResult = await transcribeWithFallback(audio)
+      console.log(`[transcribe] Used provider: ${sttResult.usedProvider}, language detected: ${sttResult.language}`)
+    } catch (err: any) {
+      console.error('[transcribe] All STT providers failed:', err.message)
       return NextResponse.json({
-        error: `Whisper failed (${groqRes.status})`,
-        detail: errText.slice(0, 500),
-      }, { status: groqRes.status })
+        error: `Transcription failed. Please try again.`,
+        detail: err.message.slice(0, 500),
+      }, { status: 502 })
     }
 
-    const data = await groqRes.json()
-
     // --- TRACK USAGE ---
-    // Use Whisper's returned duration (most accurate). Fallback to last segment end.
-    const audioSeconds = Math.ceil(
-      data.duration
-        || (data.segments?.[data.segments.length - 1]?.end || 0)
-        || 0
-    )
-
+    const audioSeconds = sttResult.duration
     if (audioSeconds > 0) {
       await sb.from('profiles')
         .update({
@@ -110,11 +225,13 @@ export async function POST(req: NextRequest) {
     )
 
     return NextResponse.json({
-      text: data.text || '',
-      segments: data.segments || [],
-      language: data.language || 'auto',
+      text: sttResult.text,
+      segments: sttResult.segments,
+      language: sttResult.language,       // auto-detected language
       audioSeconds,
       usage: newCheck,
+      usedProvider: sttResult.usedProvider,
+      usedFallback: sttResult.usedFallback,
     })
   } catch (e: any) {
     console.error('[transcribe] Unexpected:', e)
