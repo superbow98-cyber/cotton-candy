@@ -37,9 +37,13 @@ const GROK_URL = 'https://api.x.ai/v1/stt'
 
 /**
  * Try 3 STT providers in order, return first success.
- * Auto-detects language (no explicit language param).
+ * Auto-detects language unless explicit hint provided.
+ * If languageHint is 'ms' or 'en', pass to Whisper for better accuracy.
  */
-async function transcribeWithFallback(audio: File): Promise<STTResult> {
+async function transcribeWithFallback(
+  audio: File,
+  languageHint?: 'ms' | 'en'
+): Promise<STTResult> {
   const groqKey = process.env.GROQ_API_KEY
   const xaiKey = process.env.XAI_API_KEY
   const attempts: string[] = []
@@ -47,7 +51,7 @@ async function transcribeWithFallback(audio: File): Promise<STTResult> {
   // === 1st: Groq Whisper Turbo (cheapest) ===
   if (groqKey) {
     try {
-      const result = await callGroq(audio, groqKey, 'whisper-large-v3-turbo')
+      const result = await callGroq(audio, groqKey, 'whisper-large-v3-turbo', languageHint)
       return { ...result, usedProvider: 'groq-whisper-turbo', usedFallback: false }
     } catch (err: any) {
       console.warn('[STT] Turbo failed, trying Grok STT:', err.message)
@@ -58,7 +62,7 @@ async function transcribeWithFallback(audio: File): Promise<STTResult> {
   // === 2nd: Grok STT (xAI) ===
   if (xaiKey) {
     try {
-      const result = await callGrokSTT(audio, xaiKey)
+      const result = await callGrokSTT(audio, xaiKey, languageHint)
       return { ...result, usedProvider: 'grok-stt', usedFallback: true }
     } catch (err: any) {
       console.warn('[STT] Grok STT failed, trying Whisper v3:', err.message)
@@ -69,7 +73,7 @@ async function transcribeWithFallback(audio: File): Promise<STTResult> {
   // === 3rd: Groq Whisper v3 (most proven) ===
   if (groqKey) {
     try {
-      const result = await callGroq(audio, groqKey, 'whisper-large-v3')
+      const result = await callGroq(audio, groqKey, 'whisper-large-v3', languageHint)
       return { ...result, usedProvider: 'groq-whisper-v3', usedFallback: true }
     } catch (err: any) {
       attempts.push(`v3: ${err.message}`)
@@ -81,13 +85,20 @@ async function transcribeWithFallback(audio: File): Promise<STTResult> {
 
 /**
  * Groq Whisper — shared for Turbo + v3
- * NOTE: No `language` param = auto-detect!
+ * Pass language hint if provided for better accuracy.
  */
-async function callGroq(audio: File, apiKey: string, model: string): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
+async function callGroq(
+  audio: File,
+  apiKey: string,
+  model: string,
+  languageHint?: 'ms' | 'en'
+): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
   const form = new FormData()
   form.append('file', audio, 'audio.webm')
   form.append('model', model)
-  // NO language param = Whisper auto-detects language
+  if (languageHint) {
+    form.append('language', languageHint)  // explicit hint for better BM accuracy
+  }
   form.append('response_format', 'verbose_json')
 
   const res = await fetch(GROQ_URL, {
@@ -116,13 +127,19 @@ async function callGroq(audio: File, apiKey: string, model: string): Promise<Omi
 
 /**
  * Grok STT — xAI Speech-to-Text
- * NOTE: No `language` param = auto-detect (25+ langs)
+ * Pass language hint if provided (auto-detect otherwise).
  */
-async function callGrokSTT(audio: File, apiKey: string): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
+async function callGrokSTT(
+  audio: File,
+  apiKey: string,
+  languageHint?: 'ms' | 'en'
+): Promise<Omit<STTResult, 'usedProvider' | 'usedFallback'>> {
   const form = new FormData()
   form.append('file', audio, 'audio.webm')
   form.append('model', 'grok-stt')
-  // NO language param = Grok auto-detects
+  if (languageHint) {
+    form.append('language', languageHint)  // explicit hint
+  }
   form.append('format', 'json')
 
   const res = await fetch(GROK_URL, {
@@ -192,11 +209,25 @@ export async function POST(req: NextRequest) {
       }, { status: 413 })
     }
 
+    // --- DETERMINE LANGUAGE HINT ---
+    // Hybrid approach:
+    //   - User's profile lang = 'bm' → pass 'ms' to Whisper (force BM for accuracy)
+    //   - User's profile lang = 'en' → pass 'en' (force EN)
+    //   - Client form override → use that
+    //   - Otherwise → auto-detect
+    const clientLang = form.get('language') as string | null
+    const userUILang = profile?.lang || null
+    const rawLang = clientLang || userUILang
+    const languageHint: 'ms' | 'en' | undefined =
+      rawLang === 'bm' ? 'ms' :
+      rawLang === 'en' ? 'en' :
+      undefined // auto-detect if unknown
+
     // --- TRANSCRIBE WITH 3-TIER FALLBACK ---
     let sttResult: STTResult
     try {
-      sttResult = await transcribeWithFallback(audio)
-      console.log(`[transcribe] Used provider: ${sttResult.usedProvider}, language detected: ${sttResult.language}`)
+      sttResult = await transcribeWithFallback(audio, languageHint)
+      console.log(`[transcribe] Used: ${sttResult.usedProvider}, hint: ${languageHint || 'auto'}, detected: ${sttResult.language}`)
     } catch (err: any) {
       console.error('[transcribe] All STT providers failed:', err.message)
       return NextResponse.json({
