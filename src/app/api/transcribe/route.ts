@@ -1,6 +1,7 @@
 // src/app/api/transcribe/route.ts
-// Simple + reliable: Whisper Large v3 with language hint from user profile.
-// Audio NEVER persisted.
+// SIMPLEST POSSIBLE: Whisper Large v3 with pure auto-detect.
+// No language hints. No fallback. Just Whisper doing its thing.
+// Whisper v3 handles 99+ languages + science terms natively.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -12,7 +13,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3'  // Large model = better BM accuracy
+const MODEL = 'whisper-large-v3'
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     // --- CAP CHECK ---
     const { data: profile } = await sb.from('profiles')
-      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at, lang')
+      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -58,29 +59,16 @@ export async function POST(req: NextRequest) {
 
     if (audio.size > 25 * 1024 * 1024) {
       return NextResponse.json({
-        error: 'Audio chunk too large. Please chunk on client side.',
+        error: 'Audio chunk too large.',
       }, { status: 413 })
     }
 
-    // Language hint: profile 'bm' → 'ms', 'en' → 'en', otherwise auto-detect
-    const clientLang = form.get('language') as string | null
-    const userLang = profile?.lang || null
-    const rawLang = clientLang || userLang
-    const languageHint =
-      rawLang === 'bm' ? 'ms' :
-      rawLang === 'en' ? 'en' :
-      null
-
-    // --- WHISPER CALL ---
+    // --- WHISPER CALL (pure auto-detect) ---
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
-    if (languageHint) {
-      groqForm.append('language', languageHint)
-    }
+    // NO language param = Whisper auto-detects BM/EN/science/whatever
     groqForm.append('response_format', 'verbose_json')
-
-    console.log(`[transcribe] Calling Whisper v3 with language hint: ${languageHint || 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -90,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     if (!groqRes.ok) {
       const errText = await groqRes.text().catch(() => 'unknown')
-      console.error('[transcribe] Groq error:', groqRes.status, errText)
+      console.error('[transcribe] Whisper error:', groqRes.status, errText)
       return NextResponse.json({
         error: `Transcription failed (${groqRes.status})`,
         detail: errText.slice(0, 500),
@@ -98,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await groqRes.json()
-    console.log(`[transcribe] Done. detected: ${data.language}, chars: ${(data.text || '').length}`)
+    console.log(`[transcribe] detected: ${data.language}, chars: ${(data.text || '').length}`)
 
     // --- TRACK USAGE ---
     const audioSeconds = Math.ceil(
