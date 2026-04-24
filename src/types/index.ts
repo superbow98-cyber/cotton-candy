@@ -5,7 +5,7 @@
 
 export type Lang = 'en' | 'bm'
 
-export type Plan = 'free' | 'day' | 'month' | 'year'
+export type Plan = 'free' | 'day' | 'student_pro' | 'month' | 'year'
 
 export type Theme = 'pink' | 'blue' | 'green' | 'yellow'
 
@@ -190,13 +190,19 @@ export const PLANS: Record<Plan, {
 }> = {
   free: {
     name: 'Free', priceRM: 0, durationHours: null,
-    lectureLimit: 3, minutesPerLecture: 15, maxAudioHours: 0.75, notebookLimit: 1,
+    lectureLimit: 1, minutesPerLecture: 15, maxAudioHours: 0.25, notebookLimit: 1,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: true,
     stripeMode: 'payment',
   },
   day: {
     name: 'Day Pass', priceRM: 8, durationHours: 24,
     lectureLimit: 10, minutesPerLecture: 45, maxAudioHours: 4, notebookLimit: 3,
+    pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
+    stripeMode: 'payment',
+  },
+  student_pro: {
+    name: 'Student PRO', priceRM: 17, durationHours: 24 * 30,
+    lectureLimit: 20, minutesPerLecture: 45, maxAudioHours: 15, notebookLimit: 10,
     pdfExport: true, mdExport: true, aiSummary: true, watermark: false,
     stripeMode: 'payment',
   },

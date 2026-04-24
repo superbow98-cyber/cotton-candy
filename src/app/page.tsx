@@ -325,10 +325,10 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Symmetrical 4-col grid */}
+          {/* Symmetrical 5-col grid */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(5, 1fr)',
             gap: 14,
           }} className="cc-price-grid">
             <PricingCard
@@ -337,7 +337,7 @@ export default function Home() {
               period={L('Forever', 'Selamanya')}
               tagline={L('Try it risk-free.', 'Cuba tanpa risiko.')}
               features={[
-                L('3 recordings total', '3 rakaman jumlah'),
+                L('1 recording / month', '1 rakaman / bulan'),
                 L('15 min per recording', '15 min setiap rakaman'),
                 L('All 6 recording types', 'Semua 6 jenis rakaman'),
                 L('Export .md / .pdf', 'Eksport .md / .pdf'),
@@ -360,6 +360,22 @@ export default function Home() {
               ctaText={L('Buy Day Pass', 'Beli Day Pass')}
               ctaHref="/checkout?plan=day"
               variant="standard"
+            />
+            <PricingCard
+              name="🎓 Student PRO"
+              amount="17"
+              period={L('30 days · Pay once', '30 hari · Bayar sekali')}
+              tagline={L('Built for students. Affordable monthly access.', 'Untuk pelajar. Akses bulanan berpatutan.')}
+              features={[
+                L('20 recordings / month', '20 rakaman / bulan'),
+                L('45 min per recording', '45 min setiap rakaman'),
+                L('15 hours audio total', '15 jam audio jumlah'),
+                L('No watermark on PDF', 'Tiada watermark pada PDF'),
+              ]}
+              ctaText={L('Buy Student PRO', 'Beli Student PRO')}
+              ctaHref="/checkout?plan=student_pro"
+              variant="gold"
+              badge={L('For students', 'Untuk pelajar')}
             />
             <PricingCard
               name="Monthly"
@@ -419,7 +435,10 @@ export default function Home() {
 
       {/* Responsive tweaks for pricing grid */}
       <style jsx>{`
-        @media (max-width: 900px) {
+        @media (max-width: 1100px) {
+          :global(.cc-price-grid) { grid-template-columns: repeat(3, 1fr) !important; }
+        }
+        @media (max-width: 720px) {
           :global(.cc-price-grid) { grid-template-columns: repeat(2, 1fr) !important; }
         }
         @media (max-width: 500px) {
@@ -555,63 +574,76 @@ function PricingCard({
 }: {
   name: string; amount: string; period: string; tagline: string;
   features: string[]; ctaText: string; ctaHref: string;
-  variant: 'free' | 'standard' | 'featured';
+  variant: 'free' | 'standard' | 'featured' | 'gold';
   badge?: string; saveTag?: string;
 }) {
   const isFeatured = variant === 'featured'
   const isFree = variant === 'free'
+  const isGold = variant === 'gold'
+  const isDark = isFeatured || isGold // shared "dark card" text color logic
 
   return (
     <div style={{
       background: isFeatured
         ? 'linear-gradient(180deg, #1d1d1f 0%, #000 100%)'
-        : '#fff',
-      color: isFeatured ? '#fff' : '#1d1d1f',
-      border: isFeatured ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
+        : isGold
+          ? 'linear-gradient(135deg, #D4A94B 0%, #E8B347 50%, #C99830 100%)'
+          : '#fff',
+      color: isDark ? '#fff' : '#1d1d1f',
+      border: isDark ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
       borderRadius: 22,
       padding: '28px 22px 24px',
       textAlign: 'left',
       position: 'relative',
       display: 'flex', flexDirection: 'column',
       minHeight: 420,
-      boxShadow: isFeatured ? '0 20px 50px rgba(29,29,31,0.35)' : 'none',
+      boxShadow: isFeatured
+        ? '0 20px 50px rgba(29,29,31,0.35)'
+        : isGold
+          ? '0 20px 50px rgba(212, 169, 75, 0.35)'
+          : 'none',
       transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s',
     }}>
       {badge && (
         <span style={{
           position: 'absolute', top: -10, left: '50%',
           transform: 'translateX(-50%)',
-          background: 'linear-gradient(135deg, #FF6B9D, #C471F5)',
-          color: '#fff',
+          background: isGold
+            ? '#fff'
+            : 'linear-gradient(135deg, #FF6B9D, #C471F5)',
+          color: isGold ? '#C99830' : '#fff',
           fontSize: 10.5, fontWeight: 600,
           padding: '5px 14px', borderRadius: 100,
           letterSpacing: '0.4px', textTransform: 'uppercase',
-          boxShadow: '0 4px 12px rgba(196, 113, 245, 0.35)',
+          boxShadow: isGold
+            ? '0 4px 12px rgba(201, 152, 48, 0.25)'
+            : '0 4px 12px rgba(196, 113, 245, 0.35)',
           whiteSpace: 'nowrap',
+          border: isGold ? '0.5px solid rgba(201, 152, 48, 0.2)' : 'none',
         }}>{badge}</span>
       )}
 
       <div style={{
         fontSize: 14, fontWeight: 500,
-        color: isFeatured ? 'rgba(255,255,255,0.55)' : 'rgba(29,29,31,0.6)',
+        color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(29,29,31,0.6)',
         marginBottom: 8,
       }}>{name}</div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
         <span style={{
           fontSize: 17, fontWeight: 500,
-          color: isFeatured ? 'rgba(255,255,255,0.6)' : 'rgba(29,29,31,0.55)',
+          color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(29,29,31,0.55)',
         }}>RM</span>
         <span style={{
           fontSize: 54, fontWeight: 700,
-          color: isFeatured ? '#fff' : '#1d1d1f',
+          color: isDark ? '#fff' : '#1d1d1f',
           letterSpacing: '-0.035em', lineHeight: 1,
         }}>{amount}</span>
       </div>
 
       <div style={{
         fontSize: 13, fontWeight: 400,
-        color: isFeatured ? 'rgba(255,255,255,0.55)' : 'rgba(29,29,31,0.5)',
+        color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(29,29,31,0.5)',
         marginBottom: 4,
       }}>
         {period}
@@ -629,28 +661,32 @@ function PricingCard({
 
       <div style={{
         fontSize: 13, fontWeight: 500,
-        color: isFeatured ? '#FF8FBA' : '#5A8FF5',
+        color: isFeatured ? '#FF8FBA' : isGold ? 'rgba(255,255,255,0.95)' : '#5A8FF5',
         margin: '12px 0 16px', minHeight: 18,
       }}>{tagline}</div>
 
       <div style={{
         height: 0.5,
-        background: isFeatured ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+        background: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
         margin: '4px 0 16px',
       }} />
 
       <ul style={{
         listStyle: 'none', padding: 0, margin: '0 0 20px',
         fontSize: 13,
-        color: isFeatured ? 'rgba(255,255,255,0.85)' : 'rgba(29,29,31,0.8)',
+        color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(29,29,31,0.8)',
         lineHeight: 1.9, flex: 1,
       }}>
         {features.map((f, i) => (
           <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0' }}>
             <span style={{
               flexShrink: 0, width: 16, height: 16, borderRadius: '50%',
-              background: isFeatured ? 'rgba(255, 139, 186, 0.18)' : 'rgba(90, 143, 245, 0.12)',
-              color: isFeatured ? '#FF8FBA' : '#5A8FF5',
+              background: isFeatured
+                ? 'rgba(255, 139, 186, 0.18)'
+                : isGold
+                  ? 'rgba(255, 255, 255, 0.25)'
+                  : 'rgba(90, 143, 245, 0.12)',
+              color: isFeatured ? '#FF8FBA' : isGold ? '#fff' : '#5A8FF5',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 9, fontWeight: 700, marginTop: 4,
             }}>✓</span>
@@ -661,11 +697,11 @@ function PricingCard({
 
       <Link href={ctaHref} style={{
         display: 'block', textAlign: 'center', padding: 13,
-        background: isFeatured ? '#fff' : (isFree ? '#fff' : '#1d1d1f'),
-        color: isFeatured ? '#1d1d1f' : (isFree ? '#1d1d1f' : '#fff'),
+        background: isFeatured ? '#fff' : isGold ? '#fff' : (isFree ? '#fff' : '#1d1d1f'),
+        color: isFeatured ? '#1d1d1f' : isGold ? '#C99830' : (isFree ? '#1d1d1f' : '#fff'),
         border: isFree ? '0.5px solid rgba(0,0,0,0.14)' : 'none',
         borderRadius: 100,
-        fontSize: 13.5, fontWeight: 500,
+        fontSize: 13.5, fontWeight: isGold ? 600 : 500,
         textDecoration: 'none', letterSpacing: '-0.01em',
       }}>
         {ctaText}
