@@ -5,9 +5,10 @@ import { PLANS, type Plan } from '@/types'
 
 // Map plan key → env var with Price ID
 const PRICE_ID_MAP: Record<Exclude<Plan, 'free'>, string | undefined> = {
-  day:   process.env.STRIPE_PRICE_DAY,
-  month: process.env.STRIPE_PRICE_MONTH,
-  year:  process.env.STRIPE_PRICE_YEAR,
+  day:         process.env.STRIPE_PRICE_DAY,
+  student_pro: process.env.STRIPE_PRICE_STUDENT_PRO,
+  month:       process.env.STRIPE_PRICE_MONTH,
+  year:        process.env.STRIPE_PRICE_YEAR,
 }
 
 export async function POST(req: Request) {
