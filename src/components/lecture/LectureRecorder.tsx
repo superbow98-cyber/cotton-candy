@@ -211,6 +211,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [aiProcessing, setAiProcessing] = useState(false)
   const [aiResult, setAiResult] = useState<AISummary | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [recordingLang, setRecordingLang] = useState<'auto' | 'ms' | 'en' | 'zh' | 'ta'>('auto')
   const [aiUsedProvider, setAiUsedProvider] = useState<string | null>(null)
   const [aiProvider, setAiProvider] = useState<AIProvider>(DEFAULT_PROVIDER)
   const [recLang, setRecLang] = useState<string>('en-US')
@@ -599,7 +600,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         const texts: string[] = []
         for (let i = 0; i < chunks.length; i++) {
           try {
-            const result = await transcribeOne(chunks[i])
+            const result = await transcribeOne(chunks[i], undefined, recordingLang)
             texts.push(result.text || '')
             if (result.usage) setUsage(result.usage)
             setEnhanceProgress({ done: i + 1, total: chunks.length })

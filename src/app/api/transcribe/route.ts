@@ -1,6 +1,5 @@
 // src/app/api/transcribe/route.ts
-// v27 — PURE Groq Whisper Large v3 Turbo only.
-// No fallback. No language hint. No alternatives.
+// v28 — Whisper Large v3 Turbo with language picker (auto/ms/en/zh/ta)
 // Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,7 +12,9 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3-turbo'  // Whisper Turbo only
+const MODEL = 'whisper-large-v3-turbo'
+
+const VALID_LANGS = ['ms', 'en', 'zh', 'ta'] as const
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    // Parse audio
+    // Parse audio + language
     const form = await req.formData()
     const audio = form.get('audio') as File | null
     if (!audio) {
@@ -65,13 +66,20 @@ export async function POST(req: NextRequest) {
       }, { status: 413 })
     }
 
+    // Get language from client (auto / ms / en / zh / ta)
+    const langParam = (form.get('language') as string | null)?.toLowerCase()
+    const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
+
     // --- WHISPER TURBO CALL ---
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
     groqForm.append('response_format', 'verbose_json')
+    if (useLanguageHint) {
+      groqForm.append('language', langParam!)
+    }
 
-    console.log(`[transcribe] Whisper Turbo only`)
+    console.log(`[transcribe] Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -81,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     if (!groqRes.ok) {
       const errText = await groqRes.text().catch(() => 'unknown')
-      console.error('[transcribe] Whisper Turbo error:', groqRes.status, errText)
+      console.error('[transcribe] Whisper error:', groqRes.status, errText)
       return NextResponse.json({
         error: `Transcription failed (${groqRes.status})`,
         detail: errText.slice(0, 500),

@@ -49,9 +49,17 @@ export class CapReachedError extends Error {
   }
 }
 
-export async function transcribeOne(audioBlob: Blob, signal?: AbortSignal): Promise<TranscribeResponse> {
+export async function transcribeOne(
+  audioBlob: Blob,
+  signal?: AbortSignal,
+  language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
+): Promise<TranscribeResponse> {
   const form = new FormData()
   form.append('audio', audioBlob, 'chunk.webm')
+  // Only pass language if explicitly set (not 'auto')
+  if (language && language !== 'auto') {
+    form.append('language', language)
+  }
   const res = await fetch('/api/transcribe', {
     method: 'POST',
     body: form,
