@@ -1,7 +1,9 @@
 // src/app/api/transcribe/route.ts
-// SIMPLEST POSSIBLE: Whisper Large v3 with pure auto-detect.
-// No language hints. No fallback. Just Whisper doing its thing.
-// Whisper v3 handles 99+ languages + science terms natively.
+// Original v12 setup (restored): Whisper v3 + profile language hint.
+// - Profile lang 'bm' → Whisper language='ms' (force BM)
+// - Profile lang 'en' → Whisper language='en' (force EN)
+// - Otherwise → auto-detect
+// Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     // --- CAP CHECK ---
     const { data: profile } = await sb.from('profiles')
-      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at')
+      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at, lang')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    // Parse audio
+    // Parse audio + language hint
     const form = await req.formData()
     const audio = form.get('audio') as File | null
     if (!audio) {
@@ -63,12 +65,21 @@ export async function POST(req: NextRequest) {
       }, { status: 413 })
     }
 
-    // --- WHISPER CALL (pure auto-detect) ---
+    // Determine language: client form > user profile > default 'en'
+    // Map UI lang codes (en/bm) to Whisper ISO codes (en/ms)
+    const clientLang = form.get('language') as string | null
+    const userUILang = profile?.lang || 'en'
+    const rawLang = clientLang || userUILang
+    const mapped = rawLang === 'bm' ? 'ms' : 'en'
+
+    // --- WHISPER CALL ---
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
-    // NO language param = Whisper auto-detects BM/EN/science/whatever
+    groqForm.append('language', mapped)  // ← KEY FIX: pass 'ms' for Malay, 'en' for English
     groqForm.append('response_format', 'verbose_json')
+
+    console.log(`[transcribe] Whisper v3 | profile.lang=${userUILang} | hint=${mapped}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -86,7 +97,6 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await groqRes.json()
-    console.log(`[transcribe] detected: ${data.language}, chars: ${(data.text || '').length}`)
 
     // --- TRACK USAGE ---
     const audioSeconds = Math.ceil(
