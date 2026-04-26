@@ -1,9 +1,7 @@
 // src/app/api/transcribe/route.ts
-// Original v12 setup (restored): Whisper v3 + profile language hint.
-// - Profile lang 'bm' → Whisper language='ms' (force BM)
-// - Profile lang 'en' → Whisper language='en' (force EN)
-// - Otherwise → auto-detect
-// Audio NEVER persisted.
+// FINAL RESET: Whisper v3 listens to ALL languages.
+// Zero language config. Zero hints. Zero profile checks.
+// Whisper auto-decides everything.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -15,7 +13,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3'
+const MODEL = 'whisper-large-v3'  // Supports 99+ languages natively
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     // --- CAP CHECK ---
     const { data: profile } = await sb.from('profiles')
-      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at, lang')
+      .select('plan, audio_seconds_used, audio_reset_at, plan_upgraded_at')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -52,7 +50,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    // Parse audio + language hint
+    // Parse audio
     const form = await req.formData()
     const audio = form.get('audio') as File | null
     if (!audio) {
@@ -61,25 +59,17 @@ export async function POST(req: NextRequest) {
 
     if (audio.size > 25 * 1024 * 1024) {
       return NextResponse.json({
-        error: 'Audio chunk too large.',
+        error: 'Audio too large.',
       }, { status: 413 })
     }
 
-    // Determine language: client form > user profile > default 'en'
-    // Map UI lang codes (en/bm) to Whisper ISO codes (en/ms)
-    const clientLang = form.get('language') as string | null
-    const userUILang = profile?.lang || 'en'
-    const rawLang = clientLang || userUILang
-    const mapped = rawLang === 'bm' ? 'ms' : 'en'
-
-    // --- WHISPER CALL ---
+    // --- WHISPER CALL — listens to all languages, decides itself ---
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
-    groqForm.append('language', mapped)  // ← KEY FIX: pass 'ms' for Malay, 'en' for English
     groqForm.append('response_format', 'verbose_json')
-
-    console.log(`[transcribe] Whisper v3 | profile.lang=${userUILang} | hint=${mapped}`)
+    // No language. No temperature override. No prompt.
+    // Whisper handle everything.
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -89,7 +79,6 @@ export async function POST(req: NextRequest) {
 
     if (!groqRes.ok) {
       const errText = await groqRes.text().catch(() => 'unknown')
-      console.error('[transcribe] Whisper error:', groqRes.status, errText)
       return NextResponse.json({
         error: `Transcription failed (${groqRes.status})`,
         detail: errText.slice(0, 500),
@@ -129,7 +118,7 @@ export async function POST(req: NextRequest) {
       usage: newCheck,
     })
   } catch (e: any) {
-    console.error('[transcribe] Unexpected:', e)
+    console.error('[transcribe] Error:', e)
     return NextResponse.json({
       error: e.message || 'Transcribe failed',
     }, { status: 500 })
