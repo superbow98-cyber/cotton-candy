@@ -1,7 +1,7 @@
 // src/app/api/transcribe/route.ts
-// FINAL RESET: Whisper v3 listens to ALL languages.
-// Zero language config. Zero hints. Zero profile checks.
-// Whisper auto-decides everything.
+// PURE GROK STT (xAI) only.
+// No Groq Whisper. No OpenAI. Just xAI's Grok STT.
+// Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -12,8 +12,8 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3'  // Supports 99+ languages natively
+const GROK_URL = 'https://api.x.ai/v1/stt'
+const MODEL = 'grok-stt'
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,9 +23,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const apiKey = process.env.GROQ_API_KEY
+    const apiKey = process.env.XAI_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 })
+      return NextResponse.json({
+        error: 'XAI_API_KEY not configured. Add it to Vercel env vars.',
+      }, { status: 500 })
     }
 
     // --- CAP CHECK ---
@@ -59,33 +61,36 @@ export async function POST(req: NextRequest) {
 
     if (audio.size > 25 * 1024 * 1024) {
       return NextResponse.json({
-        error: 'Audio too large.',
+        error: 'Audio too large (max 25MB).',
       }, { status: 413 })
     }
 
-    // --- WHISPER CALL — listens to all languages, decides itself ---
-    const groqForm = new FormData()
-    groqForm.append('file', audio, 'audio.webm')
-    groqForm.append('model', MODEL)
-    groqForm.append('response_format', 'verbose_json')
-    // No language. No temperature override. No prompt.
-    // Whisper handle everything.
+    // --- GROK STT CALL — auto-detect 25+ languages ---
+    const grokForm = new FormData()
+    grokForm.append('file', audio, 'audio.webm')
+    grokForm.append('model', MODEL)
+    grokForm.append('format', 'json')
+    // No language param = auto-detect
 
-    const groqRes = await fetch(GROQ_URL, {
+    console.log(`[transcribe] Calling Grok STT (xAI)...`)
+
+    const grokRes = await fetch(GROK_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
-      body: groqForm,
+      body: grokForm,
     })
 
-    if (!groqRes.ok) {
-      const errText = await groqRes.text().catch(() => 'unknown')
+    if (!grokRes.ok) {
+      const errText = await grokRes.text().catch(() => 'unknown')
+      console.error('[transcribe] Grok STT error:', grokRes.status, errText)
       return NextResponse.json({
-        error: `Transcription failed (${groqRes.status})`,
+        error: `Transcription failed (${grokRes.status})`,
         detail: errText.slice(0, 500),
       }, { status: 502 })
     }
 
-    const data = await groqRes.json()
+    const data = await grokRes.json()
+    console.log(`[transcribe] Grok STT done. detected: ${data.language}, chars: ${(data.text || '').length}`)
 
     // --- TRACK USAGE ---
     const audioSeconds = Math.ceil(
