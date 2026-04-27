@@ -764,7 +764,15 @@ export default function LectureRecorder({ id }: { id: string }) {
                   : 'rgba(29,29,31,0.7)',
               fontVariantNumeric: 'tabular-nums',
             }}>
-              {(usage.usedSeconds / 3600).toFixed(1)} / {(usage.capSeconds / 3600).toFixed(1)} {lang === 'bm' ? 'jam' : 'h'}
+              {usage.capSeconds < 3600 ? (
+                <>
+                  {Math.floor(usage.usedSeconds / 60)} / {Math.floor(usage.capSeconds / 60)} {lang === 'bm' ? 'min' : 'min'}
+                </>
+              ) : (
+                <>
+                  {(usage.usedSeconds / 3600).toFixed(1)} / {(usage.capSeconds / 3600).toFixed(1)} {lang === 'bm' ? 'jam' : 'h'}
+                </>
+              )}
               <span style={{ marginLeft: 6, fontWeight: 500, opacity: 0.7 }}>
                 · {usage.percentUsed}%
               </span>
@@ -852,6 +860,24 @@ export default function LectureRecorder({ id }: { id: string }) {
         {!permission && (
           <div style={{ background: '#FEF3C7', color: '#92400E', padding: 12, borderRadius: 12, fontSize: 13, marginBottom: 12 }}>
             🎤 {t('recPermission')}
+          </div>
+        )}
+
+        {/* FREE TIER LIMIT BANNER (v31) */}
+        {plan === 'free' && !recording && lines.length === 0 && (
+          <div style={{
+            background: 'rgba(90, 143, 245, 0.08)',
+            border: '0.5px solid rgba(90, 143, 245, 0.2)',
+            borderRadius: 12, padding: '10px 14px', marginBottom: 12,
+            fontSize: 12, color: 'rgba(29,29,31,0.75)',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span>ℹ️</span>
+            <span>
+              {lang === 'bm'
+                ? <>Pelan Percuma: <strong>1 rakaman/bulan</strong>, max <strong>15 minit</strong>. <a href="/#pricing" style={{ color: '#5A8FF5', textDecoration: 'none', fontWeight: 600 }}>Upgrade →</a></>
+                : <>Free Plan: <strong>1 recording/month</strong>, max <strong>15 minutes</strong>. <a href="/#pricing" style={{ color: '#5A8FF5', textDecoration: 'none', fontWeight: 600 }}>Upgrade →</a></>}
+            </span>
           </div>
         )}
 
