@@ -855,6 +855,42 @@ export default function LectureRecorder({ id }: { id: string }) {
           </div>
         )}
 
+        {/* LANGUAGE PICKER (v29) — dropdown, default rojak */}
+        {!recording && lines.length === 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{
+              display: 'block',
+              fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.06em', color: 'rgba(29,29,31,0.55)',
+              marginBottom: 8,
+            }}>
+              🌐 {lang === 'bm' ? 'Bahasa Rakaman' : 'Recording Language'}
+            </label>
+            <select
+              value={recordingLang}
+              onChange={(e) => setRecordingLang(e.target.value as any)}
+              style={{
+                width: '100%', padding: '12px 14px',
+                background: '#fff',
+                border: '0.5px solid rgba(0,0,0,0.14)',
+                borderRadius: 12, fontSize: 14,
+                fontFamily: 'inherit', color: '#1d1d1f',
+                appearance: 'none',
+                backgroundImage: "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%231d1d1f' d='M6 8L0 0h12z'/%3E%3C/svg%3E\")",
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 14px center',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN campur) — Disyorkan' : 'Rojak Mode (BM + EN mix) — Recommended'}</option>
+              <option value="ms">🇲🇾 Bahasa Melayu</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="zh">🇨🇳 Mandarin (中文)</option>
+              <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
+            </select>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button
