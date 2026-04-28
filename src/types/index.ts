@@ -22,6 +22,17 @@ export interface Profile {
   created_at: string
 }
 
+export interface MindMapBranch {
+  title: string
+  subtitle?: string
+  color?: 'blue' | 'green' | 'pink' | 'amber' | 'purple' | 'orange'
+}
+
+export interface MindMap {
+  center: string
+  branches: MindMapBranch[]
+}
+
 export interface Lecture {
   id: string
   user_id: string
@@ -43,6 +54,7 @@ export interface Lecture {
   recording_type: 'lecture' | 'meeting' | 'sv' | 'postmortem' | 'interview' | 'custom' | null
   created_at: string
   updated_at: string
+  mindmap_json?: MindMap | null
 }
 
 export interface TimelineEntry {
@@ -61,6 +73,9 @@ export interface Notebook {
   lecture_ids: string[]
   last_exported_at: string | null
   created_at: string
+  cover_image_url?: string | null
+  cover_photographer_name?: string | null
+  cover_photographer_link?: string | null
 }
 
 export interface PromoCode {

@@ -22,6 +22,14 @@ type AISummary = {
   summary: string
 }
 
+import MindMapView from './MindMapView'
+import type { MindMapBranch } from '@/types'
+
+function truncate(text: string, max: number): string {
+  if (!text) return ''
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
+}
+
 type RecognitionLang = {
   code: string
   label: string
@@ -572,31 +580,37 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAiUsedProvider(json.usedProvider || null)
         setAiFellBack(!!json.fellBack)
 
-        // Fetch Unsplash hero image (silent fail OK)
-        if (!lecture.hero_image_url) {
+        // Generate mindmap from AI summary topics (client-side, no extra API)
+        if (!lecture.mindmap_json && json.data) {
           try {
-            const searchQuery = lecture.subject || lecture.title
-            const imgRes = await fetch(`/api/unsplash?q=${encodeURIComponent(searchQuery)}`)
-            if (imgRes.ok) {
-              const imgData = await imgRes.json()
-              if (imgData.image) {
-                const sb = createClient()
-                await sb.from('lectures').update({
-                  hero_image_url: imgData.image.url,
-                  hero_photographer_name: imgData.image.photographer?.name || null,
-                  hero_photographer_link: imgData.image.photographer?.link || null,
-                }).eq('id', lecture.id)
-                const updated = {
-                  ...lecture,
-                  hero_image_url: imgData.image.url,
-                  hero_photographer_name: imgData.image.photographer?.name || null,
-                  hero_photographer_link: imgData.image.photographer?.link || null,
-                }
-                setLecture(updated); lectureRef.current = updated
+            const summary = json.data as AISummary
+            const branches: MindMapBranch[] = []
+
+            // Take up to 6 topics for branches
+            const topicLimit = Math.min(6, summary.topics?.length || 0)
+            for (let i = 0; i < topicLimit; i++) {
+              const topic = summary.topics[i]
+              // Try match a key point as subtitle
+              const subtitle = summary.keyPoints?.[i]
+                ? truncate(summary.keyPoints[i], 28)
+                : undefined
+              branches.push({ title: topic, subtitle })
+            }
+
+            if (branches.length > 0) {
+              const mindmap = {
+                center: lecture.title || (lang === 'bm' ? 'Topik Utama' : 'Main Topic'),
+                branches,
               }
+              const sb = createClient()
+              await sb.from('lectures').update({
+                mindmap_json: mindmap,
+              }).eq('id', lecture.id)
+              const updated = { ...lecture, mindmap_json: mindmap }
+              setLecture(updated); lectureRef.current = updated
             }
           } catch (e) {
-            console.warn('[hero] Unsplash fetch failed')
+            console.warn('[mindmap] Generation failed:', e)
           }
         }
       }
@@ -699,41 +713,18 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* HERO IMAGE (v40) */}
-      {lecture?.hero_image_url && (
-        <div style={{
-          position: 'relative',
-          width: '100%',
-          height: 200,
-          borderRadius: 16,
-          overflow: 'hidden',
-          marginBottom: 18,
-          background: '#f0f0f0',
-        }}>
-          <img
-            src={lecture.hero_image_url}
-            alt={lecture.title || ''}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-          {lecture.hero_photographer_name && (
-            <div style={{
-              position: 'absolute', bottom: 8, right: 10,
-              fontSize: 10, color: 'rgba(255,255,255,0.85)',
-              background: 'rgba(0,0,0,0.4)',
-              padding: '3px 8px', borderRadius: 4,
-              backdropFilter: 'blur(4px)',
-            }}>
-              Photo by{' '}
-              {lecture.hero_photographer_link ? (
-                <a href={lecture.hero_photographer_link} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', textDecoration: 'underline' }}>
-                  {lecture.hero_photographer_name}
-                </a>
-              ) : (
-                lecture.hero_photographer_name
-              )}
-              {' · Unsplash'}
-            </div>
-          )}
+      {/* MIND MAP (v41) */}
+      {lecture?.mindmap_json && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+            color: '#5A8FF5', marginBottom: 8,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            🧠 {lang === 'bm' ? 'Peta Minda' : 'Mind Map'}
+          </div>
+          <MindMapView mindmap={lecture.mindmap_json} />
         </div>
       )}
 
