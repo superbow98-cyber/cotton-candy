@@ -134,7 +134,7 @@ export default function SettingsPage() {
                   · {lang === 'bm' ? 'tamat' : 'expires'} {expires.toLocaleDateString()}
                 </span>
               )}
-              <Link href="/pricing" style={{
+              <Link href="/#pricing" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 fontSize: 12.5, fontWeight: 500,
                 color: '#5A8FF5', textDecoration: 'none', marginLeft: 'auto',

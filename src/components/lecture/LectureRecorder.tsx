@@ -834,7 +834,7 @@ export default function LectureRecorder({ id }: { id: string }) {
                 ? 'Rakaman dihentikan automatik. Upgrade pelan untuk rakam lebih.'
                 : 'Recording auto-stopped. Upgrade your plan to record more.'}
             </div>
-            <a href="/pricing" style={{
+            <a href="/#pricing" style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               marginTop: 8, fontSize: 12, fontWeight: 500,
               color: '#1d1d1f', textDecoration: 'none',

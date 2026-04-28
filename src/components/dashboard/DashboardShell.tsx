@@ -160,7 +160,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.4, marginBottom: 10 }}>
               {lang === 'bm' ? 'Monthly RM19 · bayaran sekali' : 'Monthly RM19 · one-time payment'}
             </div>
-            <Link href="/pricing" style={{
+            <Link href="/#pricing" style={{
               display: 'block', textAlign: 'center',
               padding: '7px 10px',
               background: '#fff', color: '#1d1d1f',
@@ -225,7 +225,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {showUpgrade && (
-            <Link href="/pricing" style={{
+            <Link href="/#pricing" style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '6px 12px',
               borderRadius: 100,
@@ -287,7 +287,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 10 }}>
                   {lang === 'bm' ? 'Dari RM19 · bayaran sekali' : 'From RM19 · one-time payment'}
                 </div>
-                <Link href="/pricing" onClick={() => setDrawer(false)} style={{
+                <Link href="/#pricing" onClick={() => setDrawer(false)} style={{
                   display: 'block', padding: '8px 12px',
                   background: '#fff', color: '#1d1d1f',
                   borderRadius: 100, textDecoration: 'none',
