@@ -131,14 +131,16 @@ export default function DashboardHome() {
         marginBottom: 20,
       }}>
         <StatCard
-          label={lang === 'bm' ? 'Kuliah minggu ini' : 'Lectures this week'}
-          value={stats.count}
-          sub={`${plan.lectureLimit === 9999 ? (lang === 'bm' ? 'Tak terhad' : 'Unlimited') : `${plan.lectureLimit} ${lang === 'bm' ? 'tersedia' : 'available'}`}`}
+          label={lang === 'bm' ? 'Rakaman' : 'Recordings'}
+          value={plan.lectureLimit === 9999 ? `${stats.count}` : `${stats.count} / ${plan.lectureLimit}`}
+          sub={`${plan.lectureLimit === 9999 ? (lang === 'bm' ? 'Tak terhad' : 'Unlimited') : `${plan.minutesPerLecture} min/${lang === 'bm' ? 'sesi' : 'session'}`}`}
         />
         <StatCard
           label={lang === 'bm' ? 'Kuota audio' : 'Audio quota'}
           value={audioUsage
-            ? `${(audioUsage.usedSeconds / 3600).toFixed(1)} / ${(audioUsage.capSeconds / 3600).toFixed(1)}`
+            ? (audioUsage.capSeconds < 3600
+                ? `${Math.floor(audioUsage.usedSeconds / 60)} / ${Math.floor(audioUsage.capSeconds / 60)} ${lang === 'bm' ? 'min' : 'min'}`
+                : `${(audioUsage.usedSeconds / 3600).toFixed(1)} / ${(audioUsage.capSeconds / 3600).toFixed(1)} ${lang === 'bm' ? 'jam' : 'h'}`)
             : '—'}
           sub={audioUsage
             ? `${audioUsage.percentUsed}% ${lang === 'bm' ? 'digunakan' : 'used'}`
@@ -146,7 +148,7 @@ export default function DashboardHome() {
         />
         <StatCard
           label={lang === 'bm' ? 'Notebook' : 'Notebooks'}
-          value={stats.notebooks}
+          value={`${stats.notebooks} / ${plan.notebookLimit}`}
           sub={plan.name}
         />
       </div>
