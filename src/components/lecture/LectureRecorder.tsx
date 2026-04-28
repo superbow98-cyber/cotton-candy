@@ -944,8 +944,22 @@ export default function LectureRecorder({ id }: { id: string }) {
                   letterSpacing: '-0.04em',
                   fontVariantNumeric: 'tabular-nums',
                   color: '#1d1d1f',
+                  display: 'flex', alignItems: 'baseline', gap: 6,
+                  flexWrap: 'wrap',
                 }}>
-                  {secondsToClock(elapsed)}
+                  <span>{secondsToClock(elapsed)}</span>
+                  <span style={{
+                    fontSize: 14, fontWeight: 400,
+                    color: (() => {
+                      const max = PLANS[plan].minutesPerLecture * 60
+                      const pct = (elapsed / max) * 100
+                      if (pct >= 90) return '#C62828'
+                      if (pct >= 75) return '#8a6d0f'
+                      return 'rgba(29,29,31,0.45)'
+                    })(),
+                  }}>
+                    / {PLANS[plan].minutesPerLecture}:00
+                  </span>
                 </div>
                 <div style={{ fontSize: 11, color: s.gray, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span>
@@ -954,6 +968,25 @@ export default function LectureRecorder({ id }: { id: string }) {
                       : t('recDuration')
                     } · {wordCount} {t('recWords')}
                   </span>
+                  {/* Session timer warning */}
+                  {recording && (() => {
+                    const max = PLANS[plan].minutesPerLecture * 60
+                    const remaining = max - elapsed
+                    const pct = (elapsed / max) * 100
+                    if (pct >= 75) {
+                      return (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 600,
+                          background: pct >= 90 ? 'rgba(229, 57, 53, 0.12)' : 'rgba(240, 176, 48, 0.15)',
+                          color: pct >= 90 ? '#C62828' : '#8a6d0f',
+                        }}>
+                          ⏱ {Math.max(0, Math.ceil(remaining / 60))} min {lang === 'bm' ? 'lagi' : 'left'}
+                        </span>
+                      )
+                    }
+                    return null
+                  })()}
                   {recording && audioCaptureOk !== null && (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,

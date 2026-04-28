@@ -28,22 +28,39 @@ export default function NotebooksPage() {
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [limitError, setLimitError] = useState<string | null>(null)
+  const [userPlan, setUserPlan] = useState<keyof typeof PLANS>('free')
 
   const load = async () => {
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
-    const [{ data: nb }, { data: lec }] = await Promise.all([
+    const [{ data: nb }, { data: lec }, { data: prof }] = await Promise.all([
       sb.from('notebooks').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       sb.from('lectures').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      sb.from('profiles').select('plan').eq('id', user.id).maybeSingle(),
     ])
     setNotebooks((nb || []) as Notebook[])
     setLectures((lec || []) as Lecture[])
+    setUserPlan((prof?.plan || 'free') as keyof typeof PLANS)
   }
   useEffect(() => { load() }, [])
 
   const create = async () => {
     if (!name.trim()) return
+    setLimitError(null)
+
+    // Enforce notebook limit
+    const limit = PLANS[userPlan].notebookLimit
+    if (notebooks.length >= limit) {
+      setLimitError(
+        lang === 'bm'
+          ? `Had notebook tercapai (${limit}). Upgrade untuk lebih.`
+          : `Notebook limit reached (${limit}). Upgrade for more.`
+      )
+      return
+    }
+
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
@@ -166,7 +183,7 @@ export default function NotebooksPage() {
             }}>
               {lang === 'bm' ? 'Cipta' : 'Create'}
             </button>
-            <button onClick={() => { setCreating(false); setName(''); setSubject('') }} style={{
+            <button onClick={() => { setCreating(false); setName(''); setSubject(''); setLimitError(null) }} style={{
               padding: '8px 14px', borderRadius: 9,
               background: '#fff', color: '#1d1d1f',
               border: '0.5px solid rgba(0,0,0,0.08)',
@@ -176,6 +193,27 @@ export default function NotebooksPage() {
               {lang === 'bm' ? 'Batal' : 'Cancel'}
             </button>
           </div>
+          {limitError && (
+            <div style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              background: '#FEF3C7',
+              color: '#92400E',
+              border: '0.5px solid rgba(146, 64, 14, 0.2)',
+              borderRadius: 10,
+              fontSize: 12.5,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span>⚠️</span>
+              <span>{limitError}</span>
+              <a href="/#pricing" style={{
+                marginLeft: 'auto', color: '#5A8FF5',
+                fontWeight: 600, textDecoration: 'none',
+              }}>
+                {lang === 'bm' ? 'Upgrade →' : 'Upgrade →'}
+              </a>
+            </div>
+          )}
         </div>
       )}
 
