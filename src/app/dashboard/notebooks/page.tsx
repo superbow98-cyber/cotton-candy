@@ -64,11 +64,34 @@ export default function NotebooksPage() {
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
+
+    // Fetch Unsplash cover (silent fail OK)
+    let coverImageUrl: string | null = null
+    let photographerName: string | null = null
+    let photographerLink: string | null = null
+    try {
+      const searchQuery = subject.trim() || name.trim()
+      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(searchQuery)}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.image) {
+          coverImageUrl = data.image.url
+          photographerName = data.image.photographer?.name || null
+          photographerLink = data.image.photographer?.link || null
+        }
+      }
+    } catch (e) {
+      console.warn('[notebook] Unsplash fetch failed, using gradient fallback')
+    }
+
     await sb.from('notebooks').insert({
       user_id: user.id,
       title: name.trim(),
       subject: subject.trim() || null,
       color: s.primary,
+      cover_image_url: coverImageUrl,
+      cover_photographer_name: photographerName,
+      cover_photographer_link: photographerLink,
     })
     setName(''); setSubject(''); setCreating(false)
     load()
@@ -242,16 +265,21 @@ export default function NotebooksPage() {
               {/* Cover */}
               <div style={{
                 height: 80, borderRadius: 10, marginBottom: 12,
-                background: subjectCover(nb.subject || nb.title),
+                background: nb.cover_image_url
+                  ? `url(${nb.cover_image_url}) center / cover no-repeat`
+                  : subjectCover(nb.subject || nb.title),
                 position: 'relative',
+                overflow: 'hidden',
               }}>
-                <div style={{
-                  position: 'absolute', top: 8, left: 8,
-                  width: 18, height: 24,
-                  borderRadius: 2,
-                  background: 'rgba(255,255,255,0.95)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                }} />
+                {!nb.cover_image_url && (
+                  <div style={{
+                    position: 'absolute', top: 8, left: 8,
+                    width: 18, height: 24,
+                    borderRadius: 2,
+                    background: 'rgba(255,255,255,0.95)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  }} />
+                )}
               </div>
 
               {/* Info */}

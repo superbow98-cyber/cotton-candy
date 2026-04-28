@@ -571,6 +571,34 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAiResult(json.data as AISummary)
         setAiUsedProvider(json.usedProvider || null)
         setAiFellBack(!!json.fellBack)
+
+        // Fetch Unsplash hero image (silent fail OK)
+        if (!lecture.hero_image_url) {
+          try {
+            const searchQuery = lecture.subject || lecture.title
+            const imgRes = await fetch(`/api/unsplash?q=${encodeURIComponent(searchQuery)}`)
+            if (imgRes.ok) {
+              const imgData = await imgRes.json()
+              if (imgData.image) {
+                const sb = createClient()
+                await sb.from('lectures').update({
+                  hero_image_url: imgData.image.url,
+                  hero_photographer_name: imgData.image.photographer?.name || null,
+                  hero_photographer_link: imgData.image.photographer?.link || null,
+                }).eq('id', lecture.id)
+                const updated = {
+                  ...lecture,
+                  hero_image_url: imgData.image.url,
+                  hero_photographer_name: imgData.image.photographer?.name || null,
+                  hero_photographer_link: imgData.image.photographer?.link || null,
+                }
+                setLecture(updated); lectureRef.current = updated
+              }
+            }
+          } catch (e) {
+            console.warn('[hero] Unsplash fetch failed')
+          }
+        }
       }
     } catch (e: any) { setAiError(e.message || 'Network error') }
     finally { setAiProcessing(false) }
@@ -671,6 +699,44 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* HERO IMAGE (v40) */}
+      {lecture?.hero_image_url && (
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          height: 200,
+          borderRadius: 16,
+          overflow: 'hidden',
+          marginBottom: 18,
+          background: '#f0f0f0',
+        }}>
+          <img
+            src={lecture.hero_image_url}
+            alt={lecture.title || ''}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+          {lecture.hero_photographer_name && (
+            <div style={{
+              position: 'absolute', bottom: 8, right: 10,
+              fontSize: 10, color: 'rgba(255,255,255,0.85)',
+              background: 'rgba(0,0,0,0.4)',
+              padding: '3px 8px', borderRadius: 4,
+              backdropFilter: 'blur(4px)',
+            }}>
+              Photo by{' '}
+              {lecture.hero_photographer_link ? (
+                <a href={lecture.hero_photographer_link} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', textDecoration: 'underline' }}>
+                  {lecture.hero_photographer_name}
+                </a>
+              ) : (
+                lecture.hero_photographer_name
+              )}
+              {' · Unsplash'}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
         <div>
           <h1 style={{
@@ -1192,6 +1258,34 @@ export default function LectureRecorder({ id }: { id: string }) {
       {/* AI RESULT */}
       {aiResult && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
+          {/* Hero image (Unsplash) */}
+          {lecture?.hero_image_url && (
+            <div style={{
+              borderRadius: 14,
+              overflow: 'hidden',
+              marginBottom: 14,
+              position: 'relative',
+              height: 200,
+              background: `url(${lecture.hero_image_url}) center / cover no-repeat`,
+            }}>
+              {lecture.hero_photographer_name && (
+                <a
+                  href={lecture.hero_photographer_link || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    position: 'absolute', bottom: 8, right: 10,
+                    fontSize: 10, color: '#fff',
+                    background: 'rgba(0,0,0,0.4)',
+                    padding: '3px 8px', borderRadius: 4,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Photo by {lecture.hero_photographer_name} · Unsplash
+                </a>
+              )}
+            </div>
+          )}
           {aiFellBack && aiUsedProvider && (
             <div style={{
               padding: '10px 14px', marginBottom: 10,
