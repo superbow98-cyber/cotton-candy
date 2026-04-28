@@ -68,7 +68,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     href === '/dashboard' ? pathname === '/dashboard' : pathname?.startsWith(href)
 
   const hideUpgrade = !!pathname && HIDE_UPGRADE_ON.some((p) => pathname.startsWith(p))
-  const showUpgrade = planLoaded && plan === 'free' && !hideUpgrade
+  const showUpgrade = planLoaded && plan !== 'year' && !hideUpgrade
 
   const initials = (fullName || email || 'U')
     .split(/\s+/).map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
