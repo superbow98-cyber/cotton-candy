@@ -71,15 +71,25 @@ export async function POST(req: NextRequest) {
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
     // --- WHISPER TURBO CALL ---
+    // v43: Rojak-aware prompt primes Whisper to recognize Malaysian mixed BM+EN speech
+    // Whisper uses 'prompt' param as context hint (max 224 tokens)
+    const ROJAK_PROMPT = "Malaysian student or professional speaking. " +
+      "May contain English, Bahasa Melayu, or rojak (mix of both). " +
+      "Common Malay words: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, " +
+      "untuk, sebab, lepas, ni, sini, mana, mcm, macam, boleh, tak, jangan. " +
+      "Common rojak phrases: 'so kita', 'lepas tu', 'macam ni', 'sebab', 'then', " +
+      "'okay so', 'after that', 'actually', 'basically'."
+
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', MODEL)
     groqForm.append('response_format', 'verbose_json')
+    groqForm.append('prompt', ROJAK_PROMPT)
     if (useLanguageHint) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] Whisper Turbo v43 rojak-aware | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',

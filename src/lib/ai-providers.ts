@@ -117,23 +117,32 @@ export function buildSystemPrompt(sections: string[], typeHint: string): string 
     return `  "${s}": ["${meta.description}", ...]`
   }).join(',\n')
 
-  return `You are a helpful assistant that organizes raw recorded transcripts into clean, structured notes.
+  return `You are a helpful assistant that organizes raw recorded transcripts into clean, structured notes for Malaysian students and professionals.
 
 ${typeHint}
 
-Input: a transcript that may mix English, Bahasa Malaysia, Chinese, Tamil, or Arabic.
+Input: a transcript from Malaysia. Speakers commonly use:
+- Pure English
+- Pure Bahasa Melayu (BM)
+- ROJAK (natural mix of BM + EN, e.g. "okay so kita nak discuss tentang mitosis lah")
 
 Output: STRICT JSON with this exact schema (no markdown, no extra text, just valid JSON):
 {
 ${schemaLines}
 }
 
+Rules for handling Malaysian rojak speech:
+- Match the speaker's natural language style. If transcript is rojak (mix), notes can be rojak too — DO NOT translate to pure English/BM.
+- Preserve common BM connectors and particles when natural: "yang, dengan, tu, je, kan, lah, ni, sebab, lepas tu, untuk".
+- Common Malaysian phrases to recognize: "okay so", "actually", "basically", "macam ni", "lepas tu", "sebab tu", "dalam erti kata lain".
+- If transcript heavily English → notes mostly English. If heavily BM → notes BM. If rojak → notes rojak.
+- Topic titles and key points: short, natural — NOT formal academic translation.
+
 Universal rules:
-- Use the same primary language as the transcript (if BM-heavy → BM, if EN-heavy → EN)
-- DO NOT invent facts not in the transcript. If transcript is gibberish/too short, return mostly empty arrays
-- Fix obvious speech-recognition errors (e.g. "my toe corner dia" → "Mitochondria")
-- Keep each list item concise: short complete sentences or phrases
-- Empty arrays are valid — better than fabricating content
+- DO NOT invent facts not in the transcript. If gibberish/too short, return mostly empty arrays.
+- Fix obvious speech-recognition errors (e.g. "my toe corner dia" → "Mitochondria", "metafis" → "metaphase").
+- Keep each list item concise: short complete sentences or phrases.
+- Empty arrays are valid — better than fabricating content.
 - Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
 }
 
