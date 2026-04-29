@@ -19,6 +19,7 @@ export interface Profile {
   lang: Lang
   theme: Theme | null
   ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
+  is_admin?: boolean
   created_at: string
 }
 

@@ -278,6 +278,71 @@ export default function SettingsPage() {
         <MicEnhancementSettings lang={lang} />
       </SettingsCard>
 
+      {/* ADMIN SECTION (Parcello only) */}
+      {profile?.is_admin && (
+        <SettingsCard title={lang === 'bm' ? '🔐 Admin · Parcello' : '🔐 Admin · Parcello'}>
+          <div style={{
+            padding: '12px 18px',
+            borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 500,
+              color: 'rgba(29,29,31,0.55)',
+              marginBottom: 8,
+            }}>
+              {lang === 'bm'
+                ? 'Anda adalah admin. Akses kepada alat pengurusan promo dan analitik.'
+                : 'You are an admin. Access promo management & analytics tools.'}
+            </div>
+          </div>
+
+          <Link
+            href="/dashboard/admin/promo-codes"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              textDecoration: 'none',
+              color: '#1d1d1f',
+              borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 500 }}>
+                🎟 {lang === 'bm' ? 'Kod Promo' : 'Promo Codes'}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.5)', marginTop: 2 }}>
+                {lang === 'bm' ? 'Cipta & urus kod diskaun' : 'Create & manage discount codes'}
+              </div>
+            </div>
+            <span style={{ color: 'rgba(29,29,31,0.4)', fontSize: 14 }}>→</span>
+          </Link>
+
+          <Link
+            href="/dashboard/admin/analytics"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              textDecoration: 'none',
+              color: '#1d1d1f',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 500 }}>
+                📊 {lang === 'bm' ? 'Analitik' : 'Analytics'}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.5)', marginTop: 2 }}>
+                {lang === 'bm' ? 'Penggunaan & pendapatan (akan datang)' : 'Usage & revenue (coming soon)'}
+              </div>
+            </div>
+            <span style={{ color: 'rgba(29,29,31,0.4)', fontSize: 14 }}>→</span>
+          </Link>
+        </SettingsCard>
+      )}
+
       {/* ACCOUNT ACTIONS */}
       <SettingsCard title={lang === 'bm' ? 'Tindakan akaun' : 'Account actions'}>
         <button onClick={signOut} style={{
