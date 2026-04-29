@@ -23,7 +23,7 @@ type AISummary = {
 }
 
 import MindMapView from './MindMapView'
-import CottonCandyGame from './CottonCandyGame'
+import ProcessingLoader from './ProcessingLoader'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -1134,54 +1134,17 @@ export default function LectureRecorder({ id }: { id: string }) {
       </div>
 
       {/* WHISPER ENHANCE LOADER */}
-      {enhancing && (
-        <div className="fade-in" style={{
-          background: 'linear-gradient(135deg, #FFFBFC, #fff)',
-          padding: '22px 22px',
-          borderRadius: 14,
-          border: '0.5px solid rgba(212, 83, 126, 0.25)',
-          marginBottom: 12,
-          display: 'flex', alignItems: 'center', gap: 16,
-        }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: '50%',
-            background: 'conic-gradient(from 0deg, #FF6B9D, #C471F5, #5A8FF5, #FF6B9D)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: 'cc-whisper-spin 2.5s linear infinite',
-            flexShrink: 0,
-          }}>
-            <div style={{ width: 32, height: 32, background: '#fff', borderRadius: '50%' }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 14, fontWeight: 600, color: '#1d1d1f',
-              letterSpacing: '-0.015em', marginBottom: 3,
-            }}>
-              {lang === 'bm' ? 'Whisper sedang perbaiki transkrip…' : 'Whisper is enhancing your transcript…'}
-            </div>
-            <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', marginBottom: 10 }}>
-              {lang === 'bm'
-                ? 'Auto-detect bahasa, betulkan rojak, ~95% tepat.'
-                : 'Auto-detecting languages, fixing rojak, ~95% accurate.'}
-              {enhanceProgress && enhanceProgress.total > 1 && (
-                <> · {enhanceProgress.done}/{enhanceProgress.total}</>
-              )}
-            </div>
-            <div style={{
-              height: 3, borderRadius: 999,
-              background: 'rgba(212, 83, 126, 0.12)', overflow: 'hidden',
-              position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', height: '100%',
-                width: enhanceProgress ? `${(enhanceProgress.done / enhanceProgress.total) * 100}%` : '40%',
-                borderRadius: 999,
-                background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
-                transition: 'width 0.4s ease',
-                animation: enhanceProgress ? 'none' : 'cc-whisper-slide 1.4s ease-in-out infinite',
-              }} />
-            </div>
-          </div>
+      {enhancing && !aiProcessing && (
+        <div className="fade-in" style={{ marginBottom: 14 }}>
+          <ProcessingLoader
+            status={lang === 'bm'
+              ? `Sedang menulis transkrip…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`
+              : `Transcribing your audio…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`}
+            subStatus={lang === 'bm'
+              ? 'AI sedang dengar dengan teliti'
+              : 'AI is listening carefully'}
+            lang={lang}
+          />
         </div>
       )}
 
@@ -1207,11 +1170,11 @@ export default function LectureRecorder({ id }: { id: string }) {
       {/* AI PROCESSING */}
       {aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
-          <CottonCandyGame
+          <ProcessingLoader
             status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
             subStatus={lang === 'bm'
-              ? `Sambil tunggu, jom main! ${PROVIDER_META[aiProvider].label}`
-              : `While you wait, play a game! ${PROVIDER_META[aiProvider].label}`}
+              ? `Mengekstrak topik & ringkasan · ${PROVIDER_META[aiProvider].label}`
+              : `Extracting topics & summary · ${PROVIDER_META[aiProvider].label}`}
             lang={lang}
           />
         </div>
