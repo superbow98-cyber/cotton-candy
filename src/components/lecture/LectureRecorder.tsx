@@ -23,6 +23,7 @@ type AISummary = {
 }
 
 import MindMapView from './MindMapView'
+import CottonCandyGame from './CottonCandyGame'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -1205,59 +1206,14 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       {/* AI PROCESSING */}
       {aiProcessing && (
-        <div className="fade-in" style={{
-          background: `linear-gradient(135deg, ${s.soft}, #fff)`,
-          padding: '28px 24px', borderRadius: 22,
-          border: `2px dashed ${s.primaryDark}`, marginBottom: 14, textAlign: 'center',
-          boxShadow: '0 10px 30px rgba(212, 83, 126, 0.08)',
-        }}>
-          {/* Animated AI orb */}
-          <div style={{
-            width: 56, height: 56, borderRadius: '50%',
-            margin: '0 auto 14px',
-            background: `conic-gradient(from 0deg, ${s.primary}, ${s.primaryDark}, ${s.primary})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: 'cc-spin 2.5s linear infinite',
-          }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: '50%',
-              background: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22,
-            }}>🤖</div>
-          </div>
-
-          <div style={{ fontWeight: 700, fontSize: 17, color: s.dark, marginBottom: 4 }}>
-            {lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
-          </div>
-          <div style={{ fontSize: 13, color: s.gray, marginBottom: 14 }}>
-            {lang === 'bm'
-              ? 'Extracting topik, key points, formula, soalan, dan ringkasan.'
-              : 'Extracting topics, key points, formulas, questions, and summary.'}
-          </div>
-
-          {/* Indeterminate progress bar */}
-          <div style={{
-            maxWidth: 300, margin: '0 auto',
-            height: 4, borderRadius: 999, background: 'rgba(212, 83, 126, 0.12)',
-            overflow: 'hidden', position: 'relative',
-          }}>
-            <div style={{
-              position: 'absolute',
-              height: '100%', width: '40%',
-              borderRadius: 999,
-              background: `linear-gradient(90deg, ${s.primary}, ${s.primaryDark})`,
-              animation: 'cc-slide 1.4s ease-in-out infinite',
-            }} />
-          </div>
-
-          <div style={{
-            fontSize: 11, color: s.gray, marginTop: 14, opacity: 0.7,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}>
-            <AILogo provider={aiProvider} size={11} />
-            {PROVIDER_META[aiProvider].label}
-          </div>
+        <div className="fade-in" style={{ marginBottom: 14 }}>
+          <CottonCandyGame
+            status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
+            subStatus={lang === 'bm'
+              ? `Sambil tunggu, jom main! ${PROVIDER_META[aiProvider].label}`
+              : `While you wait, play a game! ${PROVIDER_META[aiProvider].label}`}
+            lang={lang}
+          />
         </div>
       )}
 
