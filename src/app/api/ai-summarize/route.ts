@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { callAI, buildSystemPrompt, type AIProvider } from '@/lib/ai-providers'
 import { getRecordingTypeMeta } from '@/lib/recording-types'
+import { logUsage } from '@/lib/usage-logger'
+import { calcLLMCost } from '@/lib/usage-pricing'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -53,6 +55,42 @@ ${truncated}`
       keywords: result.topics || [],
       updated_at: new Date().toISOString(),
     }).eq('id', lectureId)
+
+    // v52: Log usage cost
+    try {
+      // Estimate tokens (rough: 1 token ≈ 4 chars for Latin)
+      const inputChars = (userMessage?.length || 0) + (systemPrompt?.length || 0)
+      const outputChars = JSON.stringify(result).length
+      const inputTokens = Math.ceil(inputChars / 4)
+      const outputTokens = Math.ceil(outputChars / 4)
+
+      const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
+        'gemini-flash': 'gemini_flash',
+        'gemini-flash-lite': 'gemini_flash_lite',
+        'groq': 'gemini_flash',  // groq llama3 — approx Gemini cost
+        'xai': 'xai_grok',
+      }
+      const serviceKey = serviceMap[usedProvider as string] || 'gemini_flash'
+      const cost = calcLLMCost(serviceKey as any, inputTokens, outputTokens)
+
+      await logUsage({
+        userId: user.id,
+        service: serviceKey,
+        operation: 'summarize',
+        units: inputTokens + outputTokens,
+        unit_type: 'tokens',
+        cost_usd: cost,
+        lecture_id: lectureId,
+        metadata: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          provider: usedProvider,
+          fell_back: fellBack,
+        },
+      })
+    } catch (logErr) {
+      console.error('[ai-summarize] usage log failed (non-fatal):', logErr)
+    }
 
     return NextResponse.json({
       ok: true,

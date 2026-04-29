@@ -172,6 +172,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <span style={{ fontSize: 13 }}>🎟</span>
               {lang === 'bm' ? 'Kod Promo' : 'Promo Codes'}
             </Link>
+            <Link
+              href="/dashboard/admin/usage"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '8px 10px', borderRadius: 8,
+                fontSize: 13, fontWeight: 500,
+                color: pathname?.startsWith('/dashboard/admin/usage') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                background: pathname?.startsWith('/dashboard/admin/usage') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>📊</span>
+              {lang === 'bm' ? 'Penggunaan & Kos' : 'Usage & Cost'}
+            </Link>
           </>
         )}
 
@@ -332,6 +346,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 >
                   <span style={{ fontSize: 13 }}>🎟</span>
                   {lang === 'bm' ? 'Kod Promo' : 'Promo Codes'}
+                </Link>
+                <Link
+                  href="/dashboard/admin/usage"
+                  onClick={() => setDrawer(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '8px 10px', borderRadius: 8,
+                    fontSize: 13, fontWeight: 500,
+                    color: pathname?.startsWith('/dashboard/admin/usage') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                    background: pathname?.startsWith('/dashboard/admin/usage') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>📊</span>
+                  {lang === 'bm' ? 'Penggunaan & Kos' : 'Usage & Cost'}
                 </Link>
               </>
             )}

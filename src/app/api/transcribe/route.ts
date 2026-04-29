@@ -1,20 +1,21 @@
 // src/app/api/transcribe/route.ts
-// v47 — Deep Malay detection: language-specific prompts + temperature 0.0 + word lists
-// Research-backed: Whisper prompt = language model priming (rare words, vocabulary)
+// v53 — Hybrid: Soniox for BM/Rojak (best accuracy), Whisper Turbo for EN/zh/ta (fast & cheap)
 // Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkAudioCap } from '@/lib/audio-usage'
 import { type Plan } from '@/types'
+import { logUsage } from '@/lib/usage-logger'
+import { calcWhisperCost, calcSonioxCost } from '@/lib/usage-pricing'
+import { transcribeWithSoniox } from '@/lib/soniox'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL_TURBO = 'whisper-large-v3-turbo'  // fast, cheap, good for EN/rojak/auto
-const MODEL_LARGE = 'whisper-large-v3'         // slower, better for pure BM
+const MODEL_TURBO = 'whisper-large-v3-turbo'
 
 const VALID_LANGS = ['ms', 'en', 'zh', 'ta'] as const
 
@@ -24,13 +25,6 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    }
-
-    const apiKey = process.env.GROQ_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({
-        error: 'GROQ_API_KEY not configured.',
-      }, { status: 500 })
     }
 
     // --- CAP CHECK ---
@@ -68,55 +62,115 @@ export async function POST(req: NextRequest) {
       }, { status: 413 })
     }
 
-    // Get language from client (auto / ms / en / zh / ta)
     const langParam = (form.get('language') as string | null)?.toLowerCase()
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
-    // --- HYBRID STT MODEL SELECTION (v44.1) ---
-    // Whisper Large v3 for: Malay (ms) + Auto/Rojak mode (no language hint)
-    // Whisper Turbo for: explicit non-Malay (en, zh, ta) — fast & cheap
+    // --- ROUTING DECISION (v53) ---
+    // Soniox: best for BM, Rojak, code-switching
+    // Whisper Turbo: fast & cheap for explicit EN/zh/ta
     const isMalay = useLanguageHint && langParam === 'ms'
     const isAutoRojak = !useLanguageHint
-    const useV3 = isMalay || isAutoRojak
-    const selectedModel = useV3 ? MODEL_LARGE : MODEL_TURBO
+    const useSoniox = isMalay || isAutoRojak
 
-    // v47: Language-specific prompts (Whisper acts as language model — primes vocabulary)
-    // Research: Including target-language word list in prompt significantly improves rare-word recognition
-    let prompt: string
-    if (isMalay) {
-      // PURE BM prompt — deeper technical vocabulary + academic terms
-      prompt = "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. " +
-        "Perkataan biasa: saya, awak, dia, kita, mereka, ini, itu, yang, dengan, untuk, " +
-        "sebab, lepas, kemudian, akhirnya, sebenarnya, maksudnya, contohnya, termasuk, " +
-        "iaitu, manakala, walaupun, bagaimana, mengapa, semasa, selepas, sebelum. " +
-        "Istilah akademik: pembahagian sel, fotosintesis, tindak balas, persamaan, " +
-        "fungsi, teorem, hipotesis, kajian, eksperimen, penyelidikan, analisis, " +
-        "kesimpulan, perlembagaan, kemerdekaan, ekonomi, masyarakat, kerajaan, " +
-        "pembangunan, teknologi, sumber, pengaruh, kepentingan, kesan, faktor."
-    } else if (isAutoRojak) {
-      // ROJAK prompt — BM + EN mixed natural Malaysian speech
-      prompt = "Malaysian student or professional speaking natural rojak (Malay + English mix). " +
-        "Common Malay words: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, " +
-        "sebab, lepas, ni, sini, mana, macam, boleh, tak, jangan, kalau, mesti, kena. " +
-        "Common rojak phrases: 'so kita', 'lepas tu', 'macam ni', 'sebab tu', 'okay so', " +
-        "'actually', 'basically', 'in other words', 'for example', 'in conclusion'. " +
-        "Academic terms in BM: pembahagian sel, fotosintesis, persamaan, teorem, kajian."
-    } else {
-      // Other languages — generic prompt
-      prompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
+    if (useSoniox) {
+      // ===== SONIOX PATH =====
+      console.log(`[transcribe] v53 Soniox | language hint: ${isMalay ? 'ms' : 'auto-rojak'}`)
+
+      const languageHints = isMalay ? ['ms'] : ['ms', 'en']
+      const context = isMalay
+        ? "Malaysian speaker. Bahasa Melayu rasmi atau formal. " +
+          "Topics: pendidikan, pelajaran, pembahagian sel, fotosintesis, persamaan, " +
+          "perlembagaan, kemerdekaan, ekonomi, kerajaan, pembangunan, teknologi."
+        : "Malaysian student or professional. Natural rojak (BM + English code-switching). " +
+          "Common phrases: 'okay so kita', 'lepas tu', 'macam ni', 'sebab tu'. " +
+          "Topics: lectures, education, technology, business, science."
+
+      try {
+        const result = await transcribeWithSoniox(audio, 'audio.webm', {
+          languageHints,
+          context,
+        })
+
+        console.log(`[transcribe] v53 Soniox done. detected: ${result.language}, chars: ${result.text.length}`)
+
+        const audioSeconds = result.audioSeconds
+
+        if (audioSeconds > 0) {
+          await sb.from('profiles')
+            .update({
+              audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds,
+            })
+            .eq('id', user.id)
+
+          try {
+            const cost = calcSonioxCost('async', audioSeconds)
+            await logUsage({
+              userId: user.id,
+              service: 'soniox_async' as any,
+              operation: 'transcribe',
+              units: audioSeconds,
+              unit_type: 'audio_seconds',
+              cost_usd: cost,
+              metadata: {
+                language: result.language,
+                user_picked: useLanguageHint ? langParam : 'auto',
+                token_count: result.tokens.length,
+              },
+            })
+          } catch (logErr) {
+            console.error('[transcribe] usage log failed (non-fatal):', logErr)
+          }
+        }
+
+        const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
+        const newCheck = checkAudioCap(
+          plan,
+          newUsage,
+          profile?.audio_reset_at || null,
+          profile?.plan_upgraded_at || null,
+        )
+
+        const segments = result.tokens.length > 0 ? [{
+          start: 0,
+          end: audioSeconds,
+          text: result.text,
+        }] : []
+
+        return NextResponse.json({
+          text: result.text,
+          segments,
+          language: result.language,
+          audioSeconds,
+          usage: newCheck,
+          provider: 'soniox',
+        })
+      } catch (sonioxErr: any) {
+        console.error('[transcribe] Soniox failed, fallback to Whisper:', sonioxErr.message)
+        // Fall through to Whisper Turbo as backup
+      }
     }
+
+    // ===== WHISPER TURBO PATH (for EN/zh/ta OR Soniox fallback) =====
+    const apiKey = process.env.GROQ_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({
+        error: 'GROQ_API_KEY not configured.',
+      }, { status: 500 })
+    }
+
+    const whisperPrompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
-    groqForm.append('model', selectedModel)
+    groqForm.append('model', MODEL_TURBO)
     groqForm.append('response_format', 'verbose_json')
-    groqForm.append('prompt', prompt)
-    groqForm.append('temperature', '0.0')  // v47: deterministic, less hallucination
+    groqForm.append('prompt', whisperPrompt)
+    groqForm.append('temperature', '0.0')
     if (useLanguageHint) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] v47 deep-malay | model: ${selectedModel} | language: ${useLanguageHint ? langParam : 'auto'} | temp: 0.0`)
+    console.log(`[transcribe] v53 Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -134,9 +188,8 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await groqRes.json()
-    console.log(`[transcribe] Done. detected: ${data.language}, chars: ${(data.text || '').length}`)
+    console.log(`[transcribe] Whisper done. detected: ${data.language}, chars: ${(data.text || '').length}`)
 
-    // --- TRACK USAGE ---
     const audioSeconds = Math.ceil(
       data.duration
       || (data.segments?.[data.segments.length - 1]?.end || 0)
@@ -149,6 +202,25 @@ export async function POST(req: NextRequest) {
           audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds,
         })
         .eq('id', user.id)
+
+      try {
+        const cost = calcWhisperCost('groq_whisper_turbo', audioSeconds)
+        await logUsage({
+          userId: user.id,
+          service: 'groq_whisper_turbo',
+          operation: 'transcribe',
+          units: audioSeconds,
+          unit_type: 'audio_seconds',
+          cost_usd: cost,
+          metadata: {
+            language: data.language || 'auto',
+            user_picked: useLanguageHint ? langParam : 'auto',
+            model: MODEL_TURBO,
+          },
+        })
+      } catch (logErr) {
+        console.error('[transcribe] usage log failed (non-fatal):', logErr)
+      }
     }
 
     const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
@@ -165,6 +237,7 @@ export async function POST(req: NextRequest) {
       language: data.language || 'auto',
       audioSeconds,
       usage: newCheck,
+      provider: 'whisper_turbo',
     })
   } catch (e: any) {
     console.error('[transcribe] Error:', e)
