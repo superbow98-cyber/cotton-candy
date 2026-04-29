@@ -1,22 +1,31 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
 import { createClient } from '@/lib/supabase/client'
 import { type Notebook, type Lecture, PLANS } from '@/types'
-import { lectureToPdf, lectureToMarkdown, downloadText } from '@/lib/export'
-import { Icon } from '@/components/ui/Icon'
 
-// Pastel gradient cover by subject keyword
 const subjectCover = (subject: string | null | undefined): string => {
   const s = (subject || '').toLowerCase()
-  if (/bio|biolog/.test(s)) return 'linear-gradient(135deg, #E8F5E9, #C8E6C9)'
-  if (/chem|kimia/.test(s)) return 'linear-gradient(135deg, #FFF3E0, #FFE0B2)'
-  if (/phys|fizik/.test(s)) return 'linear-gradient(135deg, #E3F2FD, #BBDEFB)'
-  if (/math|matem/.test(s)) return 'linear-gradient(135deg, #F3E5F5, #E1BEE7)'
-  if (/hist|sejarah/.test(s)) return 'linear-gradient(135deg, #FFEBEE, #FFCDD2)'
-  if (/geo|geogr/.test(s)) return 'linear-gradient(135deg, #E0F7FA, #B2EBF2)'
-  return 'linear-gradient(135deg, #F5F5F7, #E8E8EA)'
+  if (/bio|biolog/.test(s)) return 'linear-gradient(135deg, #1B5E20, #4CAF50)'
+  if (/chem|kimia/.test(s)) return 'linear-gradient(135deg, #BF360C, #FF7043)'
+  if (/phys|fizik/.test(s)) return 'linear-gradient(135deg, #0D47A1, #42A5F5)'
+  if (/math|matem/.test(s)) return 'linear-gradient(135deg, #4A148C, #8E24AA)'
+  if (/hist|sejarah/.test(s)) return 'linear-gradient(135deg, #4E342E, #8D6E63)'
+  if (/geo|geogr/.test(s)) return 'linear-gradient(135deg, #006064, #26C6DA)'
+  return 'linear-gradient(135deg, #424242, #757575)'
+}
+
+const subjectIcon = (subject: string | null | undefined): string => {
+  const s = (subject || '').toLowerCase()
+  if (/bio|biolog/.test(s)) return '🧬'
+  if (/chem|kimia/.test(s)) return '⚗️'
+  if (/phys|fizik/.test(s)) return '⚛️'
+  if (/math|matem/.test(s)) return '📐'
+  if (/hist|sejarah/.test(s)) return '📜'
+  if (/geo|geogr/.test(s)) return '🌏'
+  return '📓'
 }
 
 export default function NotebooksPage() {
@@ -27,9 +36,12 @@ export default function NotebooksPage() {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [limitError, setLimitError] = useState<string | null>(null)
   const [userPlan, setUserPlan] = useState<keyof typeof PLANS>('free')
+
+  const [dragLectureId, setDragLectureId] = useState<string | null>(null)
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [moveMenuFor, setMoveMenuFor] = useState<string | null>(null)
 
   const load = async () => {
     const sb = createClient()
@@ -48,357 +60,411 @@ export default function NotebooksPage() {
 
   const create = async () => {
     if (!name.trim()) return
-    setLimitError(null)
-
-    // Enforce notebook limit
-    const limit = PLANS[userPlan].notebookLimit
-    if (notebooks.length >= limit) {
-      setLimitError(
-        lang === 'bm'
-          ? `Had notebook tercapai (${limit}). Upgrade untuk lebih.`
-          : `Notebook limit reached (${limit}). Upgrade for more.`
-      )
-      return
-    }
-
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
 
-    // Fetch Unsplash cover (silent fail OK)
+    const limit = PLANS[userPlan].notebookLimit
+    if (notebooks.length >= limit) {
+      setLimitError(lang === 'bm'
+        ? `Had buku nota dicapai (${limit}). Naik tahap untuk lebih.`
+        : `Notebook limit reached (${limit}). Upgrade for more.`)
+      return
+    }
+    setLimitError(null)
+
     let coverImageUrl: string | null = null
-    let photographerName: string | null = null
-    let photographerLink: string | null = null
+    let coverPhotographerName: string | null = null
+    let coverPhotographerLink: string | null = null
     try {
       const searchQuery = subject.trim() || name.trim()
-      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(searchQuery)}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.image) {
-          coverImageUrl = data.image.url
-          photographerName = data.image.photographer?.name || null
-          photographerLink = data.image.photographer?.link || null
+      const imgRes = await fetch(`/api/unsplash?q=${encodeURIComponent(searchQuery)}`)
+      if (imgRes.ok) {
+        const imgData = await imgRes.json()
+        if (imgData.image) {
+          coverImageUrl = imgData.image.url
+          coverPhotographerName = imgData.image.photographer?.name || null
+          coverPhotographerLink = imgData.image.photographer?.link || null
         }
       }
-    } catch (e) {
-      console.warn('[notebook] Unsplash fetch failed, using gradient fallback')
-    }
+    } catch {}
 
-    await sb.from('notebooks').insert({
+    const { data, error } = await sb.from('notebooks').insert({
       user_id: user.id,
       title: name.trim(),
       subject: subject.trim() || null,
-      color: s.primary,
+      color: '#FF8FA8',
+      lecture_ids: [],
       cover_image_url: coverImageUrl,
-      cover_photographer_name: photographerName,
-      cover_photographer_link: photographerLink,
-    })
+      cover_photographer_name: coverPhotographerName,
+      cover_photographer_link: coverPhotographerLink,
+    }).select().maybeSingle()
+    if (error) { console.error(error); return }
+    if (data) setNotebooks([data as Notebook, ...notebooks])
     setName(''); setSubject(''); setCreating(false)
-    load()
   }
 
-  const toggleLecture = async (nb: Notebook, lectureId: string) => {
-    const has = nb.lecture_ids?.includes(lectureId)
-    const next = has ? (nb.lecture_ids || []).filter((x) => x !== lectureId) : [...(nb.lecture_ids || []), lectureId]
+  const moveLecture = async (lectureId: string, notebookId: string | null) => {
     const sb = createClient()
-    await sb.from('notebooks').update({ lecture_ids: next }).eq('id', nb.id)
-    load()
+    const { error } = await sb.from('lectures').update({ notebook_id: notebookId }).eq('id', lectureId)
+    if (error) { console.error(error); return }
+    setLectures(lectures.map(l => l.id === lectureId ? { ...l, notebook_id: notebookId } : l))
+    setMoveMenuFor(null)
   }
 
-  const del = async (id: string) => {
-    if (!confirm(lang === 'bm' ? 'Padam notebook ini?' : 'Delete this notebook?')) return
-    const sb = createClient()
-    await sb.from('notebooks').delete().eq('id', id)
-    load()
+  const onDragStart = (e: React.DragEvent, lectureId: string) => {
+    setDragLectureId(lectureId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', lectureId)
+  }
+  const onDragEnd = () => {
+    setDragLectureId(null)
+    setDropTargetId(null)
+  }
+  const onDragOver = (e: React.DragEvent, notebookId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDropTargetId(notebookId)
+  }
+  const onDragLeave = () => setDropTargetId(null)
+  const onDrop = (e: React.DragEvent, notebookId: string) => {
+    e.preventDefault()
+    const lectureId = e.dataTransfer.getData('text/plain')
+    if (lectureId) moveLecture(lectureId, notebookId)
+    setDragLectureId(null)
+    setDropTargetId(null)
   }
 
-  const exportNotebook = async (nb: Notebook, format: 'md' | 'pdf') => {
-    const nbLectures = lectures.filter((l) => nb.lecture_ids?.includes(l.id))
-    if (nbLectures.length === 0) {
-      alert(lang === 'bm' ? 'Notebook ini kosong.' : 'This notebook is empty.')
-      return
-    }
-    if (format === 'md') {
-      const md = nbLectures.map((l) => lectureToMarkdown(l)).join('\n\n---\n\n')
-      downloadText(`${nb.title.replace(/[^\w-]+/g, '_')}.md`, md, 'text/markdown')
-    } else {
-      // Simple PDF for first lecture only — export each is cleaner
-      for (const l of nbLectures) await lectureToPdf(l, { watermark: false, theme: s })
-    }
-  }
+  const notebookById = useMemo(() => {
+    const m = new Map<string, Notebook>()
+    notebooks.forEach(n => m.set(n.id, n))
+    return m
+  }, [notebooks])
+
+  const limit = PLANS[userPlan].notebookLimit
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      {/* HEADER */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        gap: 12, marginBottom: 20, flexWrap: 'wrap',
-      }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 16px' }}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <h1 style={{
-            margin: 0, fontSize: 22, fontWeight: 600,
-            letterSpacing: '-0.025em', color: '#1d1d1f',
-          }}>
-            {lang === 'bm' ? 'Notebook' : 'Notebooks'}
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.025em', margin: 0 }}>
+            {lang === 'bm' ? 'Buku Nota' : 'Notebooks'}
           </h1>
-          <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.55)', marginTop: 2 }}>
-            {lang === 'bm'
-              ? 'Kumpul kuliah ikut subjek atau semester.'
-              : 'Group lectures by subject, semester, or topic.'}
+          <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.55)', marginTop: 2 }}>
+            {notebooks.length} / {limit} · {PLANS[userPlan].name}
           </div>
         </div>
-        {!creating && (
-          <button onClick={() => setCreating(true)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 9,
+        <button
+          onClick={() => setCreating(!creating)}
+          style={{
+            padding: '8px 16px',
             background: '#1d1d1f', color: '#fff',
-            border: 'none', fontSize: 13, fontWeight: 500,
-            letterSpacing: '-0.01em', cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}>
-            <Icon.Plus size={14} />
-            {lang === 'bm' ? 'Notebook baru' : 'New notebook'}
-          </button>
-        )}
+            border: 'none', borderRadius: 100,
+            fontSize: 12, fontWeight: 500,
+            cursor: 'pointer',
+          }}
+        >+ {lang === 'bm' ? 'Baru' : 'New'}</button>
       </div>
 
-      {/* CREATE FORM */}
+      {limitError && (
+        <div style={{
+          padding: '10px 14px', marginBottom: 12,
+          background: 'rgba(255, 200, 100, 0.1)',
+          border: '0.5px solid rgba(255, 200, 100, 0.3)',
+          borderRadius: 10,
+          fontSize: 12, color: '#8a6d0f',
+        }}>{limitError}</div>
+      )}
+
       {creating && (
         <div style={{
-          background: '#fff',
-          border: '0.5px solid rgba(0,0,0,0.06)',
-          borderRadius: 14, padding: '18px 20px',
-          marginBottom: 14,
+          background: '#fff', padding: 16, borderRadius: 12,
+          border: '0.5px solid rgba(0,0,0,0.08)', marginBottom: 16,
         }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-            <input
-              value={name} onChange={(e) => setName(e.target.value)}
-              placeholder={lang === 'bm' ? 'Nama notebook, contoh: Biologi Sem 2' : 'Notebook name, e.g., Biology Sem 2'}
-              style={{
-                flex: 1, minWidth: 200,
-                padding: '10px 14px',
-                background: '#f5f5f7',
-                border: '0.5px solid rgba(0,0,0,0.08)',
-                borderRadius: 10, fontSize: 13.5,
-                color: '#1d1d1f', fontFamily: 'inherit', outline: 'none',
-              }}
-              autoFocus
-            />
-            <input
-              value={subject} onChange={(e) => setSubject(e.target.value)}
-              placeholder={lang === 'bm' ? 'Subjek (pilihan)' : 'Subject (optional)'}
-              style={{
-                flex: 1, minWidth: 160,
-                padding: '10px 14px',
-                background: '#f5f5f7',
-                border: '0.5px solid rgba(0,0,0,0.08)',
-                borderRadius: 10, fontSize: 13.5,
-                color: '#1d1d1f', fontFamily: 'inherit', outline: 'none',
-              }}
-            />
-          </div>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder={lang === 'bm' ? 'Nama buku nota' : 'Notebook name'}
+            style={{
+              width: '100%', padding: '10px 12px', marginBottom: 8,
+              border: '0.5px solid rgba(0,0,0,0.14)', borderRadius: 8,
+              fontSize: 13, color: '#1d1d1f', outline: 'none',
+            }}
+          />
+          <input
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder={lang === 'bm' ? 'Subjek (e.g. Biology)' : 'Subject (e.g. Biology)'}
+            style={{
+              width: '100%', padding: '10px 12px', marginBottom: 12,
+              border: '0.5px solid rgba(0,0,0,0.14)', borderRadius: 8,
+              fontSize: 13, color: '#1d1d1f', outline: 'none',
+            }}
+          />
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={create} style={{
-              padding: '8px 14px', borderRadius: 9,
-              background: '#1d1d1f', color: '#fff', border: 'none',
-              fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}>
-              {lang === 'bm' ? 'Cipta' : 'Create'}
-            </button>
-            <button onClick={() => { setCreating(false); setName(''); setSubject(''); setLimitError(null) }} style={{
-              padding: '8px 14px', borderRadius: 9,
-              background: '#fff', color: '#1d1d1f',
-              border: '0.5px solid rgba(0,0,0,0.08)',
-              fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}>
-              {lang === 'bm' ? 'Batal' : 'Cancel'}
-            </button>
+              padding: '8px 14px', background: '#1d1d1f', color: '#fff',
+              border: 'none', borderRadius: 100, fontSize: 12, cursor: 'pointer',
+            }}>{lang === 'bm' ? 'Cipta' : 'Create'}</button>
+            <button onClick={() => { setCreating(false); setName(''); setSubject('') }} style={{
+              padding: '8px 14px', background: '#fff', color: '#1d1d1f',
+              border: '0.5px solid rgba(0,0,0,0.14)', borderRadius: 100, fontSize: 12, cursor: 'pointer',
+            }}>{lang === 'bm' ? 'Batal' : 'Cancel'}</button>
           </div>
-          {limitError && (
-            <div style={{
-              marginTop: 12,
-              padding: '10px 12px',
-              background: '#FEF3C7',
-              color: '#92400E',
-              border: '0.5px solid rgba(146, 64, 14, 0.2)',
-              borderRadius: 10,
-              fontSize: 12.5,
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <span>⚠️</span>
-              <span>{limitError}</span>
-              <a href="/#pricing" style={{
-                marginLeft: 'auto', color: '#5A8FF5',
-                fontWeight: 600, textDecoration: 'none',
-              }}>
-                {lang === 'bm' ? 'Upgrade →' : 'Upgrade →'}
-              </a>
-            </div>
-          )}
         </div>
       )}
 
-      {/* GRID */}
-      <div style={{
-        display: 'grid', gap: 12,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+      <div className="notebooks-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 240px) 1fr',
+        gap: 16,
       }}>
-        {notebooks.map((nb) => {
-          const nbLectures = lectures.filter((l) => nb.lecture_ids?.includes(l.id))
-          const totalMins = nbLectures.reduce((a, l) => a + Math.round((l.duration_seconds || 0) / 60), 0)
-          const expanded = expandedId === nb.id
-          return (
-            <div key={nb.id} style={{
-              background: '#fff',
-              border: '0.5px solid rgba(0,0,0,0.06)',
-              borderRadius: 14,
-              padding: 16,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-            onClick={() => setExpandedId(expanded ? null : nb.id)}
-            onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.borderColor = 'rgba(0,0,0,0.14)' }}
-            onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.borderColor = 'rgba(0,0,0,0.06)' }}
-            >
-              {/* Cover */}
-              <div style={{
-                height: 80, borderRadius: 10, marginBottom: 12,
-                background: nb.cover_image_url
-                  ? `url(${nb.cover_image_url}) center / cover no-repeat`
-                  : subjectCover(nb.subject || nb.title),
-                position: 'relative',
-                overflow: 'hidden',
-              }}>
-                {!nb.cover_image_url && (
-                  <div style={{
-                    position: 'absolute', top: 8, left: 8,
-                    width: 18, height: 24,
-                    borderRadius: 2,
-                    background: 'rgba(255,255,255,0.95)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                  }} />
-                )}
-              </div>
 
-              {/* Info */}
-              <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 2, color: '#1d1d1f' }}>
-                {nb.title}
-              </div>
-              <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)' }}>
-                {nbLectures.length === 0
-                  ? (lang === 'bm' ? 'Kosong · tap untuk isi' : 'Empty · tap to fill')
-                  : `${nbLectures.length} ${lang === 'bm' ? 'kuliah' : 'lectures'} · ${totalMins} min`}
-              </div>
+        <div>
+          <div style={{
+            fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '0.06em', color: 'rgba(29,29,31,0.45)',
+            marginBottom: 8,
+          }}>
+            {lang === 'bm' ? 'Buku Nota' : 'Notebooks'}
+          </div>
 
-              {/* Expanded state */}
-              {expanded && (
-                <div onClick={(e) => e.stopPropagation()} style={{
-                  marginTop: 14, paddingTop: 14,
-                  borderTop: '0.5px solid rgba(0,0,0,0.06)',
-                }}>
-                  {lectures.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', textAlign: 'center', padding: 12 }}>
-                      {lang === 'bm' ? 'Takda kuliah direkod lagi.' : 'No lectures recorded yet.'}
+          {notebooks.length === 0 && !creating && (
+            <div style={{
+              padding: 16, textAlign: 'center',
+              background: '#fafafa', borderRadius: 10,
+              border: '1px dashed rgba(0,0,0,0.1)',
+              fontSize: 12, color: 'rgba(29,29,31,0.5)',
+            }}>
+              {lang === 'bm' ? 'Tiada buku nota lagi' : 'No notebooks yet'}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {notebooks.map(nb => {
+              const lectureCount = lectures.filter(l => l.notebook_id === nb.id).length
+              const isDropTarget = dropTargetId === nb.id
+
+              return (
+                <Link
+                  key={nb.id}
+                  href={`/dashboard/notebooks/${nb.id}`}
+                  onDragOver={(e) => onDragOver(e, nb.id)}
+                  onDragLeave={onDragLeave}
+                  onDrop={(e) => onDrop(e, nb.id)}
+                  style={{
+                    background: isDropTarget ? 'rgba(90, 143, 245, 0.08)' : '#fff',
+                    border: isDropTarget ? '2px dashed #5A8FF5' : '0.5px solid rgba(0,0,0,0.08)',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                    display: 'block',
+                    transition: 'border 0.1s, background 0.1s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {nb.cover_image_url ? (
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: `url(${nb.cover_image_url}) center / cover`,
+                        flexShrink: 0,
+                      }} />
+                    ) : (
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: subjectCover(nb.subject || nb.title),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14, flexShrink: 0,
+                      }}>{subjectIcon(nb.subject || nb.title)}</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 500, color: '#1d1d1f',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{nb.title}</div>
+                      <div style={{ fontSize: 11, color: isDropTarget ? '#5A8FF5' : 'rgba(29,29,31,0.55)' }}>
+                        {isDropTarget
+                          ? (lang === 'bm' ? 'Lepaskan untuk tambah ↓' : 'Drop to add ↓')
+                          : `${lectureCount} ${lang === 'bm' ? 'rakaman' : (lectureCount === 1 ? 'lecture' : 'lectures')}`}
+                      </div>
                     </div>
-                  ) : (
-                    <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
-                      {lectures.slice(0, 20).map((l) => {
-                        const included = nb.lecture_ids?.includes(l.id)
-                        return (
-                          <label key={l.id} style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '6px 0', fontSize: 12,
-                            cursor: 'pointer',
-                            color: included ? '#1d1d1f' : 'rgba(29,29,31,0.6)',
-                          }}>
-                            <input
-                              type="checkbox"
-                              checked={included || false}
-                              onChange={() => toggleLecture(nb, l.id)}
-                              style={{ margin: 0, cursor: 'pointer' }}
-                            />
-                            <span style={{
-                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1,
-                            }}>{l.title}</span>
-                          </label>
-                        )
-                      })}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div style={{
+            fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '0.06em', color: 'rgba(29,29,31,0.45)',
+            marginBottom: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span>{lang === 'bm' ? 'Semua Rakaman · seret untuk tambah' : 'All Recordings · drag to add'}</span>
+            <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
+              {lectures.length}
+            </span>
+          </div>
+
+          {lectures.length === 0 && (
+            <div style={{
+              padding: 24, textAlign: 'center',
+              background: '#fafafa', borderRadius: 10,
+              border: '1px dashed rgba(0,0,0,0.1)',
+              fontSize: 12, color: 'rgba(29,29,31,0.5)',
+            }}>
+              {lang === 'bm' ? 'Belum ada rakaman' : 'No recordings yet'}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {lectures.map(lec => {
+              const inNotebook = lec.notebook_id ? notebookById.get(lec.notebook_id) : null
+              const isDragging = dragLectureId === lec.id
+
+              return (
+                <div
+                  key={lec.id}
+                  draggable
+                  onDragStart={(e) => onDragStart(e, lec.id)}
+                  onDragEnd={onDragEnd}
+                  style={{
+                    background: '#fff',
+                    border: isDragging ? '2px solid #5A8FF5' : '0.5px solid rgba(0,0,0,0.08)',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    cursor: 'grab',
+                    opacity: isDragging ? 0.6 : 1,
+                    transform: isDragging ? 'rotate(-1deg)' : 'none',
+                    transition: 'opacity 0.1s, transform 0.1s',
+                    userSelect: 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      fontSize: 14, color: 'rgba(29,29,31,0.4)',
+                      cursor: 'grab', flexShrink: 0,
+                    }}>⋮⋮</span>
+
+                    <Link
+                      href={`/dashboard/lectures/${lec.id}`}
+                      style={{
+                        flex: 1, minWidth: 0, textDecoration: 'none',
+                        color: 'inherit',
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 13, color: '#1d1d1f', fontWeight: 500,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{lec.title || (lang === 'bm' ? 'Tiada tajuk' : 'Untitled')}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.5)' }}>
+                        {lec.duration_seconds
+                          ? `${Math.round(lec.duration_seconds / 60)} min · ${new Date(lec.created_at).toLocaleDateString()}`
+                          : new Date(lec.created_at).toLocaleDateString()}
+                      </div>
+                    </Link>
+
+                    {inNotebook ? (
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px',
+                        background: 'rgba(52, 168, 83, 0.1)',
+                        color: '#2C8545',
+                        borderRadius: 100,
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{inNotebook.title}</span>
+                    ) : (
+                      <span style={{
+                        fontSize: 10, padding: '2px 8px',
+                        background: 'rgba(0,0,0,0.04)',
+                        color: 'rgba(29,29,31,0.5)',
+                        borderRadius: 100,
+                        flexShrink: 0,
+                      }}>{lang === 'bm' ? 'Tiada' : 'Unsorted'}</span>
+                    )}
+
+                    <button
+                      onClick={(e) => { e.preventDefault(); setMoveMenuFor(moveMenuFor === lec.id ? null : lec.id) }}
+                      style={{
+                        background: 'transparent', border: 'none', padding: 4,
+                        cursor: 'pointer', fontSize: 14, color: 'rgba(29,29,31,0.5)',
+                        flexShrink: 0,
+                      }}
+                      aria-label="Move to notebook"
+                    >⋯</button>
+                  </div>
+
+                  {moveMenuFor === lec.id && (
+                    <div style={{
+                      marginTop: 8, padding: 8,
+                      background: '#fafafa', borderRadius: 8,
+                      border: '0.5px solid rgba(0,0,0,0.08)',
+                    }}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600,
+                        color: 'rgba(29,29,31,0.5)',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                        marginBottom: 6,
+                      }}>{lang === 'bm' ? 'Pindah ke buku nota' : 'Move to notebook'}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {lec.notebook_id && (
+                          <button onClick={() => moveLecture(lec.id, null)} style={moveMenuButtonStyle}>
+                            ✕ {lang === 'bm' ? 'Buang dari buku nota' : 'Remove from notebook'}
+                          </button>
+                        )}
+                        {notebooks.map(nb => (
+                          <button
+                            key={nb.id}
+                            onClick={() => moveLecture(lec.id, nb.id)}
+                            disabled={lec.notebook_id === nb.id}
+                            style={{
+                              ...moveMenuButtonStyle,
+                              background: lec.notebook_id === nb.id ? '#1d1d1f' : '#fff',
+                              color: lec.notebook_id === nb.id ? '#fff' : '#1d1d1f',
+                            }}
+                          >
+                            {subjectIcon(nb.subject || nb.title)} {nb.title}
+                            {lec.notebook_id === nb.id && ' ✓'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button onClick={() => exportNotebook(nb, 'md')} style={actionBtn}>
-                      <Icon.Download size={11} /> .md
-                    </button>
-                    <button onClick={() => exportNotebook(nb, 'pdf')} style={actionBtn}>
-                      <Icon.Download size={11} /> .pdf
-                    </button>
-                    <button onClick={() => del(nb.id)} style={{ ...actionBtn, color: '#c62828' }}>
-                      <Icon.Trash size={11} /> {lang === 'bm' ? 'Padam' : 'Delete'}
-                    </button>
-                  </div>
                 </div>
-              )}
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        </div>
 
-        {/* New notebook card (empty state tile) */}
-        {!creating && (
-          <button
-            onClick={() => setCreating(true)}
-            style={{
-              background: 'rgba(0,0,0,0.02)',
-              border: '1.5px dashed rgba(0,0,0,0.12)',
-              borderRadius: 14, padding: '32px 16px',
-              textAlign: 'center', cursor: 'pointer',
-              transition: 'all 0.15s',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              minHeight: 165, fontFamily: 'inherit',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.25)'
-              e.currentTarget.style.background = 'rgba(0,0,0,0.04)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'
-              e.currentTarget.style.background = 'rgba(0,0,0,0.02)'
-            }}
-          >
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%',
-              background: '#fff',
-              border: '0.5px solid rgba(0,0,0,0.1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 10, color: 'rgba(29,29,31,0.7)',
-            }}>
-              <Icon.Plus size={14} />
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#1d1d1f' }}>
-              {lang === 'bm' ? 'Notebook baru' : 'New notebook'}
-            </div>
-          </button>
-        )}
       </div>
 
-      {notebooks.length === 0 && !creating && (
-        <div style={{ marginTop: 16 }} />
-      )}
+      <style jsx>{`
+        @media (max-width: 640px) {
+          :global(.notebooks-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
 
-const actionBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '5px 10px',
+const moveMenuButtonStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  padding: '6px 10px',
   background: '#fff',
+  color: '#1d1d1f',
   border: '0.5px solid rgba(0,0,0,0.08)',
-  borderRadius: 7, fontSize: 11, fontWeight: 500,
-  color: 'rgba(29,29,31,0.7)',
-  cursor: 'pointer', fontFamily: 'inherit',
-  letterSpacing: '-0.005em',
+  borderRadius: 6,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontFamily: 'inherit',
 }

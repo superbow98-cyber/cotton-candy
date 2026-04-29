@@ -55,6 +55,7 @@ export interface Lecture {
   created_at: string
   updated_at: string
   mindmap_json?: MindMap | null
+  notebook_id?: string | null
 }
 
 export interface TimelineEntry {
