@@ -32,6 +32,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [planLoaded, setPlanLoaded] = useState(false)
   const [fullName, setFullName] = useState<string>('')
   const [email, setEmail] = useState<string>('')
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -41,10 +42,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         if (!user) { setPlanLoaded(true); return }
         setEmail(user.email || '')
         const { data } = await sb.from('profiles')
-          .select('plan, plan_expires_at, full_name')
+          .select('plan, plan_expires_at, full_name, is_admin')
           .eq('id', user.id).maybeSingle()
         if (data) {
           setFullName(data.full_name || '')
+          setIsAdmin(!!data.is_admin)
           const isExpired = data.plan_expires_at && new Date(data.plan_expires_at) < new Date()
           setPlan((data.plan === 'free' || isExpired) ? 'free' : data.plan)
         } else {
@@ -142,6 +144,36 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* Nav */}
         {NAV.map((n) => <NavLink key={n.href} item={n} />)}
+
+        {/* ADMIN SECTION (Parcello only) */}
+        {isAdmin && (
+          <>
+            <div style={{
+              padding: '14px 10px 6px',
+              fontSize: 10, fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              color: 'rgba(29,29,31,0.4)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ fontSize: 10 }}>🔐</span>
+              {lang === 'bm' ? 'Admin · Parcello' : 'Admin · Parcello'}
+            </div>
+            <Link
+              href="/dashboard/admin/promo-codes"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '8px 10px', borderRadius: 8,
+                fontSize: 13, fontWeight: 500,
+                color: pathname?.startsWith('/dashboard/admin/promo-codes') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                background: pathname?.startsWith('/dashboard/admin/promo-codes') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>🎟</span>
+              {lang === 'bm' ? 'Kod Promo' : 'Promo Codes'}
+            </Link>
+          </>
+        )}
 
         <div style={{ flex: 1 }} />
 
@@ -272,6 +304,37 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </button>
             </div>
             {NAV.map((n) => <NavLink key={n.href} item={n} onClick={() => setDrawer(false)} />)}
+
+            {/* ADMIN SECTION (Parcello only) — mobile */}
+            {isAdmin && (
+              <>
+                <div style={{
+                  padding: '14px 10px 6px',
+                  fontSize: 10, fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                  color: 'rgba(29,29,31,0.4)',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: 10 }}>🔐</span>
+                  {lang === 'bm' ? 'Admin · Parcello' : 'Admin · Parcello'}
+                </div>
+                <Link
+                  href="/dashboard/admin/promo-codes"
+                  onClick={() => setDrawer(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '8px 10px', borderRadius: 8,
+                    fontSize: 13, fontWeight: 500,
+                    color: pathname?.startsWith('/dashboard/admin/promo-codes') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                    background: pathname?.startsWith('/dashboard/admin/promo-codes') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>🎟</span>
+                  {lang === 'bm' ? 'Kod Promo' : 'Promo Codes'}
+                </Link>
+              </>
+            )}
 
             <div style={{ flex: 1 }} />
 
