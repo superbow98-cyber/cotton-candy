@@ -35,7 +35,28 @@ export async function POST(req: Request) {
       const sess = event.data.object as Stripe.Checkout.Session
       const userId = sess.metadata?.userId
       const plan = sess.metadata?.plan as Plan | undefined
+      const promoCode = sess.metadata?.promo_code
       if (userId && plan) await grant(userId, plan)
+
+      // v50: Increment promo code usage
+      if (promoCode) {
+        try {
+          const { data: pc } = await admin
+            .from('promo_codes')
+            .select('used_count')
+            .eq('code', promoCode)
+            .maybeSingle()
+          if (pc) {
+            await admin
+              .from('promo_codes')
+              .update({ used_count: (pc.used_count || 0) + 1 })
+              .eq('code', promoCode)
+            console.log(`[webhook] promo ${promoCode} used_count incremented`)
+          }
+        } catch (e) {
+          console.error('[webhook] promo increment failed:', e)
+        }
+      }
     }
     if (event.type === 'invoice.paid') {
       const inv = event.data.object as Stripe.Invoice
