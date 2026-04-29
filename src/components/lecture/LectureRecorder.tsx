@@ -779,21 +779,6 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* MIND MAP (v41) */}
-      {lecture?.mindmap_json && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{
-            fontSize: 11, fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-            color: '#5A8FF5', marginBottom: 8,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            🧠 {lang === 'bm' ? 'Peta Minda' : 'Mind Map'}
-          </div>
-          <MindMapView mindmap={lecture.mindmap_json} />
-        </div>
-      )}
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
         <div>
           <h1 style={{
@@ -1403,6 +1388,21 @@ export default function LectureRecorder({ id }: { id: string }) {
               })
               .filter(Boolean)
           })()}
+
+          {/* MIND MAP (v41 — moved below keyPoints in v45) */}
+          {lecture?.mindmap_json && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.05em',
+                color: '#5A8FF5', marginBottom: 8,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                🧠 {lang === 'bm' ? 'Peta Minda' : 'Mind Map'}
+              </div>
+              <MindMapView mindmap={lecture.mindmap_json} />
+            </div>
+          )}
         </div>
       )}
 
