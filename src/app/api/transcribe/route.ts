@@ -1,5 +1,5 @@
 // src/app/api/transcribe/route.ts
-// v28 — Whisper Large v3 Turbo with language picker (auto/ms/en/zh/ta)
+// v44.1 — Hybrid STT: Whisper Large v3 for Malay & Rojak/Auto, Turbo for EN/zh/ta
 // Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,7 +12,8 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const MODEL = 'whisper-large-v3-turbo'
+const MODEL_TURBO = 'whisper-large-v3-turbo'  // fast, cheap, good for EN/rojak/auto
+const MODEL_LARGE = 'whisper-large-v3'         // slower, better for pure BM
 
 const VALID_LANGS = ['ms', 'en', 'zh', 'ta'] as const
 
@@ -70,9 +71,15 @@ export async function POST(req: NextRequest) {
     const langParam = (form.get('language') as string | null)?.toLowerCase()
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
-    // --- WHISPER TURBO CALL ---
+    // --- HYBRID STT MODEL SELECTION (v44.1) ---
+    // Whisper Large v3 for: Malay (ms) + Auto/Rojak mode (no language hint)
+    // Whisper Turbo for: explicit non-Malay (en, zh, ta) — fast & cheap
+    const isMalay = useLanguageHint && langParam === 'ms'
+    const isAutoRojak = !useLanguageHint  // user picked "Rojak / Auto" mode
+    const useV3 = isMalay || isAutoRojak
+    const selectedModel = useV3 ? MODEL_LARGE : MODEL_TURBO
+
     // v43: Rojak-aware prompt primes Whisper to recognize Malaysian mixed BM+EN speech
-    // Whisper uses 'prompt' param as context hint (max 224 tokens)
     const ROJAK_PROMPT = "Malaysian student or professional speaking. " +
       "May contain English, Bahasa Melayu, or rojak (mix of both). " +
       "Common Malay words: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, " +
@@ -82,14 +89,14 @@ export async function POST(req: NextRequest) {
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
-    groqForm.append('model', MODEL)
+    groqForm.append('model', selectedModel)
     groqForm.append('response_format', 'verbose_json')
     groqForm.append('prompt', ROJAK_PROMPT)
     if (useLanguageHint) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] Whisper Turbo v43 rojak-aware | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] v44 Hybrid | model: ${selectedModel} | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
