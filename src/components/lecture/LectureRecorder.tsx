@@ -225,6 +225,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [recLang, setRecLang] = useState<string>('en-US')
 
   const recRef = useRef<any>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const startRef = useRef<number>(0)
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
@@ -417,15 +418,72 @@ export default function LectureRecorder({ id }: { id: string }) {
         return false
       }
 
-      // Request with echo cancellation off — we want raw audio for better Whisper accuracy
+      // Read user prefs from localStorage (default: enhancement ON)
+      const enhancementOn = (() => {
+        try {
+          return localStorage.getItem('cc-mic-enhance') !== 'off'
+        } catch { return true }
+      })()
+      const gainBoost = (() => {
+        try {
+          const v = parseFloat(localStorage.getItem('cc-mic-gain') || '1.5')
+          return Math.max(0.5, Math.min(3.0, v))
+        } catch { return 1.5 }
+      })()
+
+      // Request mic with browser-native enhancement (echo/noise/AGC)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation: enhancementOn,
+          noiseSuppression: enhancementOn,
+          autoGainControl: enhancementOn,
         },
       })
       mediaStreamRef.current = stream
+
+      // Optional: Web Audio gain boost (extra amplification before MediaRecorder)
+      // Graceful fallback — if anything fails, use raw stream
+      let processedStream = stream
+      if (enhancementOn && gainBoost !== 1.0) {
+        try {
+          const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
+          if (AudioCtx) {
+            const audioCtx = new AudioCtx()
+            audioCtxRef.current = audioCtx
+            const source = audioCtx.createMediaStreamSource(stream)
+            const gain = audioCtx.createGain()
+            gain.gain.value = gainBoost  // boost (1.5 = +3.5dB default)
+
+            // Compressor — soft-knee normalize loud peaks
+            const compressor = audioCtx.createDynamicsCompressor()
+            compressor.threshold.value = -24
+            compressor.knee.value = 30
+            compressor.ratio.value = 4
+            compressor.attack.value = 0.003
+            compressor.release.value = 0.25
+
+            // High-pass filter — remove low rumble (typing, fans below 80Hz)
+            const hipass = audioCtx.createBiquadFilter()
+            hipass.type = 'highpass'
+            hipass.frequency.value = 80
+
+            // Output to MediaStream
+            const dest = audioCtx.createMediaStreamDestination()
+            source.connect(hipass)
+            hipass.connect(gain)
+            gain.connect(compressor)
+            compressor.connect(dest)
+            processedStream = dest.stream
+            console.log('[audio] enhancement active: gain=', gainBoost, 'hipass=80Hz, compressor on')
+          }
+        } catch (enhanceErr) {
+          console.warn('[audio] enhancement failed, fallback to raw stream:', enhanceErr)
+          processedStream = stream
+        }
+      } else {
+        console.log('[audio] enhancement disabled (user pref or boost=1)')
+      }
+
       audioChunksRef.current = []
 
       // Pick best supported mime type — Chrome Android prefers webm/opus
@@ -437,7 +495,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       ]
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
 
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+      const rec = new MediaRecorder(processedStream, mime ? { mimeType: mime } : undefined)
 
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
@@ -470,9 +528,13 @@ export default function LectureRecorder({ id }: { id: string }) {
     return new Promise((resolve) => {
       const rec = mediaRecRef.current
       if (!rec || rec.state === 'inactive') {
-        // Cleanup stream
+        // Cleanup stream + audio context
         mediaStreamRef.current?.getTracks().forEach(t => t.stop())
         mediaStreamRef.current = null
+        if (audioCtxRef.current) {
+          try { audioCtxRef.current.close() } catch {}
+          audioCtxRef.current = null
+        }
         resolve([])
         return
       }
@@ -482,6 +544,10 @@ export default function LectureRecorder({ id }: { id: string }) {
         mediaRecRef.current = null
         mediaStreamRef.current?.getTracks().forEach(t => t.stop())
         mediaStreamRef.current = null
+        if (audioCtxRef.current) {
+          try { audioCtxRef.current.close() } catch {}
+          audioCtxRef.current = null
+        }
         resolve(chunks)
       }
       rec.stop()

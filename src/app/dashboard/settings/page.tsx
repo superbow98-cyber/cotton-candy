@@ -273,6 +273,11 @@ export default function SettingsPage() {
         </div>
       </SettingsCard>
 
+      {/* MIC ENHANCEMENT */}
+      <SettingsCard title={lang === 'bm' ? 'Penambahbaikan Mikrofon' : 'Mic Enhancement'}>
+        <MicEnhancementSettings lang={lang} />
+      </SettingsCard>
+
       {/* ACCOUNT ACTIONS */}
       <SettingsCard title={lang === 'bm' ? 'Tindakan akaun' : 'Account actions'}>
         <button onClick={signOut} style={{
@@ -345,4 +350,125 @@ function langPillStyle(active: boolean): React.CSSProperties {
     cursor: 'pointer', fontFamily: 'inherit',
     letterSpacing: '-0.005em',
   }
+}
+
+function MicEnhancementSettings({ lang }: { lang: 'en' | 'bm' }) {
+  const [enhanceOn, setEnhanceOn] = useState(true)
+  const [gain, setGain] = useState(1.5)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cc-mic-enhance')
+      setEnhanceOn(saved !== 'off')
+      const g = parseFloat(localStorage.getItem('cc-mic-gain') || '1.5')
+      setGain(Math.max(0.5, Math.min(3.0, g)))
+    } catch {}
+    setMounted(true)
+  }, [])
+
+  const toggleEnhance = (next: boolean) => {
+    setEnhanceOn(next)
+    try { localStorage.setItem('cc-mic-enhance', next ? 'on' : 'off') } catch {}
+  }
+
+  const setGainValue = (next: number) => {
+    setGain(next)
+    try { localStorage.setItem('cc-mic-gain', String(next)) } catch {}
+  }
+
+  if (!mounted) return null
+
+  const gainDb = (20 * Math.log10(gain)).toFixed(1)
+
+  return (
+    <>
+      <div style={{
+        padding: '12px 18px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        fontSize: 13.5,
+        borderBottom: '0.5px solid rgba(0,0,0,0.06)',
+      }}>
+        <div>
+          <div style={{ color: '#1d1d1f', fontWeight: 500 }}>
+            {lang === 'bm' ? 'Audio diperbaiki sebelum transkrip' : 'Auto-enhance audio'}
+          </div>
+          <div style={{ color: 'rgba(29,29,31,0.5)', fontSize: 11.5, marginTop: 2 }}>
+            {lang === 'bm'
+              ? 'Buang bunyi bising, tingkatkan suara perlahan'
+              : 'Reduce noise, boost quiet voices'}
+          </div>
+        </div>
+        <button
+          onClick={() => toggleEnhance(!enhanceOn)}
+          style={{
+            width: 44, height: 26, borderRadius: 100,
+            background: enhanceOn ? '#34A853' : 'rgba(0,0,0,0.15)',
+            border: 'none', position: 'relative', cursor: 'pointer',
+            transition: 'background 0.15s',
+          }}
+          aria-label="Toggle mic enhancement"
+        >
+          <span style={{
+            position: 'absolute',
+            top: 2, left: enhanceOn ? 20 : 2,
+            width: 22, height: 22,
+            background: '#fff', borderRadius: '50%',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+            transition: 'left 0.15s',
+          }} />
+        </button>
+      </div>
+
+      <div style={{
+        padding: '12px 18px',
+        opacity: enhanceOn ? 1 : 0.4,
+        pointerEvents: enhanceOn ? 'auto' : 'none',
+      }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 8, fontSize: 13.5,
+        }}>
+          <span style={{ color: '#1d1d1f', fontWeight: 500 }}>
+            {lang === 'bm' ? 'Tingkat suara' : 'Voice boost'}
+          </span>
+          <span style={{ color: 'rgba(29,29,31,0.55)', fontSize: 12, fontFamily: 'SF Mono, Monaco, monospace' }}>
+            {gain >= 1 ? '+' : ''}{gainDb} dB
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0.5"
+          max="3.0"
+          step="0.1"
+          value={gain}
+          onChange={(e) => setGainValue(parseFloat(e.target.value))}
+          style={{
+            width: '100%', accentColor: '#1d1d1f',
+            cursor: 'pointer',
+          }}
+        />
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          fontSize: 10, color: 'rgba(29,29,31,0.45)',
+          marginTop: 4,
+        }}>
+          <span>{lang === 'bm' ? 'Perlahan' : 'Soft'}</span>
+          <span>{lang === 'bm' ? 'Biasa' : 'Normal'} (1.5×)</span>
+          <span>{lang === 'bm' ? 'Kuat' : 'Loud'}</span>
+        </div>
+      </div>
+
+      <div style={{
+        padding: '8px 18px 14px',
+        fontSize: 11,
+        color: 'rgba(29,29,31,0.5)',
+        lineHeight: 1.5,
+      }}>
+        {lang === 'bm'
+          ? '💡 Tetapan ini akan diguna pada rakaman seterusnya. Jika sistem mikrofon gagal, sistem akan automatik guna audio asal.'
+          : '💡 Applies to next recording. If mic enhancement fails, system auto-falls back to raw audio.'}
+      </div>
+    </>
+  )
 }
