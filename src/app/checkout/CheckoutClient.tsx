@@ -108,7 +108,7 @@ export default function CheckoutClient() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           plan: planKey,
-          promoCode: promoStatus === 'ok' ? promo.trim().toUpperCase() : undefined,
+          promo: promoStatus === 'ok' ? promo.trim().toUpperCase() : undefined,
         }),
       })
       const j = await res.json()
