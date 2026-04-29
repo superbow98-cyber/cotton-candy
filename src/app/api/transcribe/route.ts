@@ -1,5 +1,6 @@
 // src/app/api/transcribe/route.ts
-// v44.1 — Hybrid STT: Whisper Large v3 for Malay & Rojak/Auto, Turbo for EN/zh/ta
+// v47 — Deep Malay detection: language-specific prompts + temperature 0.0 + word lists
+// Research-backed: Whisper prompt = language model priming (rare words, vocabulary)
 // Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -75,28 +76,47 @@ export async function POST(req: NextRequest) {
     // Whisper Large v3 for: Malay (ms) + Auto/Rojak mode (no language hint)
     // Whisper Turbo for: explicit non-Malay (en, zh, ta) — fast & cheap
     const isMalay = useLanguageHint && langParam === 'ms'
-    const isAutoRojak = !useLanguageHint  // user picked "Rojak / Auto" mode
+    const isAutoRojak = !useLanguageHint
     const useV3 = isMalay || isAutoRojak
     const selectedModel = useV3 ? MODEL_LARGE : MODEL_TURBO
 
-    // v43: Rojak-aware prompt primes Whisper to recognize Malaysian mixed BM+EN speech
-    const ROJAK_PROMPT = "Malaysian student or professional speaking. " +
-      "May contain English, Bahasa Melayu, or rojak (mix of both). " +
-      "Common Malay words: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, " +
-      "untuk, sebab, lepas, ni, sini, mana, mcm, macam, boleh, tak, jangan. " +
-      "Common rojak phrases: 'so kita', 'lepas tu', 'macam ni', 'sebab', 'then', " +
-      "'okay so', 'after that', 'actually', 'basically'."
+    // v47: Language-specific prompts (Whisper acts as language model — primes vocabulary)
+    // Research: Including target-language word list in prompt significantly improves rare-word recognition
+    let prompt: string
+    if (isMalay) {
+      // PURE BM prompt — deeper technical vocabulary + academic terms
+      prompt = "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. " +
+        "Perkataan biasa: saya, awak, dia, kita, mereka, ini, itu, yang, dengan, untuk, " +
+        "sebab, lepas, kemudian, akhirnya, sebenarnya, maksudnya, contohnya, termasuk, " +
+        "iaitu, manakala, walaupun, bagaimana, mengapa, semasa, selepas, sebelum. " +
+        "Istilah akademik: pembahagian sel, fotosintesis, tindak balas, persamaan, " +
+        "fungsi, teorem, hipotesis, kajian, eksperimen, penyelidikan, analisis, " +
+        "kesimpulan, perlembagaan, kemerdekaan, ekonomi, masyarakat, kerajaan, " +
+        "pembangunan, teknologi, sumber, pengaruh, kepentingan, kesan, faktor."
+    } else if (isAutoRojak) {
+      // ROJAK prompt — BM + EN mixed natural Malaysian speech
+      prompt = "Malaysian student or professional speaking natural rojak (Malay + English mix). " +
+        "Common Malay words: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, " +
+        "sebab, lepas, ni, sini, mana, macam, boleh, tak, jangan, kalau, mesti, kena. " +
+        "Common rojak phrases: 'so kita', 'lepas tu', 'macam ni', 'sebab tu', 'okay so', " +
+        "'actually', 'basically', 'in other words', 'for example', 'in conclusion'. " +
+        "Academic terms in BM: pembahagian sel, fotosintesis, persamaan, teorem, kajian."
+    } else {
+      // Other languages — generic prompt
+      prompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
+    }
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
     groqForm.append('model', selectedModel)
     groqForm.append('response_format', 'verbose_json')
-    groqForm.append('prompt', ROJAK_PROMPT)
+    groqForm.append('prompt', prompt)
+    groqForm.append('temperature', '0.0')  // v47: deterministic, less hallucination
     if (useLanguageHint) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] v44 Hybrid | model: ${selectedModel} | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] v47 deep-malay | model: ${selectedModel} | language: ${useLanguageHint ? langParam : 'auto'} | temp: 0.0`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
