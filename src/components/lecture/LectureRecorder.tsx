@@ -821,7 +821,14 @@ export default function LectureRecorder({ id }: { id: string }) {
     setEnhanceError(null)
 
     // --- Step 1: enhance transcript with Whisper (if audio captured) ---
-    if (chunks.length > 0) {
+    // v57.6: SKIP Whisper enhance for BM/Rojak — Soniox streaming already provided clean transcript
+    const usedSonioxStreaming = recordingLang === 'ms' || recordingLang === 'auto'
+    const skipWhisperEnhance = usedSonioxStreaming
+    if (skipWhisperEnhance) {
+      console.log('[finish] Skipping Whisper enhance — Soniox transcript already clean')
+    }
+
+    if (chunks.length > 0 && !skipWhisperEnhance) {
       setEnhancing(true)
       setEnhanceProgress({ done: 0, total: chunks.length })
       try {
