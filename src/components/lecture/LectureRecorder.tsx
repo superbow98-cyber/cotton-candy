@@ -1230,6 +1230,26 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* v57 DEBUG: Show streaming status visibly */}
+      {recording && (
+        <div style={{
+          marginBottom: 8,
+          padding: '6px 10px',
+          background: sonioxStream.error ? '#FEE' : sonioxStream.isStreaming ? '#EFE' : '#FFE',
+          border: `0.5px solid ${sonioxStream.error ? '#FAA' : sonioxStream.isStreaming ? '#9D9' : '#DD9'}`,
+          borderRadius: 8,
+          fontSize: 11,
+          fontFamily: 'SF Mono, Monaco, monospace',
+          color: 'rgba(29,29,31,0.7)',
+        }}>
+          {sonioxStream.error ? `❌ Error: ${sonioxStream.error}` :
+           sonioxStream.isStreaming ? '✅ Soniox streaming ACTIVE' :
+           !sonioxStream.isReady ? '⏳ Loading Soniox library...' :
+           '⚠ Soniox ready but not streaming'}
+          {' '}| ready={String(sonioxStream.isReady)} streaming={String(sonioxStream.isStreaming)}
+        </div>
+      )}
+
       {/* v56: LIVE MIC LEVEL METER (opt-in via settings) */}
       {recording && analyser && showMicMeter && (
         <div className="fade-in" style={{ marginBottom: 12 }}>
