@@ -1058,8 +1058,8 @@ export default function LectureRecorder({ id }: { id: string }) {
                 cursor: 'pointer',
               }}
             >
-              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN, Soniox AI) — Disyorkan' : 'Rojak Mode (BM + EN, Soniox AI) — Recommended'}</option>
-              <option value="ms">🇲🇾 Bahasa Melayu (Soniox AI)</option>
+              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN) — Disyorkan' : 'Rojak Mode (BM + EN) — Recommended'}</option>
+              <option value="ms">🇲🇾 Bahasa Melayu</option>
               <option value="en">🇬🇧 English</option>
               <option value="zh">🇨🇳 Mandarin (中文)</option>
               <option value="ta">🇮🇳 Tamil (தமிழ்)</option>

@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
 const MODEL_TURBO = 'whisper-large-v3-turbo'
+const MODEL_LARGE = 'whisper-large-v3'  // v56.2: better for BM/Rojak
 
 const VALID_LANGS = ['ms', 'en', 'zh', 'ta'] as const
 
@@ -65,12 +66,12 @@ export async function POST(req: NextRequest) {
     const langParam = (form.get('language') as string | null)?.toLowerCase()
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
-    // --- ROUTING DECISION (v53) ---
-    // Soniox: best for BM, Rojak, code-switching
-    // Whisper Turbo: fast & cheap for explicit EN/zh/ta
+    // --- ROUTING DECISION (v56.2 hotfix) ---
+    // TEMPORARILY: All languages route to Whisper Turbo
+    // Soniox path disabled until investigated
     const isMalay = useLanguageHint && langParam === 'ms'
     const isAutoRojak = !useLanguageHint
-    const useSoniox = isMalay || isAutoRojak
+    const useSoniox = false  // v56.2: disabled, awaiting Soniox debug
 
     if (useSoniox) {
       // ===== SONIOX PATH =====
@@ -158,11 +159,30 @@ export async function POST(req: NextRequest) {
       }, { status: 500 })
     }
 
-    const whisperPrompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
+    // v56.2: Language-specific Whisper prompts (since Soniox disabled)
+    let whisperPrompt: string
+    if (isMalay) {
+      whisperPrompt = "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. " +
+        "Perkataan biasa: saya, awak, dia, kita, mereka, ini, itu, yang, dengan, untuk, " +
+        "sebab, lepas, kemudian, akhirnya, sebenarnya, maksudnya, contohnya, termasuk. " +
+        "Istilah akademik: pembahagian sel, fotosintesis, persamaan, fungsi, teorem, " +
+        "kajian, eksperimen, perlembagaan, kemerdekaan, ekonomi, kerajaan, pembangunan."
+    } else if (isAutoRojak) {
+      whisperPrompt = "Malaysian student or professional speaking natural rojak (Malay + English mix). " +
+        "Common Malay: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, " +
+        "sebab, lepas, ni, macam, boleh, tak, kalau, mesti, kena. " +
+        "Common phrases: 'so kita', 'lepas tu', 'macam ni', 'okay so', 'actually'."
+    } else {
+      whisperPrompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
+    }
+
+    // v56.3: Whisper Turbo untuk SEMUA (paling laju, murah)
+    const useV3 = false
+    const selectedModel = MODEL_TURBO
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
-    groqForm.append('model', MODEL_TURBO)
+    groqForm.append('model', selectedModel)
     groqForm.append('response_format', 'verbose_json')
     groqForm.append('prompt', whisperPrompt)
     groqForm.append('temperature', '0.0')
@@ -170,7 +190,7 @@ export async function POST(req: NextRequest) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] v53 Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] v56.3 Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -204,10 +224,11 @@ export async function POST(req: NextRequest) {
         .eq('id', user.id)
 
       try {
-        const cost = calcWhisperCost('groq_whisper_turbo', audioSeconds)
+        const serviceKey = useV3 ? 'groq_whisper_v3' : 'groq_whisper_turbo'
+        const cost = calcWhisperCost(serviceKey as any, audioSeconds)
         await logUsage({
           userId: user.id,
-          service: 'groq_whisper_turbo',
+          service: serviceKey as any,
           operation: 'transcribe',
           units: audioSeconds,
           unit_type: 'audio_seconds',
@@ -215,7 +236,7 @@ export async function POST(req: NextRequest) {
           metadata: {
             language: data.language || 'auto',
             user_picked: useLanguageHint ? langParam : 'auto',
-            model: MODEL_TURBO,
+            model: selectedModel,
           },
         })
       } catch (logErr) {
