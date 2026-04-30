@@ -26,6 +26,7 @@ import MindMapView from './MindMapView'
 import ProcessingLoader from './ProcessingLoader'
 import MicLevelMeter from './MicLevelMeter'
 import KnowledgeFacts from './KnowledgeFacts'
+import { useSonioxStream } from '@/lib/soniox-stream'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -214,6 +215,15 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
   const [recording, setRecording] = useState(false)
+
+  // v57: Soniox streaming for BM/Rojak live transcription
+  const sonioxStream = useSonioxStream({
+    languageHints: ['ms', 'en'],
+    context: {
+      general: [{ key: 'domain', value: 'Malaysian education / lecture' }],
+      text: 'Malaysian student or professional speaking. Natural rojak (BM + EN code-switching) common.',
+    },
+  })
 
   // v56: Opt-in preferences from settings
   // Defaults: mic meter OFF, knowledge facts ON, study tips ON
@@ -600,6 +610,37 @@ export default function LectureRecorder({ id }: { id: string }) {
   const toggle = async () => {
     if (recording) {
       stopRecognition()
+      // v57: Stop Soniox streaming if active
+      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
+      if (useStreaming && sonioxStream.isStreaming) {
+        try {
+          const result = await sonioxStream.stop()
+          // Send finish notification to backend (cost log + cap update)
+          fetch('/api/soniox-stream-finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              audioSeconds: result.audioSeconds,
+              finalText: result.text,
+              detectedLanguage: result.language,
+              tokenCount: result.tokenCount,
+            }),
+          }).then(r => r.json()).then(d => {
+            if (d.usage) setUsage(d.usage)
+          }).catch(e => console.warn('[soniox-finish] failed:', e))
+
+          // Set lines from streaming result (clean text, ready)
+          if (result.text && result.text.trim().length > 0) {
+            const lines = result.text.split(/[.!?]+\s+/).filter(s => s.trim().length > 0).map((text, i) => ({
+              ts: i * 5,  // approximation
+              text: text.trim(),
+            }))
+            setLines(lines.length > 0 ? lines : [{ ts: 0, text: result.text.trim() }])
+          }
+        } catch (e) {
+          console.warn('[soniox-stream] stop error:', e)
+        }
+      }
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
@@ -611,12 +652,26 @@ export default function LectureRecorder({ id }: { id: string }) {
       const audioOk = await startAudioCapture()
       console.log('[toggle] audio capture ready:', audioOk)
 
-      // 2. Small delay to let mic settle before Web Speech attaches
+      // 2. Small delay to let mic settle
       await new Promise(r => setTimeout(r, 150))
 
-      // 3. Start Web Speech API for live preview
+      // 3. Start streaming based on language
+      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
       startRef.current = Date.now()
-      recRef.current = startRecognition(recLangRef.current)
+
+      if (useStreaming && sonioxStream.isReady) {
+        // v57: Use Soniox streaming for BM/Rojak (live + accurate)
+        try {
+          await sonioxStream.start()
+          console.log('[toggle] Soniox streaming started for', recLangRef.current)
+        } catch (e: any) {
+          console.warn('[toggle] Soniox stream failed, fallback Web Speech:', e.message)
+          recRef.current = startRecognition(recLangRef.current)
+        }
+      } else {
+        // Web Speech for EN/zh/ta (free, fast preview)
+        recRef.current = startRecognition(recLangRef.current)
+      }
 
       tickRef.current = setInterval(() => {
         const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
@@ -1059,8 +1114,8 @@ export default function LectureRecorder({ id }: { id: string }) {
                 cursor: 'pointer',
               }}
             >
-              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN, Soniox AI) — Disyorkan' : 'Rojak Mode (BM + EN, Soniox AI) — Recommended'}</option>
-              <option value="ms">🇲🇾 Bahasa Melayu (Soniox AI)</option>
+              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN, Live) — Disyorkan' : 'Rojak Mode (BM + EN, Live) — Recommended'}</option>
+              <option value="ms">🇲🇾 Bahasa Melayu (Live)</option>
               <option value="en">🇬🇧 English</option>
               <option value="zh">🇨🇳 Mandarin (中文)</option>
               <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
@@ -1186,6 +1241,77 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       )}
 
+      {/* v57: SONIOX LIVE STREAMING TRANSCRIPT (BM/Rojak only) */}
+      {recording && sonioxStream.isStreaming && (
+        <div className="fade-in" style={{
+          background: 'linear-gradient(135deg, #FFFBFC, #F5F5F7)',
+          border: '0.5px solid rgba(212, 83, 126, 0.18)',
+          borderRadius: 14,
+          padding: '14px 18px',
+          marginBottom: 12,
+          minHeight: 80,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            marginBottom: 8,
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#E24B4A',
+              animation: 'cc-pulse-dot 1.2s ease-in-out infinite',
+            }} />
+            <span style={{
+              fontSize: 11, fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+              color: 'rgba(212, 83, 126, 0.9)',
+            }}>
+              {lang === 'bm' ? 'Transkrip Langsung' : 'Live Transcript'}
+            </span>
+            {sonioxStream.detectedLanguage !== 'auto' && (
+              <span style={{
+                fontSize: 10, color: 'rgba(29,29,31,0.5)',
+                marginLeft: 'auto',
+              }}>
+                {sonioxStream.detectedLanguage.toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div style={{
+            fontSize: 14,
+            color: '#1d1d1f',
+            lineHeight: 1.55,
+            letterSpacing: '-0.01em',
+          }}>
+            <span>{sonioxStream.finalText}</span>
+            {sonioxStream.partialText && (
+              <span style={{ color: 'rgba(29,29,31,0.4)' }}>
+                {sonioxStream.partialText}
+              </span>
+            )}
+            {!sonioxStream.finalText && !sonioxStream.partialText && (
+              <span style={{ color: 'rgba(29,29,31,0.4)', fontStyle: 'italic' }}>
+                {lang === 'bm' ? 'Sila mula bercakap…' : 'Start speaking…'}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Soniox stream error display */}
+      {recording && sonioxStream.error && (
+        <div style={{
+          background: '#fff9e6',
+          border: '0.5px solid rgba(184, 134, 11, 0.25)',
+          borderRadius: 10,
+          padding: '8px 12px',
+          marginBottom: 12,
+          fontSize: 11,
+          color: '#8a6d0f',
+        }}>
+          ⚠ {lang === 'bm' ? 'Streaming gagal — guna mode rakaman biasa' : 'Streaming failed — using regular recording'}
+        </div>
+      )}
+
       {/* v56b: UNIVERSAL KNOWLEDGE FACTS (opt-in, during recording) */}
       {recording && showKnowledgeFacts && (
         <KnowledgeFacts active={recording} lang={lang} />
@@ -1270,6 +1396,10 @@ export default function LectureRecorder({ id }: { id: string }) {
         @keyframes cc-whisper-slide {
           0%   { left: -40%; width: 40%; }
           100% { left: 100%; width: 40%; }
+        }
+        @keyframes cc-pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.5; transform: scale(0.85); }
         }
       `}</style>
 
