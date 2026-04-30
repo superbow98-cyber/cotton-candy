@@ -27,6 +27,7 @@ import ProcessingLoader from './ProcessingLoader'
 import MicLevelMeter from './MicLevelMeter'
 import KnowledgeFacts from './KnowledgeFacts'
 import { useSonioxStream } from '@/lib/soniox-stream'
+import { isAdminEmail } from '@/lib/admin'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -225,6 +226,9 @@ export default function LectureRecorder({ id }: { id: string }) {
     },
   })
 
+  // v57.8 admin debug only
+  const [isAdmin, setIsAdmin] = useState(false)
+
   // v56: Opt-in preferences from settings
   // Defaults: mic meter OFF, knowledge facts ON, study tips ON
   const [showMicMeter, setShowMicMeter] = useState(false)
@@ -324,6 +328,8 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (!data) { router.replace('/dashboard/lectures'); return }
       const lec = data as Lecture
       setLecture(lec); lectureRef.current = lec
+      // v57.8: Set admin flag
+      setIsAdmin(isAdminEmail(user.email))
       if (lec.transcript_md) {
         const parsed: Line[] = []
         let idx = 0
@@ -631,16 +637,23 @@ export default function LectureRecorder({ id }: { id: string }) {
 
           // v57.3: APPEND new transcript to existing lines (don't replace)
           if (result.text && result.text.trim().length > 0) {
-            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.ts)) + 1 : 0
+            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.t || 0)) + 1 : 0
             const newLines = result.text.split(/[.!?]+\s+/)
               .filter(s => s.trim().length > 0)
               .map((text, i) => ({
-                ts: baseTime + i,
+                id: `sx${Date.now()}${i}`,
+                t: baseTime + i,
                 text: text.trim(),
+                lang: result.language || recLangRef.current,
               }))
             setLines(prev => [
               ...prev,
-              ...(newLines.length > 0 ? newLines : [{ ts: baseTime, text: result.text.trim() }]),
+              ...(newLines.length > 0 ? newLines : [{
+                id: `sx${Date.now()}`,
+                t: baseTime,
+                text: result.text.trim(),
+                lang: result.language || recLangRef.current,
+              }]),
             ])
           }
         } catch (e) {
@@ -801,6 +814,50 @@ export default function LectureRecorder({ id }: { id: string }) {
   const finishLecture = async () => {
     if (recording) {
       stopRecognition()
+      // v57.7: Stop Soniox stream + capture final transcript
+      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
+      if (useStreaming && sonioxStream.isStreaming) {
+        try {
+          const result = await sonioxStream.stop()
+          // Send finish notification (cost log + cap update)
+          fetch('/api/soniox-stream-finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              audioSeconds: result.audioSeconds,
+              finalText: result.text,
+              detectedLanguage: result.language,
+              tokenCount: result.tokenCount,
+            }),
+          }).then(r => r.json()).then(d => {
+            if (d.usage) setUsage(d.usage)
+          }).catch(e => console.warn('[soniox-finish] failed:', e))
+
+          // Append Soniox tokens to lines (preserve resume mode)
+          if (result.text && result.text.trim().length > 0) {
+            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.t || 0)) + 1 : 0
+            const newLines = result.text.split(/[.!?]+\s+/)
+              .filter(s => s.trim().length > 0)
+              .map((text, i) => ({
+                id: `sx${Date.now()}${i}`,
+                t: baseTime + i,
+                text: text.trim(),
+                lang: result.language || recLangRef.current,
+              }))
+            setLines(prev => [
+              ...prev,
+              ...(newLines.length > 0 ? newLines : [{
+                id: `sx${Date.now()}`,
+                t: baseTime,
+                text: result.text.trim(),
+                lang: result.language || recLangRef.current,
+              }]),
+            ])
+          }
+        } catch (e) {
+          console.warn('[finishLecture] Soniox stop error:', e)
+        }
+      }
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
@@ -1209,6 +1266,26 @@ export default function LectureRecorder({ id }: { id: string }) {
                     } · {wordCount} {t('recWords')}
                   </span>
                 </div>
+                {/* v57.8: Admin-only Soniox debug line */}
+                {isAdmin && recording && (
+                  <div style={{
+                    fontSize: 10, marginTop: 2,
+                    fontFamily: 'SF Mono, Monaco, monospace',
+                    color: sonioxStream.error ? '#C62828' :
+                           !sonioxStream.isReady ? '#A37018' :
+                           sonioxStream.isStreaming ? 'rgba(29,29,31,0.45)' :
+                           '#A37018',
+                  }}>
+                    soniox · {recordingLang}
+                    {sonioxStream.error
+                      ? ` · err: ${sonioxStream.error.slice(0, 40)}`
+                      : !sonioxStream.isReady
+                        ? ' · loading…'
+                        : sonioxStream.isStreaming
+                          ? ` · live${sonioxStream.detectedLanguage !== 'auto' ? ' · ' + sonioxStream.detectedLanguage : ''}`
+                          : ' · idle'}
+                  </div>
+                )}
               </div>
 
               {/* AI chip — under timer */}
