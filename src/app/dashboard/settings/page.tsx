@@ -278,6 +278,11 @@ export default function SettingsPage() {
         <MicEnhancementSettings lang={lang} />
       </SettingsCard>
 
+      {/* RECORDING EXPERIENCE (v56) */}
+      <SettingsCard title={lang === 'bm' ? 'Pengalaman Rakaman' : 'Recording Experience'}>
+        <RecordingExperienceSettings lang={lang} />
+      </SettingsCard>
+
       {/* ADMIN SECTION (Parcello only) */}
       {profile?.is_admin && (
         <SettingsCard title={lang === 'bm' ? '🔐 Admin · Parcello' : '🔐 Admin · Parcello'}>
@@ -535,5 +540,118 @@ function MicEnhancementSettings({ lang }: { lang: 'en' | 'bm' }) {
           : '💡 Applies to next recording. If mic enhancement fails, system auto-falls back to raw audio.'}
       </div>
     </>
+  )
+}
+
+// v56: Recording experience opt-in toggles
+function RecordingExperienceSettings({ lang }: { lang: 'en' | 'bm' }) {
+  const [showMicMeter, setShowMicMeter] = useState(false)
+  const [showFactsLoader, setShowFactsLoader] = useState(false)
+  const [showKnowledge, setShowKnowledge] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    try {
+      setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
+      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') === 'on')
+      setShowKnowledge(localStorage.getItem('cc-show-knowledge') === 'on')
+    } catch {}
+    setMounted(true)
+  }, [])
+
+  const toggle = (key: 'mic' | 'facts' | 'knowledge', next: boolean) => {
+    if (key === 'mic') {
+      setShowMicMeter(next)
+      try { localStorage.setItem('cc-show-mic-meter', next ? 'on' : 'off') } catch {}
+    } else if (key === 'facts') {
+      setShowFactsLoader(next)
+      try { localStorage.setItem('cc-show-facts-loader', next ? 'on' : 'off') } catch {}
+    } else {
+      setShowKnowledge(next)
+      try { localStorage.setItem('cc-show-knowledge', next ? 'on' : 'off') } catch {}
+    }
+  }
+
+  if (!mounted) return null
+
+  return (
+    <>
+      <ToggleRow
+        label={lang === 'bm' ? 'Tunjuk meter mikrofon semasa rakam' : 'Show mic meter while recording'}
+        sub={lang === 'bm'
+          ? 'Bar audio langsung + bacaan dB untuk kepastian mic berfungsi'
+          : 'Live audio bars + dB readout to confirm mic is working'}
+        on={showMicMeter}
+        onChange={(v) => toggle('mic', v)}
+      />
+      <ToggleRow
+        label={lang === 'bm' ? 'Tunjuk fakta menarik semasa rakam' : 'Show interesting facts while recording'}
+        sub={lang === 'bm'
+          ? 'Fakta umum (sains, alam, sejarah) berputar setiap 8 saat'
+          : 'Universal trivia (science, nature, history) rotates every 8s'}
+        on={showKnowledge}
+        onChange={(v) => toggle('knowledge', v)}
+      />
+      <ToggleRow
+        label={lang === 'bm' ? 'Tunjuk tip semasa AI memproses' : 'Show study tips while AI processes'}
+        sub={lang === 'bm'
+          ? 'Foto + tip belajar berputar setiap 5 saat semasa menunggu'
+          : 'Photo + rotating study tips every 5s while waiting'}
+        on={showFactsLoader}
+        onChange={(v) => toggle('facts', v)}
+        last
+      />
+      <div style={{
+        padding: '8px 18px 14px',
+        fontSize: 11,
+        color: 'rgba(29,29,31,0.5)',
+        lineHeight: 1.5,
+      }}>
+        {lang === 'bm'
+          ? '💡 Semua lalai DIMATIKAN untuk kekalkan UI bersih. Hidupkan ikut keperluan.'
+          : '💡 All default OFF to keep UI clean. Enable as needed.'}
+      </div>
+    </>
+  )
+}
+
+function ToggleRow({
+  label, sub, on, onChange, last,
+}: {
+  label: string; sub?: string; on: boolean
+  onChange: (next: boolean) => void
+  last?: boolean
+}) {
+  return (
+    <div style={{
+      padding: '12px 18px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+      fontSize: 13.5,
+      borderBottom: last ? 'none' : '0.5px solid rgba(0,0,0,0.06)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: '#1d1d1f', fontWeight: 500 }}>{label}</div>
+        {sub && (
+          <div style={{ color: 'rgba(29,29,31,0.5)', fontSize: 11.5, marginTop: 2 }}>{sub}</div>
+        )}
+      </div>
+      <button
+        onClick={() => onChange(!on)}
+        style={{
+          width: 44, height: 26, borderRadius: 100,
+          background: on ? '#34A853' : 'rgba(0,0,0,0.15)',
+          border: 'none', position: 'relative', cursor: 'pointer',
+          transition: 'background 0.15s', flexShrink: 0,
+        }}
+        aria-label="Toggle"
+      >
+        <span style={{
+          position: 'absolute', top: 2, left: on ? 20 : 2,
+          width: 22, height: 22, background: '#fff', borderRadius: '50%',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+          transition: 'left 0.15s',
+        }} />
+      </button>
+    </div>
   )
 }

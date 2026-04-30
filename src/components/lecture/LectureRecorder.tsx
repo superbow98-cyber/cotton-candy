@@ -24,6 +24,8 @@ type AISummary = {
 
 import MindMapView from './MindMapView'
 import ProcessingLoader from './ProcessingLoader'
+import MicLevelMeter from './MicLevelMeter'
+import KnowledgeFacts from './KnowledgeFacts'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -212,6 +214,18 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
   const [recording, setRecording] = useState(false)
+
+  // v56: Opt-in preferences from settings (default OFF)
+  const [showMicMeter, setShowMicMeter] = useState(false)
+  const [showFactsLoader, setShowFactsLoader] = useState(false)
+  const [showKnowledgeFacts, setShowKnowledgeFacts] = useState(false)
+  useEffect(() => {
+    try {
+      setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
+      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') === 'on')
+      setShowKnowledgeFacts(localStorage.getItem('cc-show-knowledge') === 'on')
+    } catch {}
+  }, [])
   const [interim, setInterim] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [supported, setSupported] = useState(true)
@@ -227,6 +241,8 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   const recRef = useRef<any>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
   const startRef = useRef<number>(0)
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
@@ -445,13 +461,22 @@ export default function LectureRecorder({ id }: { id: string }) {
       // Optional: Web Audio gain boost (extra amplification before MediaRecorder)
       // Graceful fallback — if anything fails, use raw stream
       let processedStream = stream
-      if (enhancementOn && gainBoost !== 1.0) {
-        try {
-          const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
-          if (AudioCtx) {
-            const audioCtx = new AudioCtx()
-            audioCtxRef.current = audioCtx
-            const source = audioCtx.createMediaStreamSource(stream)
+      try {
+        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx()
+          audioCtxRef.current = audioCtx
+          const source = audioCtx.createMediaStreamSource(stream)
+
+          // v56: Analyser node — taps audio for visualizer (parallel, no effect on recording)
+          const analyserNode = audioCtx.createAnalyser()
+          analyserNode.fftSize = 256
+          analyserNode.smoothingTimeConstant = 0.7
+          source.connect(analyserNode)  // parallel branch
+          analyserRef.current = analyserNode
+          setAnalyser(analyserNode)
+
+          if (enhancementOn && gainBoost !== 1.0) {
             const gain = audioCtx.createGain()
             gain.gain.value = gainBoost  // boost (1.5 = +3.5dB default)
 
@@ -476,13 +501,13 @@ export default function LectureRecorder({ id }: { id: string }) {
             compressor.connect(dest)
             processedStream = dest.stream
             console.log('[audio] enhancement active: gain=', gainBoost, 'hipass=80Hz, compressor on')
+          } else {
+            console.log('[audio] enhancement disabled (visualizer still active)')
           }
-        } catch (enhanceErr) {
-          console.warn('[audio] enhancement failed, fallback to raw stream:', enhanceErr)
-          processedStream = stream
         }
-      } else {
-        console.log('[audio] enhancement disabled (user pref or boost=1)')
+      } catch (enhanceErr) {
+        console.warn('[audio] enhancement failed, fallback to raw stream:', enhanceErr)
+        processedStream = stream
       }
 
       audioChunksRef.current = []
@@ -536,6 +561,8 @@ export default function LectureRecorder({ id }: { id: string }) {
           try { audioCtxRef.current.close() } catch {}
           audioCtxRef.current = null
         }
+        analyserRef.current = null
+        setAnalyser(null)
         resolve([])
         return
       }
@@ -549,6 +576,8 @@ export default function LectureRecorder({ id }: { id: string }) {
           try { audioCtxRef.current.close() } catch {}
           audioCtxRef.current = null
         }
+        analyserRef.current = null
+        setAnalyser(null)
         resolve(chunks)
       }
       rec.stop()
@@ -1133,18 +1162,43 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* v56: LIVE MIC LEVEL METER (opt-in via settings) */}
+      {recording && analyser && showMicMeter && (
+        <div className="fade-in" style={{ marginBottom: 12 }}>
+          <MicLevelMeter
+            analyser={analyser}
+            active={recording}
+            lang={lang}
+          />
+        </div>
+      )}
+
+      {/* v56b: UNIVERSAL KNOWLEDGE FACTS (opt-in, during recording) */}
+      {recording && showKnowledgeFacts && (
+        <KnowledgeFacts active={recording} lang={lang} />
+      )}
+
       {/* WHISPER ENHANCE LOADER */}
       {enhancing && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
-          <ProcessingLoader
-            status={lang === 'bm'
-              ? `Sedang menulis transkrip…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`
-              : `Transcribing your audio…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`}
-            subStatus={lang === 'bm'
-              ? 'AI sedang dengar dengan teliti'
-              : 'AI is listening carefully'}
-            lang={lang}
-          />
+          {showFactsLoader ? (
+            <ProcessingLoader
+              status={lang === 'bm'
+                ? `Sedang menulis transkrip…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`
+                : `Transcribing your audio…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`}
+              subStatus={lang === 'bm'
+                ? 'AI sedang dengar dengan teliti'
+                : 'AI is listening carefully'}
+              lang={lang}
+            />
+          ) : (
+            <SimpleLoader
+              status={lang === 'bm'
+                ? `Sedang menulis transkrip…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`
+                : `Transcribing your audio…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`}
+              subStatus={lang === 'bm' ? 'AI sedang dengar' : 'AI is listening'}
+            />
+          )}
         </div>
       )}
 
@@ -1170,13 +1224,22 @@ export default function LectureRecorder({ id }: { id: string }) {
       {/* AI PROCESSING */}
       {aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
-          <ProcessingLoader
-            status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
-            subStatus={lang === 'bm'
-              ? `Mengekstrak topik & ringkasan · ${PROVIDER_META[aiProvider].label}`
-              : `Extracting topics & summary · ${PROVIDER_META[aiProvider].label}`}
-            lang={lang}
-          />
+          {showFactsLoader ? (
+            <ProcessingLoader
+              status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
+              subStatus={lang === 'bm'
+                ? `Mengekstrak topik & ringkasan · ${PROVIDER_META[aiProvider].label}`
+                : `Extracting topics & summary · ${PROVIDER_META[aiProvider].label}`}
+              lang={lang}
+            />
+          ) : (
+            <SimpleLoader
+              status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
+              subStatus={lang === 'bm'
+                ? `Mengekstrak topik · ${PROVIDER_META[aiProvider].label}`
+                : `Extracting topics · ${PROVIDER_META[aiProvider].label}`}
+            />
+          )}
         </div>
       )}
 
@@ -1426,4 +1489,45 @@ function buildRichMarkdown(lecture: Lecture, transcript: string, ai: AISummary):
   lines.push('---', '', '## 📝 Raw transcript', '', transcript || '_No transcript_', '')
   lines.push('---', '', '_Generated by Cotton Candy 🍭_')
   return lines.join('\n')
+}
+
+// v56: Minimal loader fallback when ProcessingLoader (facts) opt-in disabled
+function SimpleLoader({ status, subStatus }: { status: string; subStatus?: string }) {
+  return (
+    <div style={{
+      background: '#fff',
+      border: '0.5px solid rgba(0,0,0,0.08)',
+      borderRadius: 12,
+      padding: '14px 18px',
+      display: 'flex', alignItems: 'center', gap: 12,
+      maxWidth: 480, margin: '0 auto',
+    }}>
+      <div style={{
+        width: 18, height: 18, borderRadius: '50%',
+        border: '2px solid rgba(90, 143, 245, 0.25)',
+        borderTopColor: '#5A8FF5',
+        animation: 'cc-simple-spin 0.8s linear infinite',
+        flexShrink: 0,
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 13, fontWeight: 500,
+          color: '#1d1d1f',
+          letterSpacing: '-0.01em',
+        }}>{status}</div>
+        {subStatus && (
+          <div style={{
+            fontSize: 11,
+            color: 'rgba(29,29,31,0.5)',
+            marginTop: 2,
+          }}>{subStatus}</div>
+        )}
+      </div>
+      <style jsx>{`
+        @keyframes cc-simple-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  )
 }
