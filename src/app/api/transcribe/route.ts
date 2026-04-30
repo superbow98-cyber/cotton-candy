@@ -91,7 +91,13 @@ export async function POST(req: NextRequest) {
           context,
         })
 
-        console.log(`[transcribe] v53 Soniox done. detected: ${result.language}, chars: ${result.text.length}`)
+        console.log(`[transcribe] v56.7 Soniox done. detected: ${result.language}, chars: ${result.text.length}, tokens: ${result.tokens.length}`)
+
+        // v56.7: If Soniox returns empty/very short, fall through to Whisper
+        if (!result.text || result.text.trim().length < 3) {
+          console.warn(`[transcribe] Soniox returned empty/short result, falling back to Whisper`)
+          throw new Error('Soniox empty result')
+        }
 
         const audioSeconds = result.audioSeconds
 
