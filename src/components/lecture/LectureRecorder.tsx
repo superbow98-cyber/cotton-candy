@@ -1277,6 +1277,42 @@ export default function LectureRecorder({ id }: { id: string }) {
           0%, 100% { opacity: 1; transform: scale(1); }
           50%      { opacity: 0.5; transform: scale(0.85); }
         }
+        /* v58.2: Cotton candy cloud cursor */
+        .cc-cloud-cursor {
+          display: inline-block;
+          position: relative;
+          width: 32px;
+          height: 16px;
+          vertical-align: middle;
+          margin-left: 4px;
+        }
+        .cc-cloud-puff {
+          position: absolute;
+          border-radius: 50%;
+          animation: cc-cloud-pulse 1.4s ease-in-out infinite;
+        }
+        .cc-puff-1 {
+          width: 12px; height: 12px;
+          background: #F4C0D1;
+          top: 2px; left: 0;
+          animation-delay: 0s;
+        }
+        .cc-puff-2 {
+          width: 14px; height: 14px;
+          background: #CECBF6;
+          top: 0; left: 9px;
+          animation-delay: 0.2s;
+        }
+        .cc-puff-3 {
+          width: 11px; height: 11px;
+          background: #B5D4F4;
+          top: 3px; left: 19px;
+          animation-delay: 0.4s;
+        }
+        @keyframes cc-cloud-pulse {
+          0%, 100% { transform: scale(0.85); opacity: 0.7; }
+          50%      { transform: scale(1.15); opacity: 1; }
+        }
       `}</style>
 
       {/* AI ERROR */}
@@ -1438,7 +1474,24 @@ export default function LectureRecorder({ id }: { id: string }) {
             )
           })}
           {interim && (
-            <div style={{ color: 'rgba(29,29,31,0.5)', fontStyle: 'italic', padding: '4px 0', fontSize: 13 }}>{interim}…</div>
+            <div style={{ color: 'rgba(29,29,31,0.5)', fontStyle: 'italic', padding: '4px 0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span>{interim}</span>
+              <span className="cc-cloud-cursor" aria-hidden="true">
+                <span className="cc-cloud-puff cc-puff-1" />
+                <span className="cc-cloud-puff cc-puff-2" />
+                <span className="cc-cloud-puff cc-puff-3" />
+              </span>
+            </div>
+          )}
+          {/* Trailing cursor when recording but no interim yet (between phrases) */}
+          {recording && !interim && lines.length > 0 && (
+            <div style={{ padding: '4px 0' }}>
+              <span className="cc-cloud-cursor" aria-hidden="true">
+                <span className="cc-cloud-puff cc-puff-1" />
+                <span className="cc-cloud-puff cc-puff-2" />
+                <span className="cc-cloud-puff cc-puff-3" />
+              </span>
+            </div>
           )}
         </div>
       </div>
