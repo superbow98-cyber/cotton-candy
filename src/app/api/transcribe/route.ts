@@ -86,7 +86,17 @@ export async function POST(req: NextRequest) {
           "Topics: lectures, education, technology, business, science."
 
       try {
-        const result = await transcribeWithSoniox(audio, 'audio.webm', {
+        // v56.9: Detect actual audio mime/extension (iOS Safari may record mp4, not webm)
+        const audioMime = (audio as any).type || 'audio/webm'
+        const ext = audioMime.includes('mp4') ? 'mp4'
+                  : audioMime.includes('mpeg') ? 'mp3'
+                  : audioMime.includes('ogg') ? 'ogg'
+                  : audioMime.includes('wav') ? 'wav'
+                  : 'webm'
+        const filename = `audio.${ext}`
+        console.log(`[transcribe] v56.9 Soniox uploading audio.${ext} (${audioMime}, ${audio.size} bytes)`)
+
+        const result = await transcribeWithSoniox(audio, filename, {
           languageHints,
           context,
         })
@@ -188,8 +198,16 @@ export async function POST(req: NextRequest) {
     const useV3 = false
     const selectedModel = MODEL_TURBO
 
+    // v56.9: Detect actual audio extension for Whisper too
+    const whisperMime = (audio as any).type || 'audio/webm'
+    const whisperExt = whisperMime.includes('mp4') ? 'mp4'
+                     : whisperMime.includes('mpeg') ? 'mp3'
+                     : whisperMime.includes('ogg') ? 'ogg'
+                     : whisperMime.includes('wav') ? 'wav'
+                     : 'webm'
+
     const groqForm = new FormData()
-    groqForm.append('file', audio, 'audio.webm')
+    groqForm.append('file', audio, `audio.${whisperExt}`)
     groqForm.append('model', selectedModel)
     groqForm.append('response_format', 'verbose_json')
     groqForm.append('prompt', whisperPrompt)
