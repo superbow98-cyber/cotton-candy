@@ -132,10 +132,13 @@ ${schemaLines}
 }
 
 Rules for handling Malaysian rojak speech:
-- Match the speaker's natural language style. If transcript is rojak (mix), notes can be rojak too — DO NOT translate to pure English/BM.
+- **CRITICAL:** Output language MUST match transcript language exactly:
+  - Transcript pure Bahasa Melayu → Output 100% Bahasa Melayu (topics, keyPoints, summary, questions ALL in BM).
+  - Transcript pure English → Output 100% English.
+  - Transcript rojak (mix BM+EN) → Output rojak (mirror the mix natural).
+- DO NOT translate. NEVER convert BM transcript to English notes or vice versa.
 - Preserve common BM connectors and particles when natural: "yang, dengan, tu, je, kan, lah, ni, sebab, lepas tu, untuk".
 - Common Malaysian phrases to recognize: "okay so", "actually", "basically", "macam ni", "lepas tu", "sebab tu", "dalam erti kata lain".
-- If transcript heavily English → notes mostly English. If heavily BM → notes BM. If rojak → notes rojak.
 - Topic titles and key points: short, natural — NOT formal academic translation.
 
 Universal rules:

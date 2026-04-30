@@ -36,8 +36,8 @@ const SERVICE_LABELS: Record<string, { label: string; emoji: string }> = {
   gemini_flash: { label: 'Gemini Flash', emoji: '✨' },
   gemini_flash_lite: { label: 'Gemini Flash Lite', emoji: '✨' },
   xai_grok: { label: 'xAI Grok', emoji: '🧠' },
-  soniox_async: { label: 'Soniox Async (BM/Rojak)', emoji: '🎯' },
-  soniox_streaming: { label: 'Soniox Streaming', emoji: '🎯' },
+  soniox_async: { label: 'Soniox Async (BM/Rojak file)', emoji: '🎯' },
+  soniox_streaming: { label: 'Soniox Live Stream (BM/Rojak)', emoji: '🌊' },
 }
 
 function fmtUSD(n: number): string {
@@ -156,7 +156,7 @@ export default function AdminUsagePage() {
               <tbody>
                 {data.byService.map(s => {
                   const meta = SERVICE_LABELS[s.service] || { label: s.service, emoji: '•' }
-                  const isAudio = s.service.startsWith('groq_whisper')
+                  const isAudio = s.service.startsWith('groq_whisper') || s.service.startsWith('soniox')
                   return (
                     <tr key={s.service} style={{ borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
                       <td style={tdStyle}>

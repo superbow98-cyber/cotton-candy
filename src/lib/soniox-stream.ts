@@ -104,11 +104,15 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
 
       onPartialResult: (result: { tokens: SonioxToken[] }) => {
         const tokens = result.tokens || []
+
+        // Soniox sends ALL tokens each callback (final + partial)
+        // We separate: collect finals once, replace partials on each update
+        const finalTokens: SonioxToken[] = []
         let partialBuf = ''
+
         for (const t of tokens) {
           if (t.is_final) {
-            finalTokensRef.current.push(t)
-            tokenCountRef.current++
+            finalTokens.push(t)
             if (t.language) {
               langCountsRef.current[t.language] = (langCountsRef.current[t.language] || 0) + 1
             }
@@ -116,12 +120,16 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
             partialBuf += t.text
           }
         }
-        // Update final text
-        const newFinal = finalTokensRef.current.map(t => t.text).join('')
+
+        // Replace finals (library guarantees finals are stable + accumulating)
+        finalTokensRef.current = finalTokens
+        tokenCountRef.current = finalTokens.length
+
+        const newFinal = finalTokens.map(t => t.text).join('')
         setFinalText(newFinal)
         setPartialText(partialBuf)
 
-        // Update detected language (most frequent)
+        // Update detected language
         const langs = Object.entries(langCountsRef.current).sort((a, b) => b[1] - a[1])
         if (langs.length > 0) {
           setDetectedLanguage(langs[0][0])
