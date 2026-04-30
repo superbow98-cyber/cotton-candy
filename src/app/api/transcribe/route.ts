@@ -66,12 +66,11 @@ export async function POST(req: NextRequest) {
     const langParam = (form.get('language') as string | null)?.toLowerCase()
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
-    // --- ROUTING DECISION (v56.2 hotfix) ---
-    // TEMPORARILY: All languages route to Whisper Turbo
-    // Soniox path disabled until investigated
+    // v56.6: Soniox for BM/Rojak (best Malaysian accuracy + code-switching)
+    //        Whisper Turbo for EN/zh/ta (fast)
     const isMalay = useLanguageHint && langParam === 'ms'
     const isAutoRojak = !useLanguageHint
-    const useSoniox = false  // v56.2: disabled, awaiting Soniox debug
+    const useSoniox = isMalay || isAutoRojak
 
     if (useSoniox) {
       // ===== SONIOX PATH =====
@@ -176,9 +175,10 @@ export async function POST(req: NextRequest) {
       whisperPrompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
     }
 
-    // v56.3: Whisper Turbo untuk SEMUA (paling laju, murah)
-    const useV3 = false
-    const selectedModel = MODEL_TURBO
+    // v56.5: BM/Rojak → Whisper Large v3 (better BM accuracy)
+    //        EN/zh/ta → Whisper Turbo (fast)
+    const useV3 = isMalay || isAutoRojak
+    const selectedModel = useV3 ? MODEL_LARGE : MODEL_TURBO
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] v56.3 Whisper Turbo | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] v56.6 Whisper ${useV3 ? 'Large v3 (Soniox fallback)' : 'Turbo'} | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
