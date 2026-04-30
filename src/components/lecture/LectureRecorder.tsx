@@ -629,13 +629,19 @@ export default function LectureRecorder({ id }: { id: string }) {
             if (d.usage) setUsage(d.usage)
           }).catch(e => console.warn('[soniox-finish] failed:', e))
 
-          // Set lines from streaming result (clean text, ready)
+          // v57.3: APPEND new transcript to existing lines (don't replace)
           if (result.text && result.text.trim().length > 0) {
-            const lines = result.text.split(/[.!?]+\s+/).filter(s => s.trim().length > 0).map((text, i) => ({
-              ts: i * 5,  // approximation
-              text: text.trim(),
-            }))
-            setLines(lines.length > 0 ? lines : [{ ts: 0, text: result.text.trim() }])
+            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.ts)) + 1 : 0
+            const newLines = result.text.split(/[.!?]+\s+/)
+              .filter(s => s.trim().length > 0)
+              .map((text, i) => ({
+                ts: baseTime + i,
+                text: text.trim(),
+              }))
+            setLines(prev => [
+              ...prev,
+              ...(newLines.length > 0 ? newLines : [{ ts: baseTime, text: result.text.trim() }]),
+            ])
           }
         } catch (e) {
           console.warn('[soniox-stream] stop error:', e)
@@ -645,8 +651,18 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     } else {
-      setAiResult(null); setAiError(null); setEnhanceError(null); setAiFellBack(false)
+      // v57.3: Resume mode — DON'T clear AI summary, just append new audio
+      const isResume = lines.length > 0 || aiResult !== null
+      if (!isResume) {
+        // Fresh recording — clear AI state
+        setAiResult(null); setAiError(null); setEnhanceError(null); setAiFellBack(false)
+      } else {
+        console.log('[toggle] RESUME mode — keeping existing transcript + AI summary')
+      }
       setAudioCaptureOk(null)
+
+      // Reset Soniox stream state for new session (but lines preserved)
+      sonioxStream.reset()
 
       // 1. Start audio capture FIRST — grabs mic exclusively for MediaRecorder
       const audioOk = await startAudioCapture()
@@ -793,9 +809,15 @@ export default function LectureRecorder({ id }: { id: string }) {
     // Stop audio capture and collect chunks
     const chunks = await stopAudioCapture()
 
-    setAiResult(null)
-    setAiError(null)
-    setAiUsedProvider(null)
+    // v57.3: Determine if this is RESUME (existing transcript) or FRESH
+    const isResume = lines.length > 0
+    if (!isResume) {
+      // Fresh recording — clear AI state for regeneration
+      setAiResult(null)
+      setAiError(null)
+      setAiUsedProvider(null)
+    }
+    // Always clear enhance error
     setEnhanceError(null)
 
     // --- Step 1: enhance transcript with Whisper (if audio captured) ---
@@ -830,7 +852,12 @@ export default function LectureRecorder({ id }: { id: string }) {
         if (combined.length > 20) {
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
-            setLines(whisperLines)
+            // v57.3: APPEND on resume, REPLACE on fresh
+            if (isResume) {
+              setLines(prev => [...prev, ...whisperLines])
+            } else {
+              setLines(whisperLines)
+            }
           }
         }
       } catch (e: any) {
@@ -1174,38 +1201,6 @@ export default function LectureRecorder({ id }: { id: string }) {
                       : t('recDuration')
                     } · {wordCount} {t('recWords')}
                   </span>
-                  {/* Session timer warning */}
-                  {recording && (() => {
-                    const max = PLANS[plan].minutesPerLecture * 60
-                    const remaining = max - elapsed
-                    const pct = (elapsed / max) * 100
-                    if (pct >= 75) {
-                      return (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 600,
-                          background: pct >= 90 ? 'rgba(229, 57, 53, 0.12)' : 'rgba(240, 176, 48, 0.15)',
-                          color: pct >= 90 ? '#C62828' : '#8a6d0f',
-                        }}>
-                          ⏱ {Math.max(0, Math.ceil(remaining / 60))} min {lang === 'bm' ? 'lagi' : 'left'}
-                        </span>
-                      )
-                    }
-                    return null
-                  })()}
-                  {recording && audioCaptureOk !== null && (
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 500,
-                      background: audioCaptureOk ? 'rgba(52, 168, 83, 0.1)' : 'rgba(229, 57, 53, 0.1)',
-                      color: audioCaptureOk ? '#2C8545' : '#C62828',
-                    }}>
-                      {audioCaptureOk
-                        ? <>● {lang === 'bm' ? 'Audio direkod' : 'Audio ok'}</>
-                        : <>✗ {lang === 'bm' ? 'Audio gagal' : 'Audio off'}</>
-                      }
-                    </span>
-                  )}
                 </div>
               </div>
 
