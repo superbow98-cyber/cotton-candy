@@ -183,8 +183,10 @@ export async function POST(req: NextRequest) {
 
     // v56.5: BM/Rojak → Whisper Large v3 (better BM accuracy)
     //        EN/zh/ta → Whisper Turbo (fast)
-    const useV3 = isMalay || isAutoRojak
-    const selectedModel = useV3 ? MODEL_LARGE : MODEL_TURBO
+    // v56.8: Whisper Turbo untuk SEMUA (laju + murah)
+    // BM/Rojak utama Soniox, fallback Turbo (Whisper v3 pun lemah BM, so guna Turbo je)
+    const useV3 = false
+    const selectedModel = MODEL_TURBO
 
     const groqForm = new FormData()
     groqForm.append('file', audio, 'audio.webm')
@@ -196,7 +198,7 @@ export async function POST(req: NextRequest) {
       groqForm.append('language', langParam!)
     }
 
-    console.log(`[transcribe] v56.6 Whisper ${useV3 ? 'Large v3 (Soniox fallback)' : 'Turbo'} | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] v56.8 Whisper Turbo${isMalay || isAutoRojak ? ' (Soniox fallback)' : ''} | language: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
