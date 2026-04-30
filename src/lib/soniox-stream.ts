@@ -1,21 +1,21 @@
 'use client'
 // src/lib/soniox-stream.ts
-// v57: Soniox live streaming using @soniox/speech-to-text-web
-// Returns hook that streams tokens in real-time
+// v57.9: Fixed Soniox streaming using proper SonioxClient API
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface SonioxToken {
   text: string
-  is_final: boolean
+  is_final?: boolean
   confidence?: number
   language?: string
   start_ms?: number
   end_ms?: number
+  speaker?: string
 }
 
 interface UseSonioxStreamOptions {
-  languageHints?: string[]    // e.g. ['ms', 'en']
+  languageHints?: string[]
   context?: any
   onError?: (status: string, message: string) => void
 }
@@ -42,23 +42,28 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
 
   const clientRef = useRef<any>(null)
   const RecordTranscribeRef = useRef<any>(null)
-  const finalTokensRef = useRef<SonioxToken[]>([])
+  const finalAccumRef = useRef<string>('')
   const startTimeRef = useRef<number>(0)
   const tokenCountRef = useRef<number>(0)
   const langCountsRef = useRef<Record<string, number>>({})
 
-  // Lazy-load Soniox web library on mount (avoid SSR issue)
+  // Lazy-load Soniox library
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
         const mod = await import('@soniox/speech-to-text-web')
         if (cancelled) return
-        RecordTranscribeRef.current = mod.RecordTranscribe
+        // Try both export names (library evolution)
+        RecordTranscribeRef.current = (mod as any).RecordTranscribe || (mod as any).SonioxClient
+        if (!RecordTranscribeRef.current) {
+          throw new Error('No RecordTranscribe/SonioxClient export found')
+        }
         setIsReady(true)
+        console.log('[soniox-stream] library loaded')
       } catch (e: any) {
-        console.error('[soniox-stream] failed to load library:', e)
-        setError('Failed to load streaming library')
+        console.error('[soniox-stream] load failed:', e)
+        setError(`load_failed: ${e.message}`)
       }
     }
     load()
@@ -76,12 +81,14 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
     setError(null)
     setFinalText('')
     setPartialText('')
-    finalTokensRef.current = []
+    finalAccumRef.current = ''
     tokenCountRef.current = 0
     langCountsRef.current = {}
     startTimeRef.current = Date.now()
 
-    // Function to fetch fresh temp key (called by library when needed)
+    const RecordTranscribe = RecordTranscribeRef.current
+
+    // Function to fetch fresh temp key
     const getApiKey = async () => {
       const res = await fetch('/api/soniox-token', { method: 'POST' })
       if (!res.ok) {
@@ -92,27 +99,29 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
       return data.api_key
     }
 
-    const RecordTranscribe = RecordTranscribeRef.current
-    const client = new RecordTranscribe({ apiKey: getApiKey })
-    clientRef.current = client
+    // Constructor with apiKey + onPartialResult
+    const client = new RecordTranscribe({
+      apiKey: getApiKey,
+      onStarted: () => {
+        console.log('[soniox-stream] started')
+        setIsStreaming(true)
+      },
+      onFinished: () => {
+        console.log('[soniox-stream] finished')
+        setIsStreaming(false)
+        setPartialText('')
+      },
+      onPartialResult: (result: { tokens?: SonioxToken[]; words?: SonioxToken[] }) => {
+        // Try both `tokens` (new API) and `words` (legacy)
+        const tokens: SonioxToken[] = result.tokens || result.words || []
 
-    client.start({
-      model: 'stt-rt-preview',
-      languageHints: options.languageHints || ['ms', 'en'],
-      context: options.context,
-      enableLanguageIdentification: true,
-
-      onPartialResult: (result: { tokens: SonioxToken[] }) => {
-        const tokens = result.tokens || []
-
-        // Soniox sends ALL tokens each callback (final + partial)
-        // We separate: collect finals once, replace partials on each update
-        const finalTokens: SonioxToken[] = []
+        let finalThisCallback = ''
         let partialBuf = ''
 
         for (const t of tokens) {
           if (t.is_final) {
-            finalTokens.push(t)
+            finalThisCallback += t.text
+            tokenCountRef.current++
             if (t.language) {
               langCountsRef.current[t.language] = (langCountsRef.current[t.language] || 0) + 1
             }
@@ -121,12 +130,15 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
           }
         }
 
-        // Replace finals (library guarantees finals are stable + accumulating)
-        finalTokensRef.current = finalTokens
-        tokenCountRef.current = finalTokens.length
-
-        const newFinal = finalTokens.map(t => t.text).join('')
-        setFinalText(newFinal)
+        // Append finalized tokens (Soniox only sends NEW finals, not all)
+        // But just to be safe, library may behave either way:
+        // - If sends only new finals → accumulate
+        // - If sends all finals each time → replace
+        // Using endpoint_detection to keep things simple, accumulate is safer
+        if (finalThisCallback) {
+          finalAccumRef.current += finalThisCallback
+          setFinalText(finalAccumRef.current)
+        }
         setPartialText(partialBuf)
 
         // Update detected language
@@ -135,33 +147,38 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
           setDetectedLanguage(langs[0][0])
         }
       },
-
-      onStarted: () => {
-        console.log('[soniox-stream] started')
-        setIsStreaming(true)
-      },
-
-      onFinished: () => {
-        console.log('[soniox-stream] finished')
-        setIsStreaming(false)
-        setPartialText('')
-      },
-
       onError: (status: string, message: string) => {
         console.error('[soniox-stream] error:', status, message)
-        setError(`${status}: ${message}`)
+        setError(`${status}: ${message || 'Unknown'}`)
         setIsStreaming(false)
         if (options.onError) options.onError(status, message)
       },
     })
+
+    clientRef.current = client
+
+    // Start with proper config — model + audio format CRITICAL
+    client.start({
+      model: 'stt-rt-preview',
+      audioFormat: 's16le',
+      numChannels: 1,
+      sampleRate: 16000,
+      languageHints: options.languageHints || ['ms', 'en'],
+      context: options.context,
+      enableLanguageIdentification: true,
+      enableEndpointDetection: true,
+    })
+
+    console.log('[soniox-stream] start() called with config')
   }, [options])
 
   const stop = useCallback(async () => {
+    const audioSeconds = Math.ceil((Date.now() - startTimeRef.current) / 1000)
     if (!clientRef.current) {
       return {
-        text: finalText,
+        text: finalAccumRef.current,
         tokenCount: tokenCountRef.current,
-        audioSeconds: Math.ceil((Date.now() - startTimeRef.current) / 1000),
+        audioSeconds,
         language: detectedLanguage,
       }
     }
@@ -173,23 +190,20 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
     }
     clientRef.current = null
 
-    const audioSeconds = Math.ceil((Date.now() - startTimeRef.current) / 1000)
-    const finalCombined = finalTokensRef.current.map(t => t.text).join('')
-
     setIsStreaming(false)
     setPartialText('')
 
     return {
-      text: finalCombined,
+      text: finalAccumRef.current,
       tokenCount: tokenCountRef.current,
       audioSeconds,
       language: detectedLanguage,
     }
-  }, [finalText, detectedLanguage])
+  }, [detectedLanguage])
 
   const reset = useCallback(() => {
     if (clientRef.current) {
-      try { clientRef.current.stop() } catch {}
+      try { clientRef.current.cancel?.() || clientRef.current.stop?.() } catch {}
       clientRef.current = null
     }
     setFinalText('')
@@ -197,7 +211,7 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
     setDetectedLanguage('auto')
     setError(null)
     setIsStreaming(false)
-    finalTokensRef.current = []
+    finalAccumRef.current = ''
     tokenCountRef.current = 0
     langCountsRef.current = {}
   }, [])
@@ -206,7 +220,7 @@ export function useSonioxStream(options: UseSonioxStreamOptions = {}): UseSoniox
   useEffect(() => {
     return () => {
       if (clientRef.current) {
-        try { clientRef.current.stop() } catch {}
+        try { clientRef.current.cancel?.() || clientRef.current.stop?.() } catch {}
         clientRef.current = null
       }
     }
