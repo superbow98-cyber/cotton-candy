@@ -26,8 +26,6 @@ import MindMapView from './MindMapView'
 import ProcessingLoader from './ProcessingLoader'
 import MicLevelMeter from './MicLevelMeter'
 import KnowledgeFacts from './KnowledgeFacts'
-import { useSonioxStream } from '@/lib/soniox-stream'
-import { isAdminEmail } from '@/lib/admin'
 import type { MindMapBranch } from '@/types'
 
 function truncate(text: string, max: number): string {
@@ -217,18 +215,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [lines, setLines] = useState<Line[]>([])
   const [recording, setRecording] = useState(false)
 
-  // v57: Soniox streaming for BM/Rojak live transcription
-  const sonioxStream = useSonioxStream({
-    languageHints: ['ms', 'en'],
-    context: {
-      general: [{ key: 'domain', value: 'Malaysian education / lecture' }],
-      text: 'Malaysian student or professional speaking. Natural rojak (BM + EN code-switching) common.',
-    },
-  })
-
-  // v57.8 admin debug only
-  const [isAdmin, setIsAdmin] = useState(false)
-
   // v56: Opt-in preferences from settings
   // Defaults: mic meter OFF, knowledge facts ON, study tips ON
   const [showMicMeter, setShowMicMeter] = useState(false)
@@ -328,8 +314,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (!data) { router.replace('/dashboard/lectures'); return }
       const lec = data as Lecture
       setLecture(lec); lectureRef.current = lec
-      // v57.8: Set admin flag
-      setIsAdmin(isAdminEmail(user.email))
       if (lec.transcript_md) {
         const parsed: Line[] = []
         let idx = 0
@@ -616,50 +600,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const toggle = async () => {
     if (recording) {
       stopRecognition()
-      // v57: Stop Soniox streaming if active
-      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
-      if (useStreaming && sonioxStream.isStreaming) {
-        try {
-          const result = await sonioxStream.stop()
-          // Send finish notification to backend (cost log + cap update)
-          fetch('/api/soniox-stream-finish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audioSeconds: result.audioSeconds,
-              finalText: result.text,
-              detectedLanguage: result.language,
-              tokenCount: result.tokenCount,
-            }),
-          }).then(r => r.json()).then(d => {
-            if (d.usage) setUsage(d.usage)
-          }).catch(e => console.warn('[soniox-finish] failed:', e))
-
-          // v57.3: APPEND new transcript to existing lines (don't replace)
-          if (result.text && result.text.trim().length > 0) {
-            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.t || 0)) + 1 : 0
-            const newLines = result.text.split(/[.!?]+\s+/)
-              .filter(s => s.trim().length > 0)
-              .map((text, i) => ({
-                id: `sx${Date.now()}${i}`,
-                t: baseTime + i,
-                text: text.trim(),
-                lang: result.language || recLangRef.current,
-              }))
-            setLines(prev => [
-              ...prev,
-              ...(newLines.length > 0 ? newLines : [{
-                id: `sx${Date.now()}`,
-                t: baseTime,
-                text: result.text.trim(),
-                lang: result.language || recLangRef.current,
-              }]),
-            ])
-          }
-        } catch (e) {
-          console.warn('[soniox-stream] stop error:', e)
-        }
-      }
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
@@ -674,9 +614,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       }
       setAudioCaptureOk(null)
 
-      // Reset Soniox stream state for new session (but lines preserved)
-      sonioxStream.reset()
-
       // 1. Start audio capture FIRST — grabs mic exclusively for MediaRecorder
       const audioOk = await startAudioCapture()
       console.log('[toggle] audio capture ready:', audioOk)
@@ -684,23 +621,9 @@ export default function LectureRecorder({ id }: { id: string }) {
       // 2. Small delay to let mic settle
       await new Promise(r => setTimeout(r, 150))
 
-      // 3. Start streaming based on language
-      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
+      // 3. Start Web Speech API for live preview (messy but instant)
       startRef.current = Date.now()
-
-      if (useStreaming && sonioxStream.isReady) {
-        // v57: Use Soniox streaming for BM/Rojak (live + accurate)
-        try {
-          await sonioxStream.start()
-          console.log('[toggle] Soniox streaming started for', recLangRef.current)
-        } catch (e: any) {
-          console.warn('[toggle] Soniox stream failed, fallback Web Speech:', e.message)
-          recRef.current = startRecognition(recLangRef.current)
-        }
-      } else {
-        // Web Speech for EN/zh/ta (free, fast preview)
-        recRef.current = startRecognition(recLangRef.current)
-      }
+      recRef.current = startRecognition(recLangRef.current)
 
       tickRef.current = setInterval(() => {
         const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
@@ -814,50 +737,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const finishLecture = async () => {
     if (recording) {
       stopRecognition()
-      // v57.7: Stop Soniox stream + capture final transcript
-      const useStreaming = recLangRef.current === 'ms' || recLangRef.current === 'auto'
-      if (useStreaming && sonioxStream.isStreaming) {
-        try {
-          const result = await sonioxStream.stop()
-          // Send finish notification (cost log + cap update)
-          fetch('/api/soniox-stream-finish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audioSeconds: result.audioSeconds,
-              finalText: result.text,
-              detectedLanguage: result.language,
-              tokenCount: result.tokenCount,
-            }),
-          }).then(r => r.json()).then(d => {
-            if (d.usage) setUsage(d.usage)
-          }).catch(e => console.warn('[soniox-finish] failed:', e))
-
-          // Append Soniox tokens to lines (preserve resume mode)
-          if (result.text && result.text.trim().length > 0) {
-            const baseTime = lines.length > 0 ? Math.max(...lines.map(l => l.t || 0)) + 1 : 0
-            const newLines = result.text.split(/[.!?]+\s+/)
-              .filter(s => s.trim().length > 0)
-              .map((text, i) => ({
-                id: `sx${Date.now()}${i}`,
-                t: baseTime + i,
-                text: text.trim(),
-                lang: result.language || recLangRef.current,
-              }))
-            setLines(prev => [
-              ...prev,
-              ...(newLines.length > 0 ? newLines : [{
-                id: `sx${Date.now()}`,
-                t: baseTime,
-                text: result.text.trim(),
-                lang: result.language || recLangRef.current,
-              }]),
-            ])
-          }
-        } catch (e) {
-          console.warn('[finishLecture] Soniox stop error:', e)
-        }
-      }
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
@@ -877,15 +756,8 @@ export default function LectureRecorder({ id }: { id: string }) {
     // Always clear enhance error
     setEnhanceError(null)
 
-    // --- Step 1: enhance transcript with Whisper (if audio captured) ---
-    // v57.6: SKIP Whisper enhance for BM/Rojak — Soniox streaming already provided clean transcript
-    const usedSonioxStreaming = recordingLang === 'ms' || recordingLang === 'auto'
-    const skipWhisperEnhance = usedSonioxStreaming
-    if (skipWhisperEnhance) {
-      console.log('[finish] Skipping Whisper enhance — Soniox transcript already clean')
-    }
-
-    if (chunks.length > 0 && !skipWhisperEnhance) {
+    // --- Step 1: enhance transcript with Whisper/Soniox-async (server-side routing) ---
+    if (chunks.length > 0) {
       setEnhancing(true)
       setEnhanceProgress({ done: 0, total: chunks.length })
       try {
@@ -1205,8 +1077,8 @@ export default function LectureRecorder({ id }: { id: string }) {
                 cursor: 'pointer',
               }}
             >
-              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN, Live) — Disyorkan' : 'Rojak Mode (BM + EN, Live) — Recommended'}</option>
-              <option value="ms">🇲🇾 Bahasa Melayu (Live)</option>
+              <option value="auto">✨ {lang === 'bm' ? 'Mod Rojak (BM + EN, Soniox AI) — Disyorkan' : 'Rojak Mode (BM + EN, Soniox AI) — Recommended'}</option>
+              <option value="ms">🇲🇾 Bahasa Melayu (Soniox AI)</option>
               <option value="en">🇬🇧 English</option>
               <option value="zh">🇨🇳 Mandarin (中文)</option>
               <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
@@ -1266,26 +1138,6 @@ export default function LectureRecorder({ id }: { id: string }) {
                     } · {wordCount} {t('recWords')}
                   </span>
                 </div>
-                {/* v57.8: Admin-only Soniox debug line */}
-                {isAdmin && recording && (
-                  <div style={{
-                    fontSize: 10, marginTop: 2,
-                    fontFamily: 'SF Mono, Monaco, monospace',
-                    color: sonioxStream.error ? '#C62828' :
-                           !sonioxStream.isReady ? '#A37018' :
-                           sonioxStream.isStreaming ? 'rgba(29,29,31,0.45)' :
-                           '#A37018',
-                  }}>
-                    soniox · {recordingLang}
-                    {sonioxStream.error
-                      ? ` · err: ${sonioxStream.error.slice(0, 40)}`
-                      : !sonioxStream.isReady
-                        ? ' · loading…'
-                        : sonioxStream.isStreaming
-                          ? ` · live${sonioxStream.detectedLanguage !== 'auto' ? ' · ' + sonioxStream.detectedLanguage : ''}`
-                          : ' · idle'}
-                  </div>
-                )}
               </div>
 
               {/* AI chip — under timer */}
@@ -1317,77 +1169,6 @@ export default function LectureRecorder({ id }: { id: string }) {
             active={recording}
             lang={lang}
           />
-        </div>
-      )}
-
-      {/* v57: SONIOX LIVE STREAMING TRANSCRIPT (BM/Rojak only) */}
-      {recording && sonioxStream.isStreaming && (
-        <div className="fade-in" style={{
-          background: 'linear-gradient(135deg, #FFFBFC, #F5F5F7)',
-          border: '0.5px solid rgba(212, 83, 126, 0.18)',
-          borderRadius: 14,
-          padding: '14px 18px',
-          marginBottom: 12,
-          minHeight: 80,
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            marginBottom: 8,
-          }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: '#E24B4A',
-              animation: 'cc-pulse-dot 1.2s ease-in-out infinite',
-            }} />
-            <span style={{
-              fontSize: 11, fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              color: 'rgba(212, 83, 126, 0.9)',
-            }}>
-              {lang === 'bm' ? 'Transkrip Langsung' : 'Live Transcript'}
-            </span>
-            {sonioxStream.detectedLanguage !== 'auto' && (
-              <span style={{
-                fontSize: 10, color: 'rgba(29,29,31,0.5)',
-                marginLeft: 'auto',
-              }}>
-                {sonioxStream.detectedLanguage.toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div style={{
-            fontSize: 14,
-            color: '#1d1d1f',
-            lineHeight: 1.55,
-            letterSpacing: '-0.01em',
-          }}>
-            <span>{sonioxStream.finalText}</span>
-            {sonioxStream.partialText && (
-              <span style={{ color: 'rgba(29,29,31,0.4)' }}>
-                {sonioxStream.partialText}
-              </span>
-            )}
-            {!sonioxStream.finalText && !sonioxStream.partialText && (
-              <span style={{ color: 'rgba(29,29,31,0.4)', fontStyle: 'italic' }}>
-                {lang === 'bm' ? 'Sila mula bercakap…' : 'Start speaking…'}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Soniox stream error display */}
-      {recording && sonioxStream.error && (
-        <div style={{
-          background: '#fff9e6',
-          border: '0.5px solid rgba(184, 134, 11, 0.25)',
-          borderRadius: 10,
-          padding: '8px 12px',
-          marginBottom: 12,
-          fontSize: 11,
-          color: '#8a6d0f',
-        }}>
-          ⚠ {lang === 'bm' ? 'Streaming gagal — guna mode rakaman biasa' : 'Streaming failed — using regular recording'}
         </div>
       )}
 
