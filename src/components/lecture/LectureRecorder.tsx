@@ -696,8 +696,8 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAiUsedProvider(json.usedProvider || null)
         setAiFellBack(!!json.fellBack)
 
-        // Generate mindmap from AI summary topics (client-side, no extra API)
-        if (!lecture.mindmap_json && json.data) {
+        // v58.1: ALWAYS generate mindmap (regenerate even if exists)
+        if (json.data) {
           try {
             const summary = json.data as AISummary
             const branches: MindMapBranch[] = []
@@ -706,25 +706,41 @@ export default function LectureRecorder({ id }: { id: string }) {
             const topicLimit = Math.min(6, summary.topics?.length || 0)
             for (let i = 0; i < topicLimit; i++) {
               const topic = summary.topics[i]
-              // Try match a key point as subtitle
               const subtitle = summary.keyPoints?.[i]
                 ? truncate(summary.keyPoints[i], 28)
                 : undefined
               branches.push({ title: topic, subtitle })
             }
 
-            if (branches.length > 0) {
-              const mindmap = {
-                center: lecture.title || (lang === 'bm' ? 'Topik Utama' : 'Main Topic'),
-                branches,
+            // v58.1: Fallback — if no topics, derive from key points
+            if (branches.length === 0 && summary.keyPoints && summary.keyPoints.length > 0) {
+              const kpLimit = Math.min(6, summary.keyPoints.length)
+              for (let i = 0; i < kpLimit; i++) {
+                branches.push({
+                  title: truncate(summary.keyPoints[i], 28),
+                  subtitle: undefined,
+                })
               }
-              const sb = createClient()
-              await sb.from('lectures').update({
-                mindmap_json: mindmap,
-              }).eq('id', lecture.id)
-              const updated = { ...lecture, mindmap_json: mindmap }
-              setLecture(updated); lectureRef.current = updated
             }
+
+            // v58.1: Use AI inferredTitle as center, fallback graceful
+            const centerLabel = summary.inferredTitle
+              || lecture.title
+              || (lang === 'bm' ? 'Topik Utama' : 'Main Topic')
+
+            const mindmap = {
+              center: centerLabel,
+              branches: branches.length > 0
+                ? branches
+                : [{ title: centerLabel, subtitle: truncate(summary.summary || '', 40) }],
+            }
+
+            const sb = createClient()
+            await sb.from('lectures').update({
+              mindmap_json: mindmap,
+            }).eq('id', lecture.id)
+            const updated = { ...lecture, mindmap_json: mindmap }
+            setLecture(updated); lectureRef.current = updated
           } catch (e) {
             console.warn('[mindmap] Generation failed:', e)
           }

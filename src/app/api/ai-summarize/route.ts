@@ -36,9 +36,9 @@ export async function POST(req: Request) {
 
     const truncated = transcript.slice(0, 32000)
     const userMessage = `Recording type: ${typeMeta.label.en}
-Title: ${lecture.title || 'Untitled'}
-Subject: ${lecture.subject || 'Unknown'}
 Duration: ${Math.round((lecture.duration_seconds || 0) / 60)} min
+
+NOTE: Generate inferredTitle from transcript content. Ignore any user metadata.
 
 RAW TRANSCRIPT:
 ${truncated}`
@@ -50,11 +50,28 @@ ${truncated}`
 
     const { result, usedProvider, fellBack } = await callAI(provider, userMessage, systemPrompt)
 
-    await supabase.from('lectures').update({
+    // v58.1: Auto-update lecture title from AI inference if user didn't customize
+    const userTitle = (lecture.title || '').trim()
+    const isDefaultTitle = !userTitle ||
+      userTitle === 'Untitled' ||
+      userTitle === 'New lecture' ||
+      userTitle === 'New Lecture' ||
+      userTitle.toLowerCase().startsWith('untitled') ||
+      /^lecture \d+$/i.test(userTitle) ||
+      /^recording \d+$/i.test(userTitle)
+
+    const updatePayload: any = {
       summary: JSON.stringify(result),
       keywords: result.topics || [],
       updated_at: new Date().toISOString(),
-    }).eq('id', lectureId)
+    }
+
+    if (isDefaultTitle && result.inferredTitle && result.inferredTitle.length > 2) {
+      updatePayload.title = result.inferredTitle
+      console.log(`[ai-summarize] Auto-titled lecture: "${result.inferredTitle}"`)
+    }
+
+    await supabase.from('lectures').update(updatePayload).eq('id', lectureId)
 
     // v52: Log usage cost
     try {

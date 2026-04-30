@@ -8,6 +8,7 @@ export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite'
 export type AISummary = {
   // Common
   summary: string
+  inferredTitle?: string  // v58.1: AI-generated title from transcript
   // Lecture
   topics?: string[]
   keyPoints?: string[]
@@ -83,6 +84,7 @@ export const PROVIDER_META: Record<AIProvider, {
 
 // Field schema map per section
 const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: string }> = {
+  inferredTitle:     { type: 'string', description: 'A concise 3-7 word title inferred from the discussion content (in the SAME language as transcript). Do NOT use any user-provided title.' },
   summary:           { type: 'string', description: '2-3 sentence TL;DR in the primary language used' },
   topics:            { type: 'array',  description: '3-8 main topics covered (2-6 word phrases)' },
   keyPoints:         { type: 'array',  description: '5-15 critical points (complete short sentences)' },
@@ -132,14 +134,16 @@ ${schemaLines}
 }
 
 Rules for handling Malaysian rojak speech:
-- **CRITICAL:** Output language MUST match transcript language exactly:
-  - Transcript pure Bahasa Melayu → Output 100% Bahasa Melayu (topics, keyPoints, summary, questions ALL in BM).
+- **CRITICAL TITLE INFERENCE:** ALWAYS generate inferredTitle from the actual discussion content (3-7 words). NEVER use any user-provided title from metadata. Analyze the transcript and create a concise title that reflects what was actually discussed. Title MUST be in the same language as transcript.
+- **CRITICAL LANGUAGE MATCHING:** Output language MUST match transcript language exactly:
+  - Transcript pure Bahasa Melayu → Output 100% Bahasa Melayu (inferredTitle, summary, topics, keyPoints, formulas, questions ALL in BM).
   - Transcript pure English → Output 100% English.
   - Transcript rojak (mix BM+EN) → Output rojak (mirror the mix natural).
 - DO NOT translate. NEVER convert BM transcript to English notes or vice versa.
 - Preserve common BM connectors and particles when natural: "yang, dengan, tu, je, kan, lah, ni, sebab, lepas tu, untuk".
 - Common Malaysian phrases to recognize: "okay so", "actually", "basically", "macam ni", "lepas tu", "sebab tu", "dalam erti kata lain".
 - Topic titles and key points: short, natural — NOT formal academic translation.
+- Topics array MUST be populated (3-8 items) — these become mind map nodes. Empty topics = broken mind map.
 
 Universal rules:
 - DO NOT invent facts not in the transcript. If gibberish/too short, return mostly empty arrays.
@@ -151,7 +155,7 @@ Universal rules:
 
 // Default backwards-compat (for callers that don't pass type)
 export const SYSTEM_PROMPT = buildSystemPrompt(
-  ['summary', 'topics', 'keyPoints', 'formulas', 'questions'],
+  ['inferredTitle', 'summary', 'topics', 'keyPoints', 'formulas', 'questions'],
   'This is a generic recording.',
 )
 
@@ -163,6 +167,7 @@ function validateResult(raw: any): AISummary {
 
   return {
     summary:           str(raw?.summary, 1200),
+    inferredTitle:     str(raw?.inferredTitle, 120) || undefined,
     topics:            arr(raw?.topics, 12),
     keyPoints:         arr(raw?.keyPoints, 20),
     formulas:          arr(raw?.formulas, 12),
