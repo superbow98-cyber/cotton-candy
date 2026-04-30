@@ -438,17 +438,18 @@ export default function LectureRecorder({ id }: { id: string }) {
         return false
       }
 
-      // Read user prefs from localStorage (default: enhancement ON)
+      // v56.4: Default enhancement OFF (was causing mobile audio bugs)
+      // User must explicitly opt-in via Settings → Mic Enhancement
       const enhancementOn = (() => {
         try {
-          return localStorage.getItem('cc-mic-enhance') !== 'off'
-        } catch { return true }
+          return localStorage.getItem('cc-mic-enhance') === 'on'
+        } catch { return false }
       })()
       const gainBoost = (() => {
         try {
-          const v = parseFloat(localStorage.getItem('cc-mic-gain') || '1.5')
+          const v = parseFloat(localStorage.getItem('cc-mic-gain') || '1.0')
           return Math.max(0.5, Math.min(3.0, v))
-        } catch { return 1.5 }
+        } catch { return 1.0 }
       })()
 
       // Request mic with browser-native enhancement (echo/noise/AGC)
