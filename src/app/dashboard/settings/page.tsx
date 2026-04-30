@@ -546,15 +546,16 @@ function MicEnhancementSettings({ lang }: { lang: 'en' | 'bm' }) {
 // v56: Recording experience opt-in toggles
 function RecordingExperienceSettings({ lang }: { lang: 'en' | 'bm' }) {
   const [showMicMeter, setShowMicMeter] = useState(false)
-  const [showFactsLoader, setShowFactsLoader] = useState(false)
-  const [showKnowledge, setShowKnowledge] = useState(false)
+  const [showFactsLoader, setShowFactsLoader] = useState(true)
+  const [showKnowledge, setShowKnowledge] = useState(true)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     try {
       setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
-      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') === 'on')
-      setShowKnowledge(localStorage.getItem('cc-show-knowledge') === 'on')
+      // Facts/knowledge default ON (only OFF if explicitly disabled)
+      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') !== 'off')
+      setShowKnowledge(localStorage.getItem('cc-show-knowledge') !== 'off')
     } catch {}
     setMounted(true)
   }, [])
@@ -608,8 +609,8 @@ function RecordingExperienceSettings({ lang }: { lang: 'en' | 'bm' }) {
         lineHeight: 1.5,
       }}>
         {lang === 'bm'
-          ? '💡 Semua lalai DIMATIKAN untuk kekalkan UI bersih. Hidupkan ikut keperluan.'
-          : '💡 All default OFF to keep UI clean. Enable as needed.'}
+          ? '💡 Fakta menarik & tip belajar dihidupkan secara lalai. Meter mic adalah opsyen.'
+          : '💡 Interesting facts & study tips are ON by default. Mic meter is optional.'}
       </div>
     </>
   )

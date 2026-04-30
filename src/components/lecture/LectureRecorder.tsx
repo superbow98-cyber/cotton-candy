@@ -215,15 +215,18 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [lines, setLines] = useState<Line[]>([])
   const [recording, setRecording] = useState(false)
 
-  // v56: Opt-in preferences from settings (default OFF)
+  // v56: Opt-in preferences from settings
+  // Defaults: mic meter OFF, knowledge facts ON, study tips ON
   const [showMicMeter, setShowMicMeter] = useState(false)
-  const [showFactsLoader, setShowFactsLoader] = useState(false)
-  const [showKnowledgeFacts, setShowKnowledgeFacts] = useState(false)
+  const [showFactsLoader, setShowFactsLoader] = useState(true)
+  const [showKnowledgeFacts, setShowKnowledgeFacts] = useState(true)
   useEffect(() => {
     try {
       setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
-      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') === 'on')
-      setShowKnowledgeFacts(localStorage.getItem('cc-show-knowledge') === 'on')
+      // Facts loader default ON (only OFF if user explicitly disabled)
+      setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') !== 'off')
+      // Knowledge facts default ON (only OFF if user explicitly disabled)
+      setShowKnowledgeFacts(localStorage.getItem('cc-show-knowledge') !== 'off')
     } catch {}
   }, [])
   const [interim, setInterim] = useState('')
@@ -460,54 +463,63 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       // Optional: Web Audio gain boost (extra amplification before MediaRecorder)
       // Graceful fallback — if anything fails, use raw stream
+      // v56.1 hotfix: Only create AudioContext if we ACTUALLY need processing
       let processedStream = stream
-      try {
-        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
-        if (AudioCtx) {
-          const audioCtx = new AudioCtx()
-          audioCtxRef.current = audioCtx
-          const source = audioCtx.createMediaStreamSource(stream)
+      const needsEnhancement = enhancementOn && gainBoost !== 1.0
+      const needsAnalyser = (() => {
+        try { return localStorage.getItem('cc-show-mic-meter') === 'on' } catch { return false }
+      })()
 
-          // v56: Analyser node — taps audio for visualizer (parallel, no effect on recording)
-          const analyserNode = audioCtx.createAnalyser()
-          analyserNode.fftSize = 256
-          analyserNode.smoothingTimeConstant = 0.7
-          source.connect(analyserNode)  // parallel branch
-          analyserRef.current = analyserNode
-          setAnalyser(analyserNode)
+      if (needsEnhancement || needsAnalyser) {
+        try {
+          const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
+          if (AudioCtx) {
+            const audioCtx = new AudioCtx()
+            audioCtxRef.current = audioCtx
+            const source = audioCtx.createMediaStreamSource(stream)
 
-          if (enhancementOn && gainBoost !== 1.0) {
-            const gain = audioCtx.createGain()
-            gain.gain.value = gainBoost  // boost (1.5 = +3.5dB default)
+            // Analyser node — only if user opted in to mic meter
+            if (needsAnalyser) {
+              const analyserNode = audioCtx.createAnalyser()
+              analyserNode.fftSize = 256
+              analyserNode.smoothingTimeConstant = 0.7
+              source.connect(analyserNode)
+              analyserRef.current = analyserNode
+              setAnalyser(analyserNode)
+            }
 
-            // Compressor — soft-knee normalize loud peaks
-            const compressor = audioCtx.createDynamicsCompressor()
-            compressor.threshold.value = -24
-            compressor.knee.value = 30
-            compressor.ratio.value = 4
-            compressor.attack.value = 0.003
-            compressor.release.value = 0.25
+            if (needsEnhancement) {
+              const gain = audioCtx.createGain()
+              gain.gain.value = gainBoost
 
-            // High-pass filter — remove low rumble (typing, fans below 80Hz)
-            const hipass = audioCtx.createBiquadFilter()
-            hipass.type = 'highpass'
-            hipass.frequency.value = 80
+              const compressor = audioCtx.createDynamicsCompressor()
+              compressor.threshold.value = -24
+              compressor.knee.value = 30
+              compressor.ratio.value = 4
+              compressor.attack.value = 0.003
+              compressor.release.value = 0.25
 
-            // Output to MediaStream
-            const dest = audioCtx.createMediaStreamDestination()
-            source.connect(hipass)
-            hipass.connect(gain)
-            gain.connect(compressor)
-            compressor.connect(dest)
-            processedStream = dest.stream
-            console.log('[audio] enhancement active: gain=', gainBoost, 'hipass=80Hz, compressor on')
-          } else {
-            console.log('[audio] enhancement disabled (visualizer still active)')
+              const hipass = audioCtx.createBiquadFilter()
+              hipass.type = 'highpass'
+              hipass.frequency.value = 80
+
+              const dest = audioCtx.createMediaStreamDestination()
+              source.connect(hipass)
+              hipass.connect(gain)
+              gain.connect(compressor)
+              compressor.connect(dest)
+              processedStream = dest.stream
+              console.log('[audio] enhancement active: gain=', gainBoost)
+            } else {
+              console.log('[audio] mic meter only (no enhancement)')
+            }
           }
+        } catch (enhanceErr) {
+          console.warn('[audio] enhancement failed, fallback to raw stream:', enhanceErr)
+          processedStream = stream
         }
-      } catch (enhanceErr) {
-        console.warn('[audio] enhancement failed, fallback to raw stream:', enhanceErr)
-        processedStream = stream
+      } else {
+        console.log('[audio] raw stream (no AudioContext)')
       }
 
       audioChunksRef.current = []
