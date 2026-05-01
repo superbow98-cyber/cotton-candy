@@ -1258,7 +1258,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         </div>
       )}
 
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes cc-spin {
           to { transform: rotate(360deg); }
         }
