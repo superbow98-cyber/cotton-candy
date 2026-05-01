@@ -34,6 +34,16 @@ export interface MindMap {
   branches: MindMapBranch[]
 }
 
+// v59: Clean transcript segment from Soniox per recording session
+export interface CleanSegment {
+  start: number       // seconds from lecture start (timeline-aware)
+  end: number         // seconds from lecture start
+  text: string        // Soniox cleaned text for this session
+  source: 'soniox_async' | 'whisper_turbo' | 'whisper_v3'
+  language?: string   // detected language
+  created_at?: string
+}
+
 export interface Lecture {
   id: string
   user_id: string
@@ -45,6 +55,8 @@ export interface Lecture {
   ended_at: string | null
   duration_seconds: number
   transcript_md: string
+  raw_transcript_md?: string | null
+  clean_segments?: CleanSegment[] | null
   summary: string | null
   timeline: TimelineEntry[]
   keywords: string[]

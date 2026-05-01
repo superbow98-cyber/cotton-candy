@@ -26,7 +26,7 @@ import MindMapView from './MindMapView'
 import ProcessingLoader from './ProcessingLoader'
 import MicLevelMeter from './MicLevelMeter'
 import KnowledgeFacts from './KnowledgeFacts'
-import type { MindMapBranch } from '@/types'
+import type { MindMapBranch, CleanSegment } from '@/types'
 
 function truncate(text: string, max: number): string {
   if (!text) return ''
@@ -213,6 +213,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
+  const [cleanSegments, setCleanSegments] = useState<CleanSegment[]>([])  // v59
   const [recording, setRecording] = useState(false)
 
   // v56: Opt-in preferences from settings
@@ -314,6 +315,10 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (!data) { router.replace('/dashboard/lectures'); return }
       const lec = data as Lecture
       setLecture(lec); lectureRef.current = lec
+      // v59: Load existing clean segments
+      if (Array.isArray(lec.clean_segments)) {
+        setCleanSegments(lec.clean_segments)
+      }
       if (lec.transcript_md) {
         const parsed: Line[] = []
         let idx = 0
@@ -660,21 +665,43 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   const linesToMd = (ll: Line[]) => ll.map((l) => `- ${l.text}`).join('\n')
 
+  // v59: Build clean transcript markdown from clean_segments (used by AI)
+  const cleanSegmentsToMd = (segs: CleanSegment[]) =>
+    segs.map(s => s.text.trim()).filter(Boolean).join('\n\n')
+
+  // v59: Format seconds → MM:SS
+  const fmtTime = (sec: number) => {
+    const m = Math.floor(sec / 60)
+    const s = Math.floor(sec % 60)
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
   const save = async (finish: boolean) => {
     if (!lecture) return
     setSaving(true)
     try {
-      const md = linesToMd(lines)
+      // v59: Two markdowns
+      const rawMd = linesToMd(lines)              // Web Speech messy
+      const cleanMd = cleanSegmentsToMd(cleanSegments)  // Soniox clean by timeline
+      // Use clean if available; fallback to raw
+      const md = cleanMd.length > 20 ? cleanMd : rawMd
       const wordCount = md.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
       const keywords = extractKeywords(md, 12)
       const sb = createClient()
       await sb.from('lectures').update({
-        transcript_md: md, word_count: wordCount, duration_seconds: elapsed, keywords,
+        transcript_md: md,
+        raw_transcript_md: rawMd,
+        clean_segments: cleanSegments,
+        word_count: wordCount, duration_seconds: elapsed, keywords,
         status: finish ? 'finished' : 'recording',
         ended_at: finish ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       }).eq('id', lecture.id)
-      const updated = { ...lecture, transcript_md: md, keywords, word_count: wordCount, duration_seconds: elapsed }
+      const updated = {
+        ...lecture, transcript_md: md, raw_transcript_md: rawMd,
+        clean_segments: cleanSegments,
+        keywords, word_count: wordCount, duration_seconds: elapsed,
+      }
       setLecture(updated); lectureRef.current = updated
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
@@ -802,6 +829,23 @@ export default function LectureRecorder({ id }: { id: string }) {
         const combined = texts.join('\n').trim()
 
         if (combined.length > 20) {
+          // v59: Save as a clean segment with timeline (start/end seconds)
+          const sessionStart = accumRef.current - Math.max(0, elapsed - accumRef.current)
+          const segmentStart = isResume && cleanSegments.length > 0
+            ? Math.max(...cleanSegments.map(s => s.end))
+            : 0
+          const segmentEnd = elapsed
+          const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
+          const newSegment: CleanSegment = {
+            start: segmentStart,
+            end: segmentEnd,
+            text: combined,
+            source: isMalayMode ? 'soniox_async' : 'whisper_turbo',
+            language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
+            created_at: new Date().toISOString(),
+          }
+          setCleanSegments(prev => [...prev, newSegment])
+
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
             // v57.3: APPEND on resume, REPLACE on fresh
@@ -1445,16 +1489,68 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       </div>{/* end AI SECTION wrapper */}
 
-      {/* RAW TRANSCRIPT */}
+      {/* v59: CLEAN TRANSCRIPT (Soniox segments by timeline) */}
+      {cleanSegments.length > 0 && (
+        <div style={{
+          background: '#FFFBFC', borderRadius: 14, padding: 18, marginTop: 18,
+          border: '0.5px solid rgba(212, 83, 126, 0.18)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 12,
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, color: '#993556',
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              ✨ {lang === 'bm' ? 'Transkrip Bersih' : 'Clean Transcript'}
+            </div>
+            <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
+              {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
+            </span>
+          </div>
+          <div className="transcript-md">
+            {cleanSegments.map((seg, idx) => (
+              <div key={idx} className="fade-in" style={{
+                display: 'flex', gap: 10, padding: '8px 0',
+                borderBottom: idx < cleanSegments.length - 1 ? '0.5px solid rgba(0,0,0,0.06)' : 'none',
+                fontSize: 13, lineHeight: 1.65,
+              }}>
+                <span style={{
+                  fontSize: 10, color: 'rgba(29,29,31,0.5)',
+                  fontFamily: 'SF Mono, Monaco, monospace',
+                  flexShrink: 0, paddingTop: 2, minWidth: 90,
+                }}>
+                  {fmtTime(seg.start)}–{fmtTime(seg.end)}
+                </span>
+                <span style={{ color: 'rgba(29,29,31,0.92)' }}>{seg.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* v59: RAW TRANSCRIPT (Web Speech live preview, kekal messy) */}
       <div style={{
-        background: '#fff', padding: '18px 20px', borderRadius: 14,
+        background: 'rgba(0,0,0,0.02)', borderRadius: 14, padding: 18, marginTop: cleanSegments.length > 0 ? 12 : 18,
         border: '0.5px solid rgba(0,0,0,0.06)', minHeight: 200,
       }}>
         <div style={{
-          fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
-          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 12,
         }}>
-          {lang === 'bm' ? 'Transkrip' : 'Transcript'}
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
+            textTransform: 'uppercase', letterSpacing: '0.5px',
+          }}>
+            📝 {lang === 'bm' ? (cleanSegments.length > 0 ? 'Transkrip Asal (Live)' : 'Transkrip') : (cleanSegments.length > 0 ? 'Raw Transcript (Live)' : 'Transcript')}
+          </div>
+          {cleanSegments.length > 0 && (
+            <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.4)' }}>
+              {lang === 'bm' ? 'Live preview' : 'Live preview'}
+            </span>
+          )}
         </div>
         {lines.length === 0 && !interim && (
           <div style={{ color: 'rgba(29,29,31,0.5)', fontStyle: 'italic', padding: 20, textAlign: 'center', fontSize: 13 }}>
@@ -1465,7 +1561,11 @@ export default function LectureRecorder({ id }: { id: string }) {
           {lines.map((l) => {
             const langInfo = l.lang ? RECOGNITION_LANGS.find(x => x.code === l.lang) : null
             return (
-              <div key={l.id} className="fade-in" style={{ padding: '4px 0', fontSize: 13, color: 'rgba(29,29,31,0.85)', lineHeight: 1.75 }}>
+              <div key={l.id} className="fade-in" style={{
+                padding: '4px 0', fontSize: 13,
+                color: cleanSegments.length > 0 ? 'rgba(29,29,31,0.55)' : 'rgba(29,29,31,0.85)',
+                lineHeight: 1.75,
+              }}>
                 - {l.text}
                 <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginLeft: 6 }}>
                   {l.t ? `[${secondsToClock(l.t)}]` : ''}{langInfo && ` ${langInfo.flag}`}
