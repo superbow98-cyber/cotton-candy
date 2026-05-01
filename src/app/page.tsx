@@ -430,7 +430,34 @@ export default function Home() {
         borderTop: '0.5px solid rgba(0,0,0,0.06)',
         background: '#fff',
       }}>
-        {L('Made in Malaysia', 'Dibuat di Malaysia')} · Cotton Candy 🍭
+        <div style={{
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          gap: 16, flexWrap: 'wrap', marginBottom: 12,
+        }}>
+          <a href="/privacy" style={{
+            color: 'rgba(29,29,31,0.7)', textDecoration: 'none',
+            fontSize: 13, fontWeight: 500,
+          }}>
+            {L('Privacy Policy', 'Dasar Privasi')}
+          </a>
+          <span style={{ color: 'rgba(29,29,31,0.25)' }}>·</span>
+          <a href="/terms" style={{
+            color: 'rgba(29,29,31,0.7)', textDecoration: 'none',
+            fontSize: 13, fontWeight: 500,
+          }}>
+            {L('Terms of Service', 'Terma Perkhidmatan')}
+          </a>
+          <span style={{ color: 'rgba(29,29,31,0.25)' }}>·</span>
+          <a href="mailto:superbow98@gmail.com" style={{
+            color: 'rgba(29,29,31,0.7)', textDecoration: 'none',
+            fontSize: 13, fontWeight: 500,
+          }}>
+            {L('Contact', 'Hubungi')}
+          </a>
+        </div>
+        <div>
+          {L('Made in Malaysia', 'Dibuat di Malaysia')} · Cotton Candy 🍭
+        </div>
       </footer>
 
       {/* Responsive tweaks for pricing grid */}
