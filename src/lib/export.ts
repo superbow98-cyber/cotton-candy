@@ -133,6 +133,21 @@ async function imageUrlToBase64(url: string): Promise<{ data: string; format: 'J
   }
 }
 
+// Strip emojis from text (jsPDF helvetica doesn't render them — they appear as garbage)
+function stripEmojis(text: string): string {
+  // Remove emoji unicode ranges + common pictographs
+  return text
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')   // Misc symbols and pictographs
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')     // Misc symbols + dingbats
+    .replace(/[\u{2300}-\u{23FF}]/gu, '')     // Misc technical
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')   // Misc emoji
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')     // Misc symbols and arrows
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')     // Variation selectors
+    .replace(/[\u{200D}]/gu, '')              // Zero-width joiner
+    .replace(/\s+/g, ' ')                      // Collapse multiple spaces
+    .trim()
+}
+
 export async function lectureToPdf(
   l: Lecture,
   opts: { watermark?: boolean; theme?: ThemeTokens; ai?: AISummaryExport } = {}
@@ -167,24 +182,24 @@ export async function lectureToPdf(
   doc.setTextColor(...dark)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(22)
-  doc.text(title, M, 52)
+  doc.text(stripEmojis(title), M, 52)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(11)
   const meta: string[] = []
-  if (l.subject)  meta.push(l.subject)
-  if (l.lecturer) meta.push(l.lecturer)
-  if (l.location) meta.push(l.location)
+  if (l.subject)  meta.push(stripEmojis(l.subject))
+  if (l.lecturer) meta.push(stripEmojis(l.lecturer))
+  if (l.location) meta.push(stripEmojis(l.location))
   meta.push(new Date(l.started_at).toLocaleDateString())
   doc.text(meta.join('  ·  '), M, 74)
   y = 120
 
-  // Section helper
+  // Section helper (v60.1: strip emojis — jsPDF helvetica can't render them)
   const heading = (text: string, color: [number, number, number] = accent) => {
     ensure(34)
     doc.setTextColor(...color)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(14)
-    doc.text(text, M, y); y += 22
+    doc.text(stripEmojis(text), M, y); y += 22
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(11)
     doc.setTextColor(...dark)
@@ -192,17 +207,17 @@ export async function lectureToPdf(
 
   // SUMMARY
   if (ai?.summary) {
-    heading('✨ Summary')
-    const ls = wrap(ai.summary, W - 2 * M, 11)
+    heading('Summary')
+    const ls = wrap(stripEmojis(ai.summary), W - 2 * M, 11)
     for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     y += 8
   }
 
   // TOPICS COVERED
   if (ai?.topics?.length) {
-    heading('📌 Topics covered')
+    heading('Topics covered')
     ai.topics.forEach((t, i) => {
-      const ls = wrap(`${i + 1}. ${t}`, W - 2 * M - 10, 11)
+      const ls = wrap(`${i + 1}. ${stripEmojis(t)}`, W - 2 * M - 10, 11)
       for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     })
     y += 8
@@ -210,9 +225,9 @@ export async function lectureToPdf(
 
   // KEY POINTS
   if (ai?.keyPoints?.length) {
-    heading('🔑 Key points')
+    heading('Key points')
     ai.keyPoints.forEach((k) => {
-      const ls = wrap(`• ${k}`, W - 2 * M - 10, 11)
+      const ls = wrap(`• ${stripEmojis(k)}`, W - 2 * M - 10, 11)
       for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     })
     y += 8
@@ -220,9 +235,9 @@ export async function lectureToPdf(
 
   // FORMULAS
   if (ai?.formulas?.length) {
-    heading('📐 Formulas')
+    heading('Formulas')
     ai.formulas.forEach((f) => {
-      const ls = wrap(`• ${f}`, W - 2 * M - 10, 11)
+      const ls = wrap(`• ${stripEmojis(f)}`, W - 2 * M - 10, 11)
       for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     })
     y += 8
@@ -230,9 +245,9 @@ export async function lectureToPdf(
 
   // QUESTIONS
   if (ai?.questions?.length) {
-    heading('❓ Questions')
+    heading('Questions')
     ai.questions.forEach((q) => {
-      const ls = wrap(`• ${q}`, W - 2 * M - 10, 11)
+      const ls = wrap(`• ${stripEmojis(q)}`, W - 2 * M - 10, 11)
       for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     })
     y += 8
@@ -240,8 +255,8 @@ export async function lectureToPdf(
 
   // MIND MAP — render as nested indent
   if (l.mindmap_json) {
-    heading('🧠 Mind map')
-    const center = l.mindmap_json.center || title
+    heading('Mind map')
+    const center = stripEmojis(l.mindmap_json.center || title)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
     const cls = wrap(`◆ ${center}`, W - 2 * M, 12)
@@ -250,12 +265,12 @@ export async function lectureToPdf(
     doc.setFontSize(11)
     for (const branch of l.mindmap_json.branches || []) {
       ensure(16)
-      const bls = wrap(`  ▸ ${branch.title}`, W - 2 * M - 16, 11)
+      const bls = wrap(`  → ${stripEmojis(branch.title)}`, W - 2 * M - 16, 11)
       for (const line of bls) { ensure(15); doc.text(line, M + 12, y); y += 15 }
       if (branch.subtitle) {
         doc.setTextColor(...gray)
         doc.setFont('helvetica', 'italic')
-        const sls = wrap(`     ${branch.subtitle}`, W - 2 * M - 32, 10)
+        const sls = wrap(`     ${stripEmojis(branch.subtitle)}`, W - 2 * M - 32, 10)
         for (const line of sls) { ensure(14); doc.text(line, M + 24, y); y += 14 }
         doc.setTextColor(...dark)
         doc.setFont('helvetica', 'normal')
@@ -265,7 +280,7 @@ export async function lectureToPdf(
   }
 
   // CLEAN TRANSCRIPT
-  heading('📝 Clean transcript')
+  heading('Clean transcript')
   const cleanText = (l.clean_transcript_edited && l.clean_transcript_edited.trim())
     ? l.clean_transcript_edited
     : (l.clean_segments && l.clean_segments.length > 0)
@@ -281,7 +296,7 @@ export async function lectureToPdf(
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(13)
       doc.setTextColor(...accent)
-      const txt = p.replace(/^#+\s*/, '')
+      const txt = stripEmojis(p.replace(/^#+\s*/, ''))
       const ls = wrap(txt, W - 2 * M, 13)
       for (const line of ls) { ensure(18); doc.text(line, M, y); y += 18 }
       doc.setFont('helvetica', 'normal')
@@ -289,7 +304,7 @@ export async function lectureToPdf(
       doc.setTextColor(...dark)
       continue
     }
-    const clean = p.replace(/^[-*]\s*/, '• ')
+    const clean = stripEmojis(p.replace(/^[-*]\s*/, '• '))
     const ls = wrap(clean, W - 2 * M, 11)
     for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
     y += 4
@@ -298,7 +313,7 @@ export async function lectureToPdf(
   // IMAGES — embed each on a new section
   if (l.transcript_images && l.transcript_images.length > 0) {
     nextPage()
-    heading('🖼️ Images')
+    heading('Images')
 
     for (const img of l.transcript_images) {
       const imgData = await imageUrlToBase64(img.url)
@@ -306,7 +321,6 @@ export async function lectureToPdf(
 
       ensure(280)
       try {
-        // Fit image into max 400×280 pt area
         doc.addImage(imgData.data, imgData.format, M, y, 400, 240)
         y += 250
 
@@ -314,7 +328,7 @@ export async function lectureToPdf(
           doc.setFont('helvetica', 'italic')
           doc.setFontSize(10)
           doc.setTextColor(...gray)
-          const ls = wrap(img.caption, W - 2 * M, 10)
+          const ls = wrap(stripEmojis(img.caption), W - 2 * M, 10)
           for (const line of ls) { ensure(14); doc.text(line, M, y); y += 14 }
           doc.setFont('helvetica', 'normal')
           doc.setFontSize(11)
@@ -337,7 +351,7 @@ export async function lectureToPdf(
     doc.text(`${i} / ${pages}`, W - M, H - 20, { align: 'right' })
   }
 
-  doc.save(`${title.replace(/[^\w-]+/g, '_')}.pdf`)
+  doc.save(`${stripEmojis(title).replace(/[^\w-]+/g, '_')}.pdf`)
 }
 
 // ---- keyword extraction ----
