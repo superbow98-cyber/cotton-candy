@@ -44,6 +44,16 @@ export interface CleanSegment {
   created_at?: string
 }
 
+// v60: Image uploaded into clean transcript
+export interface TranscriptImage {
+  id: string             // unique uuid
+  url: string            // Supabase Storage public URL
+  caption?: string
+  position: number       // index/order in transcript
+  uploaded_at: string
+  size_bytes: number
+}
+
 export interface Lecture {
   id: string
   user_id: string
@@ -57,6 +67,8 @@ export interface Lecture {
   transcript_md: string
   raw_transcript_md?: string | null
   clean_segments?: CleanSegment[] | null
+  clean_transcript_edited?: string | null     // v60: user-edited markdown
+  transcript_images?: TranscriptImage[] | null // v60: uploaded images
   summary: string | null
   timeline: TimelineEntry[]
   keywords: string[]

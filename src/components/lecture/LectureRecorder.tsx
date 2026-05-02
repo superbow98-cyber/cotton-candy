@@ -26,7 +26,7 @@ import MindMapView from './MindMapView'
 import ProcessingLoader from './ProcessingLoader'
 import MicLevelMeter from './MicLevelMeter'
 import KnowledgeFacts from './KnowledgeFacts'
-import type { MindMapBranch, CleanSegment } from '@/types'
+import type { MindMapBranch, CleanSegment, TranscriptImage } from '@/types'
 
 function truncate(text: string, max: number): string {
   if (!text) return ''
@@ -214,6 +214,13 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
   const [cleanSegments, setCleanSegments] = useState<CleanSegment[]>([])  // v59
+  // v60: Editable transcript + images
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedText, setEditedText] = useState<string>('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [transcriptImages, setTranscriptImages] = useState<TranscriptImage[]>([])
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
 
   // v56: Opt-in preferences from settings
@@ -318,6 +325,13 @@ export default function LectureRecorder({ id }: { id: string }) {
       // v59: Load existing clean segments
       if (Array.isArray(lec.clean_segments)) {
         setCleanSegments(lec.clean_segments)
+      }
+      // v60: Load edited transcript + images
+      if (lec.clean_transcript_edited) {
+        setEditedText(lec.clean_transcript_edited)
+      }
+      if (Array.isArray(lec.transcript_images)) {
+        setTranscriptImages(lec.transcript_images)
       }
       if (lec.transcript_md) {
         const parsed: Line[] = []
@@ -880,16 +894,108 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
+  // v60: Edit transcript + image upload
+  const startEdit = () => {
+    // Initialize editor with existing edited text OR segments joined
+    const initial = editedText
+      || cleanSegments.map(s => s.text).join('\n\n')
+      || ''
+    setEditedText(initial)
+    setIsEditing(true)
+  }
+
+  const saveEdit = async () => {
+    if (!lecture) return
+    setSavingEdit(true)
+    try {
+      const res = await fetch(`/api/lectures/${lecture.id}/transcript-edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edited: editedText }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Save failed')
+      }
+      setIsEditing(false)
+      // Update local lecture
+      const updated = { ...lecture, clean_transcript_edited: editedText }
+      setLecture(updated); lectureRef.current = updated
+    } catch (e: any) {
+      alert((lang === 'bm' ? 'Gagal simpan: ' : 'Save failed: ') + e.message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const cancelEdit = () => {
+    setIsEditing(false)
+    setEditedText(lecture?.clean_transcript_edited || '')
+  }
+
+  const uploadImage = async (file: File) => {
+    if (!lecture) return
+    if (transcriptImages.length >= 5) {
+      setImageUploadError(lang === 'bm' ? 'Maksimum 5 gambar tercapai' : 'Max 5 images reached')
+      setTimeout(() => setImageUploadError(null), 3000)
+      return
+    }
+    if (file.size > 1024 * 1024) {
+      setImageUploadError(lang === 'bm' ? 'Saiz fail melebihi 1MB' : 'File exceeds 1MB')
+      setTimeout(() => setImageUploadError(null), 3000)
+      return
+    }
+    setUploadingImage(true)
+    setImageUploadError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/lectures/${lecture.id}/transcript-image`, {
+        method: 'POST',
+        body: form,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed')
+      setTranscriptImages(data.images || [])
+      const updated = { ...lecture, transcript_images: data.images || [] }
+      setLecture(updated); lectureRef.current = updated
+    } catch (e: any) {
+      setImageUploadError(e.message)
+      setTimeout(() => setImageUploadError(null), 4000)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const deleteImage = async (imageId: string) => {
+    if (!lecture) return
+    if (!confirm(lang === 'bm' ? 'Padam gambar ini?' : 'Delete this image?')) return
+    try {
+      const res = await fetch(`/api/lectures/${lecture.id}/transcript-image?imageId=${imageId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Delete failed')
+      setTranscriptImages(data.images || [])
+      const updated = { ...lecture, transcript_images: data.images || [] }
+      setLecture(updated); lectureRef.current = updated
+    } catch (e: any) {
+      alert(e.message)
+    }
+  }
+
   const exportMd = () => {
     if (!lecture) return
-    let md = lectureToMarkdown({ ...lecture, transcript_md: linesToMd(lines) })
-    if (aiResult) md = buildRichMarkdown(lecture, linesToMd(lines), aiResult)
-    downloadText(`${(lecture.title || 'lecture').replace(/[^\w-]+/g, '_')}.md`, md, 'text/markdown')
+    // v60: Pass full lecture (with clean_transcript_edited, transcript_images) + AI summary
+    const lec = { ...lecture, clean_transcript_edited: editedText || lecture.clean_transcript_edited, transcript_images: transcriptImages }
+    const md = lectureToMarkdown(lec, aiResult || undefined)
+    const title = aiResult?.inferredTitle || lecture.title || 'lecture'
+    downloadText(`${title.replace(/[^\w-]+/g, '_')}.md`, md, 'text/markdown')
   }
   const exportPdf = () => {
     if (!lecture) return
-    const lec = { ...lecture, transcript_md: aiResult ? buildRichMarkdown(lecture, linesToMd(lines), aiResult) : linesToMd(lines) }
-    lectureToPdf(lec, { watermark: PLANS[plan].watermark, theme: s })
+    const lec = { ...lecture, clean_transcript_edited: editedText || lecture.clean_transcript_edited, transcript_images: transcriptImages }
+    lectureToPdf(lec, { watermark: PLANS[plan].watermark, theme: s, ai: aiResult || undefined })
   }
 
   if (!lecture) return <div style={{ color: s.gray, padding: 20 }}>{t('loading')}</div>
@@ -1490,14 +1596,14 @@ export default function LectureRecorder({ id }: { id: string }) {
       </div>{/* end AI SECTION wrapper */}
 
       {/* v59: CLEAN TRANSCRIPT (Soniox segments by timeline) */}
-      {cleanSegments.length > 0 && (
+      {(cleanSegments.length > 0 || editedText || transcriptImages.length > 0) && (
         <div style={{
           background: '#FFFBFC', borderRadius: 14, padding: 18, marginTop: 18,
           border: '0.5px solid rgba(212, 83, 126, 0.18)',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 12,
+            marginBottom: 12, gap: 8, flexWrap: 'wrap',
           }}>
             <div style={{
               fontSize: 11, fontWeight: 600, color: '#993556',
@@ -1506,28 +1612,146 @@ export default function LectureRecorder({ id }: { id: string }) {
             }}>
               ✨ {lang === 'bm' ? 'Transkrip Bersih' : 'Clean Transcript'}
             </div>
-            <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
-              {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
-            </span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
+                {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
+              </span>
+              {!isEditing && (
+                <>
+                  <button onClick={startEdit} style={{
+                    background: 'transparent', border: '0.5px solid rgba(212, 83, 126, 0.4)',
+                    color: '#993556', padding: '3px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  }}>
+                    ✏️ {lang === 'bm' ? 'Edit' : 'Edit'}
+                  </button>
+                  <label style={{
+                    background: 'transparent', border: '0.5px solid rgba(212, 83, 126, 0.4)',
+                    color: '#993556', padding: '3px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                    opacity: transcriptImages.length >= 5 ? 0.4 : 1,
+                  }}>
+                    {uploadingImage
+                      ? (lang === 'bm' ? '⏳ Uploading...' : '⏳ Uploading...')
+                      : `🖼️ ${lang === 'bm' ? 'Tambah gambar' : 'Add image'} (${transcriptImages.length}/5)`}
+                    <input type="file" accept="image/*" style={{ display: 'none' }}
+                      disabled={uploadingImage || transcriptImages.length >= 5}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) uploadImage(file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+              {isEditing && (
+                <>
+                  <button onClick={saveEdit} disabled={savingEdit} style={{
+                    background: '#993556', border: 'none',
+                    color: '#fff', padding: '3px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    opacity: savingEdit ? 0.6 : 1,
+                  }}>
+                    {savingEdit
+                      ? (lang === 'bm' ? '💾 Menyimpan...' : '💾 Saving...')
+                      : (lang === 'bm' ? '✓ Simpan' : '✓ Save')}
+                  </button>
+                  <button onClick={cancelEdit} disabled={savingEdit} style={{
+                    background: 'transparent', border: '0.5px solid rgba(0,0,0,0.2)',
+                    color: 'rgba(29,29,31,0.65)', padding: '3px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  }}>
+                    {lang === 'bm' ? 'Batal' : 'Cancel'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="transcript-md">
-            {cleanSegments.map((seg, idx) => (
-              <div key={idx} className="fade-in" style={{
-                display: 'flex', gap: 10, padding: '8px 0',
-                borderBottom: idx < cleanSegments.length - 1 ? '0.5px solid rgba(0,0,0,0.06)' : 'none',
-                fontSize: 13, lineHeight: 1.65,
-              }}>
-                <span style={{
-                  fontSize: 10, color: 'rgba(29,29,31,0.5)',
-                  fontFamily: 'SF Mono, Monaco, monospace',
-                  flexShrink: 0, paddingTop: 2, minWidth: 90,
+
+          {imageUploadError && (
+            <div style={{
+              background: '#fde8e8', color: '#b42929',
+              padding: '6px 10px', borderRadius: 6, fontSize: 11,
+              marginBottom: 10,
+            }}>⚠ {imageUploadError}</div>
+          )}
+
+          {isEditing ? (
+            <textarea
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              autoFocus
+              style={{
+                width: '100%',
+                minHeight: 180,
+                padding: 12,
+                border: '0.5px solid rgba(212, 83, 126, 0.25)',
+                borderRadius: 8,
+                fontFamily: 'inherit',
+                fontSize: 13,
+                lineHeight: 1.65,
+                color: 'rgba(29,29,31,0.92)',
+                background: '#fff',
+                resize: 'vertical',
+              }}
+              placeholder={lang === 'bm' ? 'Edit transkrip di sini...' : 'Edit transcript here...'}
+            />
+          ) : (editedText && editedText.trim()) ? (
+            <div className="transcript-md" style={{
+              fontSize: 13, lineHeight: 1.65, color: 'rgba(29,29,31,0.92)',
+              whiteSpace: 'pre-wrap',
+            }}>
+              {editedText}
+            </div>
+          ) : (
+            <div className="transcript-md">
+              {cleanSegments.map((seg, idx) => (
+                <div key={idx} className="fade-in" style={{
+                  display: 'flex', gap: 10, padding: '8px 0',
+                  borderBottom: idx < cleanSegments.length - 1 ? '0.5px solid rgba(0,0,0,0.06)' : 'none',
+                  fontSize: 13, lineHeight: 1.65,
                 }}>
-                  {fmtTime(seg.start)}–{fmtTime(seg.end)}
-                </span>
-                <span style={{ color: 'rgba(29,29,31,0.92)' }}>{seg.text}</span>
-              </div>
-            ))}
-          </div>
+                  <span style={{
+                    fontSize: 10, color: 'rgba(29,29,31,0.5)',
+                    fontFamily: 'SF Mono, Monaco, monospace',
+                    flexShrink: 0, paddingTop: 2, minWidth: 90,
+                  }}>
+                    {fmtTime(seg.start)}–{fmtTime(seg.end)}
+                  </span>
+                  <span style={{ color: 'rgba(29,29,31,0.92)' }}>{seg.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* v60: Images grid */}
+          {transcriptImages.length > 0 && !isEditing && (
+            <div style={{
+              marginTop: 16,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: 10,
+            }}>
+              {transcriptImages.map((img) => (
+                <div key={img.id} style={{
+                  position: 'relative', borderRadius: 8, overflow: 'hidden',
+                  border: '0.5px solid rgba(0,0,0,0.06)',
+                }}>
+                  <img src={img.url} alt={img.caption || ''} style={{
+                    width: '100%', height: 100, objectFit: 'cover', display: 'block',
+                  }} />
+                  <button onClick={() => deleteImage(img.id)} style={{
+                    position: 'absolute', top: 4, right: 4,
+                    background: 'rgba(0,0,0,0.6)', color: '#fff',
+                    border: 'none', borderRadius: '50%',
+                    width: 22, height: 22, fontSize: 12,
+                    cursor: 'pointer', lineHeight: 1,
+                  }} title="Delete">×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
