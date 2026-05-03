@@ -17,10 +17,11 @@ interface PromoCode {
 }
 
 const PLAN_LABELS: Record<string, { name: string; price: string }> = {
-  day:         { name: 'Day Pass',    price: 'RM 8' },
-  student_pro: { name: 'Student PRO', price: 'RM 17' },
-  month:       { name: 'Monthly',     price: 'RM 25' },
-  year:        { name: 'Yearly',      price: 'RM 100' },
+  day:            { name: 'Day Pass',           price: 'RM 8' },
+  student_pro:    { name: 'Student PRO',        price: 'RM 17' },
+  month:          { name: 'Monthly',            price: 'RM 25' },
+  year:           { name: 'Yearly',             price: 'RM 100' },
+  upload_credits: { name: 'Upload Credits',     price: 'RM 5/each' },  // v62
 }
 
 export default function AdminPromoCodesPage() {
