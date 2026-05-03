@@ -14,9 +14,49 @@ export function BuyCreditsModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // v62: Promo code state
+  const [promoCode, setPromoCode] = useState('')
+  const [promoApplied, setPromoApplied] = useState<{ code: string; discount: number } | null>(null)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [validatingPromo, setValidatingPromo] = useState(false)
+
   if (!open) return null
 
-  const total = quantity * 5
+  const subtotal = quantity * 5
+  const discount = promoApplied ? subtotal * (promoApplied.discount / 100) : 0
+  const total = subtotal - discount
+
+  const validatePromo = async () => {
+    const code = promoCode.trim().toUpperCase()
+    if (!code) return
+    setValidatingPromo(true)
+    setPromoError(null)
+    try {
+      const res = await fetch('/api/checkout/upload-credits/validate-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        setPromoError(data.error || 'Invalid code')
+        setPromoApplied(null)
+      } else {
+        setPromoApplied({ code: data.code, discount: data.discountPercent })
+        setPromoError(null)
+      }
+    } catch (e: any) {
+      setPromoError(e.message || 'Network error')
+    } finally {
+      setValidatingPromo(false)
+    }
+  }
+
+  const removePromo = () => {
+    setPromoApplied(null)
+    setPromoCode('')
+    setPromoError(null)
+  }
 
   const checkout = async () => {
     setLoading(true)
@@ -25,7 +65,10 @@ export function BuyCreditsModal({
       const res = await fetch('/api/checkout/upload-credits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity }),
+        body: JSON.stringify({
+          quantity,
+          promoCode: promoApplied?.code || null,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -62,6 +105,7 @@ export function BuyCreditsModal({
           background: '#fff', borderRadius: 14, padding: 22,
           maxWidth: 420, width: '100%',
           border: '0.5px solid rgba(0,0,0,0.06)',
+          maxHeight: '90vh', overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -105,7 +149,7 @@ export function BuyCreditsModal({
 
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          marginBottom: 14, padding: '0 2px',
+          marginBottom: 12, padding: '0 2px',
         }}>
           <span style={{ fontSize: 12, color: 'rgba(29,29,31,0.7)' }}>
             {lang === 'bm' ? 'Kuantiti:' : 'Quantity:'}
@@ -133,10 +177,116 @@ export function BuyCreditsModal({
               color: '#1d1d1f', lineHeight: 1,
             }}
           >+</button>
-          <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 500, color: '#1d1d1f' }}>
-            {lang === 'bm' ? 'Jumlah: ' : 'Total: '}
-            <span style={{ color: '#993556' }}>RM{total}</span>
-          </span>
+        </div>
+
+        {/* v62: Promo code input */}
+        <div style={{ marginBottom: 12 }}>
+          {!promoApplied ? (
+            <>
+              <label style={{
+                fontSize: 11, color: 'rgba(29,29,31,0.6)',
+                display: 'block', marginBottom: 4, fontWeight: 500,
+              }}>
+                {lang === 'bm' ? 'Kod promo (pilihan)' : 'Promo code (optional)'}
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && validatePromo()}
+                  placeholder={lang === 'bm' ? 'cth. SAMA10' : 'e.g. SAMA10'}
+                  disabled={loading || validatingPromo}
+                  style={{
+                    flex: 1, padding: '8px 10px',
+                    border: '0.5px solid rgba(0,0,0,0.15)',
+                    borderRadius: 7, fontSize: 12,
+                    fontFamily: 'inherit',
+                    textTransform: 'uppercase',
+                  }}
+                />
+                <button
+                  onClick={validatePromo}
+                  disabled={!promoCode || validatingPromo || loading}
+                  style={{
+                    background: 'transparent',
+                    border: '0.5px solid rgba(212, 83, 126, 0.4)',
+                    color: '#993556',
+                    padding: '8px 12px', borderRadius: 7,
+                    fontSize: 12, fontWeight: 500,
+                    cursor: !promoCode || validatingPromo ? 'not-allowed' : 'pointer',
+                    opacity: !promoCode ? 0.4 : 1,
+                  }}
+                >
+                  {validatingPromo
+                    ? '...'
+                    : (lang === 'bm' ? 'Guna' : 'Apply')}
+                </button>
+              </div>
+              {promoError && (
+                <div style={{ fontSize: 11, color: '#b42929', marginTop: 4 }}>
+                  ⚠ {promoError}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{
+              background: '#e8f5e9',
+              border: '0.5px solid rgba(46, 125, 50, 0.3)',
+              borderRadius: 7,
+              padding: '8px 12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div style={{ fontSize: 12, color: '#1b5e20', fontWeight: 500 }}>
+                ✓ {promoApplied.code} — {promoApplied.discount}% {lang === 'bm' ? 'diskaun' : 'off'}
+              </div>
+              <button
+                onClick={removePromo}
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: '#1b5e20', cursor: 'pointer',
+                  fontSize: 11, padding: 0, fontWeight: 500,
+                  textDecoration: 'underline',
+                }}
+              >
+                {lang === 'bm' ? 'Buang' : 'Remove'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Total breakdown */}
+        <div style={{
+          background: 'rgba(0,0,0,0.02)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          marginBottom: 14,
+          fontSize: 12,
+        }}>
+          {promoApplied && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(29,29,31,0.65)', marginBottom: 3 }}>
+                <span>{lang === 'bm' ? 'Subtotal' : 'Subtotal'}</span>
+                <span>RM{subtotal.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#1b5e20', marginBottom: 6 }}>
+                <span>{lang === 'bm' ? 'Diskaun' : 'Discount'} ({promoApplied.discount}%)</span>
+                <span>−RM{discount.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            paddingTop: promoApplied ? 6 : 0,
+            borderTop: promoApplied ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
+          }}>
+            <span style={{ fontWeight: 500, color: '#1d1d1f' }}>
+              {lang === 'bm' ? 'Jumlah' : 'Total'}
+            </span>
+            <span style={{ fontWeight: 600, color: '#993556', fontSize: 14 }}>
+              RM{total.toFixed(2)}
+            </span>
+          </div>
         </div>
 
         {error && (
