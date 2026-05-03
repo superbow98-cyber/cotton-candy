@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { type Lecture, type Profile, PLANS } from '@/types'
 import { getRecordingTypeMeta } from '@/lib/recording-types'
 import { Icon } from '@/components/ui/Icon'
+import { BuyCreditsModal } from '@/components/lecture/BuyCreditsModal'
 
 // AI logo resolver — small brand chip
 function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
@@ -44,6 +45,7 @@ export default function DashboardHome() {
   const [audioUsage, setAudioUsage] = useState<{
     usedSeconds: number; capSeconds: number; percentUsed: number
   } | null>(null)
+  const [buyModalOpen, setBuyModalOpen] = useState(false)  // v61
 
   useEffect(() => {
     (async () => {
@@ -70,6 +72,16 @@ export default function DashboardHome() {
           if (usage) setAudioUsage(usage)
         }
       } catch {}
+
+      // v61: Check for credit purchase success
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('upload_credits_purchased')) {
+        const qty = params.get('upload_credits_purchased')
+        // Clean URL
+        window.history.replaceState({}, '', '/dashboard')
+        // Show toast/alert
+        alert(`✓ ${qty} ${(prof?.lang === 'bm' || lang === 'bm') ? 'kredit muat naik berjaya dibeli!' : 'upload credits purchased successfully!'}`)
+      }
     })()
   }, [])
 
@@ -112,16 +124,35 @@ export default function DashboardHome() {
             {dateStr}
           </div>
         </div>
-        <Link href="/dashboard/lectures/new" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '9px 16px', borderRadius: 9,
-          background: '#1d1d1f', color: '#fff',
-          fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em',
-          textDecoration: 'none',
-        }}>
-          <Icon.Plus size={14} />
-          {lang === 'bm' ? 'Kuliah baru' : 'New lecture'}
-        </Link>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* v61: Spot 1 — credits pill */}
+          {profile && profile.plan !== 'free' && (
+            <button
+              onClick={() => setBuyModalOpen(true)}
+              title={lang === 'bm' ? 'Kredit muat naik audio' : 'Audio upload credits'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 12px', borderRadius: 100,
+                background: 'rgba(212, 83, 126, 0.08)',
+                border: '0.5px solid rgba(212, 83, 126, 0.25)',
+                color: '#993556', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              🎙️ <span style={{ fontWeight: 600 }}>{profile.upload_credits || 0}</span>
+            </button>
+          )}
+          <Link href="/dashboard/lectures/new" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '9px 16px', borderRadius: 9,
+            background: '#1d1d1f', color: '#fff',
+            fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em',
+            textDecoration: 'none',
+          }}>
+            <Icon.Plus size={14} />
+            {lang === 'bm' ? 'Kuliah baru' : 'New lecture'}
+          </Link>
+        </div>
       </div>
 
       {/* STATS */}
@@ -151,7 +182,77 @@ export default function DashboardHome() {
           value={`${stats.notebooks} / ${plan.notebookLimit}`}
           sub={plan.name}
         />
+        {/* v61: Spot 2 — Upload credits stat card (paid users only) */}
+        {profile && profile.plan !== 'free' && (
+          <button
+            onClick={() => setBuyModalOpen(true)}
+            style={{
+              background: '#fff',
+              border: '0.5px solid rgba(212, 83, 126, 0.25)',
+              borderRadius: 12, padding: '14px 16px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              fontFamily: 'inherit',
+            }}
+          >
+            <div style={{
+              fontSize: 11.5, fontWeight: 500,
+              color: '#993556',
+              letterSpacing: '-0.005em', marginBottom: 6,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              🎙️ {lang === 'bm' ? 'Kredit muat naik' : 'Upload credits'}
+            </div>
+            <div style={{
+              fontSize: 24, fontWeight: 600, color: '#1d1d1f',
+              letterSpacing: '-0.025em', lineHeight: 1,
+            }}>
+              {profile.upload_credits || 0}
+            </div>
+            <div style={{ fontSize: 11, color: '#993556', marginTop: 4, fontWeight: 500 }}>
+              {(profile.upload_credits || 0) === 0
+                ? (lang === 'bm' ? '+ Beli kredit' : '+ Buy credits')
+                : (lang === 'bm' ? '+ Tambah lagi' : '+ Add more')}
+            </div>
+          </button>
+        )}
       </div>
+
+      {/* v61: Spot 3 — Soft entry card for upload (paid users only) */}
+      {profile && profile.plan !== 'free' && (
+        <Link
+          href="/dashboard/upload"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            background: '#FFFBFC',
+            border: '0.5px dashed rgba(212, 83, 126, 0.4)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            marginBottom: 14,
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ fontSize: 22 }}>🎙️</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#993556' }}>
+              {lang === 'bm' ? 'Muat naik rakaman lama' : 'Upload existing recording'}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.6)', marginTop: 2 }}>
+              {lang === 'bm'
+                ? `Ada audio file lama? Buat nota daripadanya (1 kredit · max 90 min)`
+                : `Got an old audio file? Get notes from it (1 credit · 90 min max)`}
+            </div>
+          </div>
+          <div style={{
+            fontSize: 11, color: '#993556', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span>{(profile.upload_credits || 0)} {lang === 'bm' ? 'kredit' : 'credits'}</span>
+            <Icon.ChevronRight size={11} />
+          </div>
+        </Link>
+      )}
 
       {/* RECENT LECTURES */}
       <div style={{
@@ -276,6 +377,9 @@ export default function DashboardHome() {
           accent="#f5f5f7"
         />
       </div>
+
+      {/* v61: Buy credits modal */}
+      <BuyCreditsModal open={buyModalOpen} onClose={() => setBuyModalOpen(false)} />
     </div>
   )
 }

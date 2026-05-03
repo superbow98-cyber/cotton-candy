@@ -20,6 +20,8 @@ export interface Profile {
   theme: Theme | null
   ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
   is_admin?: boolean
+  upload_credits?: number          // v61: current upload credit balance
+  upload_credits_lifetime?: number // v61: total ever purchased
   created_at: string
 }
 

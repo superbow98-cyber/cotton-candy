@@ -36,6 +36,49 @@ export async function POST(req: Request) {
       const userId = sess.metadata?.userId
       const plan = sess.metadata?.plan as Plan | undefined
       const promoCode = sess.metadata?.promo_code
+      const purchaseType = sess.metadata?.purchase_type
+
+      // v61: Upload credit purchase
+      if (userId && purchaseType === 'upload_credits') {
+        const quantity = parseInt(sess.metadata?.quantity || '0', 10)
+        const amountMyr = (sess.amount_total || 0) / 100
+
+        try {
+          // Get current balance
+          const { data: prof } = await admin
+            .from('profiles')
+            .select('upload_credits, upload_credits_lifetime')
+            .eq('id', userId)
+            .maybeSingle()
+
+          const currentBalance = prof?.upload_credits || 0
+          const lifetime = prof?.upload_credits_lifetime || 0
+          const newBalance = currentBalance + quantity
+          const newLifetime = lifetime + quantity
+
+          // Update profile
+          await admin.from('profiles').update({
+            upload_credits: newBalance,
+            upload_credits_lifetime: newLifetime,
+          }).eq('id', userId)
+
+          // Log transaction
+          await admin.from('upload_credit_transactions').insert({
+            user_id: userId,
+            type: 'purchase',
+            delta: quantity,
+            balance_after: newBalance,
+            amount_paid_myr: amountMyr,
+            stripe_session_id: sess.id,
+          })
+
+          console.log(`[webhook] credits granted user=${userId} +${quantity} → ${newBalance}`)
+        } catch (e) {
+          console.error('[webhook] upload_credits grant failed:', e)
+        }
+      }
+
+      // Existing plan upgrade
       if (userId && plan) await grant(userId, plan)
 
       // v50: Increment promo code usage
