@@ -126,36 +126,7 @@ export default function UploadAudioPage() {
   }
 
   if (isFree) {
-    return (
-      <div style={{ maxWidth: 560, margin: '40px auto', padding: '0 16px' }}>
-        <div style={{
-          background: '#fff',
-          border: '0.5px solid rgba(0,0,0,0.06)',
-          borderRadius: 14,
-          padding: '40px 24px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#1d1d1f', margin: 0, marginBottom: 6 }}>
-            {lang === 'bm' ? 'Pakej berbayar diperlukan' : 'Paid plan required'}
-          </h2>
-          <p style={{ fontSize: 13, color: 'rgba(29,29,31,0.6)', margin: 0, marginBottom: 18, lineHeight: 1.6 }}>
-            {lang === 'bm'
-              ? 'Ciri muat naik audio tersedia untuk pakej Lite, Student PRO, Pro, dan Max sahaja.'
-              : 'Upload feature available for Lite, Student PRO, Pro, and Max plans only.'}
-          </p>
-          <Link href="/#pricing" style={{
-            display: 'inline-block',
-            background: '#993556', color: '#fff',
-            padding: '9px 18px', borderRadius: 8,
-            fontSize: 13, fontWeight: 500,
-            textDecoration: 'none',
-          }}>
-            {lang === 'bm' ? 'Lihat pakej →' : 'View plans →'}
-          </Link>
-        </div>
-      </div>
-    )
+    // v62.2: Free tier now allowed — no lock screen
   }
 
   return (

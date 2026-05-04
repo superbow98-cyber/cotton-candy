@@ -126,7 +126,7 @@ export default function DashboardHome() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {/* v61: Spot 1 — credits pill */}
-          {profile && profile.plan !== 'free' && (
+          {profile && (
             <button
               onClick={() => setBuyModalOpen(true)}
               title={lang === 'bm' ? 'Kredit muat naik audio' : 'Audio upload credits'}
@@ -183,7 +183,7 @@ export default function DashboardHome() {
           sub={plan.name}
         />
         {/* v61: Spot 2 — Upload credits stat card (paid users only) */}
-        {profile && profile.plan !== 'free' && (
+        {profile && (
           <button
             onClick={() => setBuyModalOpen(true)}
             style={{
@@ -219,7 +219,7 @@ export default function DashboardHome() {
       </div>
 
       {/* v61: Spot 3 — Soft entry card for upload (paid users only) */}
-      {profile && profile.plan !== 'free' && (
+      {profile && (
         <Link
           href="/dashboard/upload"
           style={{

@@ -29,15 +29,7 @@ export async function POST(req: NextRequest) {
       .eq('id', user.id)
       .maybeSingle()
 
-    const isFree = !profile || profile.plan === 'free' ||
-      (profile.plan_expires_at && new Date(profile.plan_expires_at) < new Date())
-
-    if (isFree) {
-      return NextResponse.json({
-        error: 'Upload credits available for paid plans only. Please upgrade your plan first.',
-        requiresUpgrade: true,
-      }, { status: 402 })
-    }
+    // v62.2: Free tier now allowed to buy upload credits standalone
 
     if (!STRIPE_PRICE_ID_UPLOAD_CREDIT) {
       return NextResponse.json({

@@ -35,15 +35,7 @@ export async function POST(req: NextRequest) {
 
     if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-    // Free tier blocked
-    const isFree = profile.plan === 'free' ||
-      (profile.plan_expires_at && new Date(profile.plan_expires_at) < new Date())
-    if (isFree) {
-      return NextResponse.json({
-        error: 'Upload feature available for paid plans only.',
-        requiresUpgrade: true,
-      }, { status: 402 })
-    }
+    // v62.2: Free tier now allowed (credit-based, no plan requirement)
 
     if ((profile.upload_credits || 0) < 1) {
       return NextResponse.json({
