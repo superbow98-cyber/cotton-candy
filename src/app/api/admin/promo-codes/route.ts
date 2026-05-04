@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     if (applicable_plans.length === 0) {
       return NextResponse.json({ error: 'Select at least 1 applicable plan' }, { status: 400 })
     }
-    const validPlans = ['day', 'student_pro', 'month', 'year']
+    const validPlans = ['day', 'student_pro', 'month', 'year', 'upload_credits']
     if (!applicable_plans.every((p: string) => validPlans.includes(p))) {
       return NextResponse.json({ error: 'Invalid plan in applicable_plans' }, { status: 400 })
     }
