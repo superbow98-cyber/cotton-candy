@@ -16,6 +16,8 @@ const RECORDING_LANGUAGES = [
   { code: 'ta',   label_bm: 'தமிழ் (Whisper)',                  label_en: 'Tamil (Whisper)' },
 ]
 
+type Phase = 'idle' | 'init' | 'uploading' | 'submitting' | 'transcribing' | 'done' | 'failed'
+
 export default function UploadAudioPage() {
   const router = useRouter()
   const { lang } = useLang()
@@ -23,12 +25,13 @@ export default function UploadAudioPage() {
   const [file, setFile] = useState<File | null>(null)
   const [language, setLanguage] = useState('auto')
   const [title, setTitle] = useState('')
-  const [uploading, setUploading] = useState(false)
+  const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
-  const [phase, setPhase] = useState<'idle' | 'uploading' | 'transcribing' | 'done'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [statusMsg, setStatusMsg] = useState<string>('')
   const [buyModalOpen, setBuyModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pollAbortRef = useRef<{ stop: boolean }>({ stop: false })
 
   useEffect(() => {
     (async () => {
@@ -41,11 +44,11 @@ export default function UploadAudioPage() {
       const { data: prof } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle()
       if (prof) setProfile(prof as Profile)
     })()
+    return () => { pollAbortRef.current.stop = true }
   }, [router])
 
   const credits = profile?.upload_credits || 0
-  const isFree = profile?.plan === 'free' ||
-    (profile?.plan_expires_at && new Date(profile.plan_expires_at) < new Date())
+  const uploading = phase !== 'idle' && phase !== 'failed' && phase !== 'done'
 
   const onFilePick = (f: File | null) => {
     setError(null)
@@ -66,67 +69,161 @@ export default function UploadAudioPage() {
     if (f) onFilePick(f)
   }
 
-  const upload = async () => {
+  // Upload file to R2 with progress tracking
+  const uploadToR2 = (uploadUrl: string, fileToUpload: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', uploadUrl)
+      xhr.setRequestHeader('Content-Type', fileToUpload.type)
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100)
+          setProgress(pct)
+        }
+      })
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`R2 upload failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('Network error during upload'))
+      xhr.onabort = () => reject(new Error('Upload aborted'))
+
+      xhr.send(fileToUpload)
+    })
+  }
+
+  // Poll for transcription status
+  const pollStatus = async (jobId: string): Promise<{ lectureId: string }> => {
+    pollAbortRef.current.stop = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 60  // 60 × 5s = 5 minutes max
+
+    while (attempts < MAX_ATTEMPTS) {
+      if (pollAbortRef.current.stop) throw new Error('Cancelled')
+
+      await new Promise(r => setTimeout(r, 5000))
+      attempts++
+
+      try {
+        const res = await fetch(`/api/upload-audio/status/${jobId}`)
+        const data = await res.json()
+
+        if (!res.ok || data.ok === false) {
+          if (data.status === 'failed') {
+            throw new Error(data.error || 'Transcription failed')
+          }
+          // Soft fail — continue polling
+          continue
+        }
+
+        if (data.status === 'done') {
+          return { lectureId: data.lectureId }
+        }
+
+        // Update status message based on phase
+        const elapsed = attempts * 5
+        const remainingEstimate = Math.max(60 - elapsed, 10)
+        setStatusMsg(
+          lang === 'bm'
+            ? `🤖 AI sedang transkrip... (~${remainingEstimate}s lagi)`
+            : `🤖 AI transcribing... (~${remainingEstimate}s remaining)`
+        )
+      } catch (e: any) {
+        if (e.message === 'Cancelled') throw e
+        // Network blip — keep trying
+        console.warn('[poll] error:', e.message)
+      }
+    }
+
+    throw new Error('Timed out waiting for transcription')
+  }
+
+  const startUpload = async () => {
     if (!file || !profile) return
     if (credits < 1) {
       setError(lang === 'bm' ? 'Tiada kredit. Beli dahulu.' : 'No credits. Please buy first.')
       return
     }
 
-    setUploading(true)
     setError(null)
-    setPhase('uploading')
-    setProgress(10)
+    setProgress(0)
 
     try {
-      const form = new FormData()
-      form.append('file', file)
-      form.append('title', title || file.name)
-      form.append('language', language)
+      // PHASE 1: Initialize - get pre-signed URL
+      setPhase('init')
+      setStatusMsg(lang === 'bm' ? '🔗 Menyediakan upload...' : '🔗 Preparing upload...')
 
-      // Simulate progress (fetch doesn't expose upload progress easily)
-      const progressInterval = setInterval(() => {
-        setProgress((p) => Math.min(p + 5, 80))
-      }, 500)
-
-      setPhase('transcribing')
-      const res = await fetch('/api/upload-audio', {
+      const initRes = await fetch('/api/upload-audio/init', {
         method: 'POST',
-        body: form,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+          title: title || file.name,
+          language,
+        }),
       })
 
-      clearInterval(progressInterval)
-      const data = await res.json()
-
-      if (!res.ok) {
-        if (data.requiresUpgrade) {
-          setError(lang === 'bm'
-            ? 'Pakej berbayar diperlukan'
-            : 'Paid plan required')
-        } else {
-          setError(data.error || (lang === 'bm' ? 'Muat naik gagal' : 'Upload failed'))
-        }
-        setPhase('idle')
-        setUploading(false)
-        return
+      if (!initRes.ok) {
+        const data = await initRes.json()
+        throw new Error(data.error || 'Init failed')
       }
 
-      setProgress(100)
-      setPhase('done')
+      const { jobId, uploadUrl } = await initRes.json()
 
-      // Wait briefly then redirect to lecture page
+      // PHASE 2: Upload file directly to R2 (bypass Vercel!)
+      setPhase('uploading')
+      setStatusMsg(lang === 'bm' ? '📤 Memuat naik ke cloud...' : '📤 Uploading to cloud...')
+      await uploadToR2(uploadUrl, file)
+
+      // PHASE 3: Submit to Soniox
+      setPhase('submitting')
+      setProgress(100)
+      setStatusMsg(lang === 'bm' ? '⚡ Memulakan AI...' : '⚡ Starting AI...')
+
+      const submitRes = await fetch('/api/upload-audio/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      })
+
+      if (!submitRes.ok) {
+        const data = await submitRes.json()
+        throw new Error(data.error || 'Submit failed')
+      }
+
+      // PHASE 4: Poll status until done
+      setPhase('transcribing')
+      setStatusMsg(lang === 'bm' ? '🤖 AI sedang transkrip...' : '🤖 AI transcribing...')
+
+      const result = await pollStatus(jobId)
+
+      // PHASE 5: Done — redirect
+      setPhase('done')
+      setStatusMsg(lang === 'bm' ? '✓ Siap! Memuat halaman...' : '✓ Done! Loading lecture...')
+
       setTimeout(() => {
-        router.push(`/dashboard/lectures/${data.lectureId}`)
+        router.push(`/dashboard/lectures/${result.lectureId}`)
       }, 800)
     } catch (e: any) {
-      setError(e.message || 'Network error')
-      setPhase('idle')
-      setUploading(false)
+      setError(e.message || 'Upload failed')
+      setPhase('failed')
+      setProgress(0)
     }
   }
 
-  if (isFree) {
-    // v62.2: Free tier now allowed — no lock screen
+  const cancel = () => {
+    pollAbortRef.current.stop = true
+    setPhase('idle')
+    setProgress(0)
+    setStatusMsg('')
+    setError(null)
   }
 
   return (
@@ -174,7 +271,7 @@ export default function UploadAudioPage() {
           </button>
         </div>
 
-        {/* File picker / drop zone */}
+        {/* File picker */}
         <div
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
@@ -189,7 +286,6 @@ export default function UploadAudioPage() {
             background: '#FFFBFC',
             cursor: uploading ? 'wait' : 'pointer',
             marginBottom: 16,
-            transition: 'all 0.15s ease',
           }}
         >
           <input
@@ -207,9 +303,7 @@ export default function UploadAudioPage() {
                 {lang === 'bm' ? 'Lepas fail di sini atau klik' : 'Drop file here or click'}
               </div>
               <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.55)' }}>
-                {lang === 'bm'
-                  ? 'MP3, M4A, WAV, MP4 · Max 90 min · 200MB'
-                  : 'MP3, M4A, WAV, MP4 · Max 90 min · 200MB'}
+                MP3, M4A, WAV, MP4 · {lang === 'bm' ? 'Max 90 min · 200MB' : 'Max 90 min · 200MB'}
               </div>
             </>
           ) : (
@@ -241,7 +335,7 @@ export default function UploadAudioPage() {
           )}
         </div>
 
-        {/* Title input */}
+        {/* Title */}
         {file && !uploading && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: 11, color: 'rgba(29,29,31,0.6)', display: 'block', marginBottom: 4, fontWeight: 500 }}>
@@ -288,15 +382,19 @@ export default function UploadAudioPage() {
           </div>
         )}
 
-        {/* Progress bar */}
+        {/* Progress + status */}
         {uploading && (
           <div style={{ marginBottom: 14 }}>
             <div style={{
               fontSize: 12, color: '#993556', marginBottom: 6, fontWeight: 500,
             }}>
-              {phase === 'uploading' && (lang === 'bm' ? '📤 Memuat naik...' : '📤 Uploading...')}
-              {phase === 'transcribing' && (lang === 'bm' ? '🤖 AI menulis transkrip... (boleh ambil 1-3 minit)' : '🤖 AI transcribing... (may take 1-3 min)')}
-              {phase === 'done' && (lang === 'bm' ? '✓ Siap! Memuat halaman...' : '✓ Done! Loading...')}
+              {statusMsg || (
+                phase === 'init' ? (lang === 'bm' ? '🔗 Menyediakan...' : '🔗 Preparing...') :
+                phase === 'uploading' ? `📤 ${progress}%` :
+                phase === 'submitting' ? (lang === 'bm' ? '⚡ Memulakan AI...' : '⚡ Starting AI...') :
+                phase === 'transcribing' ? (lang === 'bm' ? '🤖 AI sedang transkrip...' : '🤖 AI transcribing...') :
+                phase === 'done' ? '✓ Done!' : ''
+              )}
             </div>
             <div style={{
               width: '100%', height: 4, background: 'rgba(212, 83, 126, 0.15)',
@@ -304,9 +402,22 @@ export default function UploadAudioPage() {
             }}>
               <div style={{
                 height: '100%', background: '#993556',
-                width: `${progress}%`, transition: 'width 0.3s ease',
+                width: phase === 'uploading' ? `${progress}%` :
+                       phase === 'init' ? '5%' :
+                       phase === 'submitting' ? '100%' :
+                       phase === 'transcribing' ? '100%' :
+                       phase === 'done' ? '100%' : '0%',
+                transition: 'width 0.3s ease',
+                animation: phase === 'transcribing' ? 'cc-pulse 2s ease-in-out infinite' : 'none',
               }} />
             </div>
+            {phase === 'transcribing' && (
+              <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)', marginTop: 6, textAlign: 'center' }}>
+                {lang === 'bm'
+                  ? 'Boleh ambil 1-3 minit untuk fail panjang. Jangan tutup tab.'
+                  : 'May take 1-3 min for long files. Keep this tab open.'}
+              </div>
+            )}
           </div>
         )}
 
@@ -319,10 +430,10 @@ export default function UploadAudioPage() {
           }}>⚠ {error}</div>
         )}
 
-        {/* Action button */}
-        {!uploading && (
+        {/* Actions */}
+        {!uploading ? (
           <button
-            onClick={upload}
+            onClick={startUpload}
             disabled={!file || credits < 1}
             style={{
               width: '100%',
@@ -340,7 +451,22 @@ export default function UploadAudioPage() {
                 ? 'Muat naik & transkrip (1 kredit)'
                 : 'Upload & transcribe (1 credit)')}
           </button>
-        )}
+        ) : phase !== 'done' ? (
+          <button
+            onClick={cancel}
+            style={{
+              width: '100%',
+              background: '#fff',
+              color: 'rgba(29,29,31,0.7)',
+              border: '0.5px solid rgba(0,0,0,0.15)',
+              borderRadius: 9,
+              padding: 11, fontSize: 12, fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'bm' ? 'Batal' : 'Cancel'}
+          </button>
+        ) : null}
 
         {credits < 1 && !uploading && (
           <button
@@ -368,6 +494,13 @@ export default function UploadAudioPage() {
       </div>
 
       <BuyCreditsModal open={buyModalOpen} onClose={() => setBuyModalOpen(false)} />
+
+      <style jsx global>{`
+        @keyframes cc-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   )
 }
