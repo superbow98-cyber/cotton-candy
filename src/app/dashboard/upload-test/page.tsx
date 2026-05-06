@@ -230,7 +230,6 @@ export default function UploadTestPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/*,video/mp4"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
           disabled={running}
           style={{ marginBottom: 12, fontSize: 12 }}
