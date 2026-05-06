@@ -25,6 +25,7 @@ function getClient(): S3Client {
       accessKeyId: R2_ACCESS_KEY_ID,
       secretAccessKey: R2_SECRET_ACCESS_KEY,
     },
+    forcePathStyle: true,  // Cloudflare R2 supports path-style; avoids subdomain DNS issues
   })
   return _client
 }
