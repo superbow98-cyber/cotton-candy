@@ -88,7 +88,7 @@ export default function UploadTestPage() {
         const uploadResult = await new Promise<{ status: number; statusText: string; headers: Record<string, string>; body: string }>((resolve, reject) => {
           const xhr = new XMLHttpRequest()
           xhr.open('PUT', uploadUrl)
-          // Don't set Content-Type — browser handles it, must match server signature
+          xhr.setRequestHeader('Content-Type', file.type)
 
           xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable) {

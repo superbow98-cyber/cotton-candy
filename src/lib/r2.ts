@@ -25,16 +25,16 @@ function getClient(): S3Client {
       accessKeyId: R2_ACCESS_KEY_ID,
       secretAccessKey: R2_SECRET_ACCESS_KEY,
     },
+    forcePathStyle: true,  // Cloudflare R2 supports path-style; avoids subdomain DNS issues
   })
   return _client
 }
 
 /**
  * Generate pre-signed URL for browser to upload file directly to R2
- * Note: We DON'T include ContentType in signature because:
- * 1. Browser auto-adds Content-Type header
- * 2. Including in signature requires client to send EXACT same value
- * 3. Easier to skip and let browser send whatever Content-Type
+ * @param key - R2 object key (e.g. "user-id/job-id.m4a")
+ * @param contentType - MIME type
+ * @param expiresInSeconds - URL validity (default 1 hour)
  */
 export async function getPresignedUploadUrl(
   key: string,
@@ -44,11 +44,9 @@ export async function getPresignedUploadUrl(
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: key,
-    // Do NOT include ContentType — let browser send whatever
+    ContentType: contentType,
   })
-  return getSignedUrl(getClient(), command, {
-    expiresIn: expiresInSeconds,
-  })
+  return getSignedUrl(getClient(), command, { expiresIn: expiresInSeconds })
 }
 
 /**
