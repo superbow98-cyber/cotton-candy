@@ -1,16 +1,17 @@
 // src/app/api/upload-audio/status/[jobId]/route.ts
-// v63: Polling endpoint - browser calls this every 5s to check job status
-// When Soniox done: creates lecture, deducts credit, deletes R2 file
+// v63.1: Polling endpoint + AI summarization trigger (same as live recording)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, adminClient } from '@/lib/supabase/server'
 import { deleteObject } from '@/lib/r2'
 import { logUsage } from '@/lib/usage-logger'
-import { calcSonioxCost } from '@/lib/usage-pricing'
+import { calcSonioxCost, calcLLMCost } from '@/lib/usage-pricing'
+import { callAI, buildSystemPrompt, type AIProvider } from '@/lib/ai-providers'
+import { getRecordingTypeMeta } from '@/lib/recording-types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 10  // 10s — enough for Soniox status check + lecture creation
+export const maxDuration = 60  // Increased from 10 to 60 for AI generation
 
 const SONIOX_API_KEY = process.env.SONIOX_API_KEY
 
@@ -137,9 +138,9 @@ export async function GET(
         })
       }
 
-      // Re-fetch profile to get current credit
+      // Re-fetch profile to get current credit + AI provider preference
       const { data: profile } = await admin.from('profiles')
-        .select('upload_credits')
+        .select('upload_credits, ai_provider')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -157,7 +158,7 @@ export async function GET(
         })
       }
 
-      // Create lecture
+      // Create lecture (transcript only first)
       const { data: lecture, error: lecErr } = await admin.from('lectures').insert({
         user_id: user.id,
         title: job.title,
@@ -166,6 +167,7 @@ export async function GET(
         lang: 'en',
         source: 'upload',
         status: 'finished',
+        recording_type: 'lecture',  // default; ai-summarize uses this
         started_at: new Date().toISOString(),
         ended_at: new Date().toISOString(),
         clean_segments: [{
@@ -176,7 +178,7 @@ export async function GET(
           language: detectedLang,
           created_at: new Date().toISOString(),
         }],
-      }).select('id').single()
+      }).select('id, title, recording_type').single()
 
       if (lecErr || !lecture) {
         console.error('[upload-status] lecture insert failed:', lecErr)
@@ -204,7 +206,100 @@ export async function GET(
         },
       })
 
-      // Mark job done
+      // Log Soniox cost
+      try {
+        const sxCost = calcSonioxCost('async', audioSeconds)
+        await logUsage({
+          userId: user.id,
+          service: 'soniox_async',
+          operation: 'transcribe',
+          units: audioSeconds,
+          unit_type: 'audio_seconds',
+          cost_usd: sxCost,
+          lecture_id: lecture.id,
+          metadata: { language: detectedLang, source: 'upload', job_id: jobId },
+        })
+      } catch (e) { console.warn('[upload-status] soniox cost log failed:', e) }
+
+      // v63.1: AI SUMMARIZE INLINE (same as live recording — generates summary + keywords + auto-title)
+      let aiGenerationSuccess = false
+      try {
+        console.log(`[upload-status] Starting AI summarize for lecture ${lecture.id}`)
+
+        const typeMeta = getRecordingTypeMeta(lecture.recording_type || 'lecture')
+        const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint)
+
+        const truncated = transcript.slice(0, 32000)
+        const userMessage = `Recording type: ${typeMeta.label.en}
+Duration: ${Math.round(audioSeconds / 60)} min
+
+NOTE: Generate inferredTitle from transcript content. Ignore any user metadata.
+
+RAW TRANSCRIPT:
+${truncated}`
+
+        const provider: AIProvider = (profile?.ai_provider as AIProvider) || 'auto'
+        const { result, usedProvider, fellBack } = await callAI(provider, userMessage, systemPrompt)
+
+        // Update lecture with AI artifacts
+        const userTitle = (lecture.title || '').trim()
+        const isDefaultTitle = !userTitle
+          || userTitle === 'Untitled'
+          || userTitle === 'New lecture'
+          || userTitle === 'New Lecture'
+          || userTitle.toLowerCase().startsWith('untitled')
+          || userTitle === job.filename
+          || userTitle === job.filename?.replace(/\.[^.]+$/, '')
+
+        const updatePayload: any = {
+          summary: JSON.stringify(result),
+          keywords: result.topics || [],
+          updated_at: new Date().toISOString(),
+        }
+
+        if (isDefaultTitle && result.inferredTitle && result.inferredTitle.length > 2) {
+          updatePayload.title = result.inferredTitle
+        }
+
+        await admin.from('lectures').update(updatePayload).eq('id', lecture.id)
+
+        aiGenerationSuccess = true
+        console.log(`[upload-status] AI summarize DONE for ${lecture.id} provider=${usedProvider} fellBack=${fellBack}`)
+
+        // Log LLM cost
+        try {
+          const inputChars = userMessage.length + systemPrompt.length
+          const outputChars = JSON.stringify(result).length
+          const inputTokens = Math.ceil(inputChars / 4)
+          const outputTokens = Math.ceil(outputChars / 4)
+
+          const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
+            'gemini-flash': 'gemini_flash',
+            'gemini-flash-lite': 'gemini_flash_lite',
+            'groq': 'gemini_flash',
+            'xai': 'xai_grok',
+          }
+          const serviceKey = serviceMap[usedProvider as string] || 'gemini_flash'
+          const llmCost = calcLLMCost(serviceKey as any, inputTokens, outputTokens)
+
+          await logUsage({
+            userId: user.id,
+            service: serviceKey,
+            operation: 'summarize',
+            units: inputTokens + outputTokens,
+            unit_type: 'tokens',
+            cost_usd: llmCost,
+            lecture_id: lecture.id,
+            metadata: { input_tokens: inputTokens, output_tokens: outputTokens, provider: usedProvider, fell_back: fellBack, source: 'upload' },
+          })
+        } catch (e) { console.warn('[upload-status] llm cost log failed:', e) }
+      } catch (aiErr: any) {
+        // AI generation failed — lecture still saved, user can manually regenerate
+        console.error('[upload-status] AI summarize failed:', aiErr)
+        aiGenerationSuccess = false
+      }
+
+      // Mark job done (regardless of AI success — transcript is saved)
       await admin.from('upload_jobs').update({
         status: 'done',
         lecture_id: lecture.id,
@@ -220,26 +315,7 @@ export async function GET(
         console.warn('[upload-status] R2 cleanup failed:', e)
       )
 
-      // Log usage cost
-      try {
-        const cost = calcSonioxCost('async', audioSeconds)
-        await logUsage({
-          userId: user.id,
-          service: 'soniox_async',
-          operation: 'transcribe',
-          units: audioSeconds,
-          unit_type: 'audio_seconds',
-          cost_usd: cost,
-          lecture_id: lecture.id,
-          metadata: {
-            language: detectedLang,
-            source: 'upload',
-            job_id: jobId,
-          },
-        })
-      } catch (e) { console.warn('[upload-status] cost log failed:', e) }
-
-      console.log(`[upload-status] DONE job=${jobId} lecture=${lecture.id} ${audioSeconds}s`)
+      console.log(`[upload-status] FULL DONE job=${jobId} lecture=${lecture.id} ${audioSeconds}s ai=${aiGenerationSuccess}`)
 
       return NextResponse.json({
         ok: true,
@@ -247,6 +323,7 @@ export async function GET(
         lectureId: lecture.id,
         audioSeconds,
         transcriptPreview: transcript.slice(0, 200),
+        aiGenerated: aiGenerationSuccess,
       })
     }
 
