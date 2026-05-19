@@ -1,32 +1,38 @@
 {
-  "name": "cotton-candy",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1042.0",
-    "@aws-sdk/s3-request-presigner": "^3.1042.0",
-    "@soniox/speech-to-text-web": "^1.0.0",
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.45.4",
-    "jspdf": "^2.5.2",
-    "next": "14.2.18",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "stripe": "^17.3.1"
-  },
-  "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.14",
-    "typescript": "^5.6.3"
-  }
+"name": "cotton-candy",
+"version": "0.1.0",
+"private": true,
+"scripts": {
+"dev": "next dev",
+"build": "next build",
+"start": "next start",
+"lint": "next lint"
+},
+"dependencies": {
+"@aws-sdk/client-s3": "^3.1042.0",
+"@aws-sdk/s3-request-presigner": "^3.1042.0",
+"@soniox/speech-to-text-web": "^1.0.0",
+"@supabase/ssr": "^0.5.2",
+"@supabase/supabase-js": "^2.45.4",
+    "@tiptap/extension-image": "^2.10.0",
+    "@tiptap/react": "^2.10.0",
+    "@tiptap/starter-kit": "^2.10.0",
+    "docx": "^9.0.0",
+    "file-saver": "^2.0.5",
+"jspdf": "^2.5.2",
+"next": "14.2.18",
+"react": "^18.3.1",
+"react-dom": "^18.3.1",
+"stripe": "^17.3.1"
+},
+"devDependencies": {
+    "@types/file-saver": "^2.0.7",
+"@types/node": "^22.9.0",
+"@types/react": "^18.3.12",
+"@types/react-dom": "^18.3.1",
+"autoprefixer": "^10.4.20",
+"postcss": "^8.4.49",
+"tailwindcss": "^3.4.14",
+"typescript": "^5.6.3"
+}
 }
