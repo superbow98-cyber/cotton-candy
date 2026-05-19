@@ -701,19 +701,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       const md = cleanMd.length > 20 ? cleanMd : rawMd
       const wordCount = md.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
       const keywords = extractKeywords(md, 12)
-
-      // [BUG-DEBUG] About to save to DB
-      console.log('[BUG-DEBUG] SAVE to DB:', {
-        finish,
-        lecture_id: lecture.id,
-        cleanSegments_count_being_saved: cleanSegments.length,
-        cleanSegments_summary: cleanSegments.map((s, i) => ({
-          idx: i, start: s.start, end: s.end, text_len: s.text?.length || 0,
-        })),
-        transcript_md_length: md.length,
-        duration_seconds: elapsed,
-      })
-
       const sb = createClient()
       await sb.from('lectures').update({
         transcript_md: md,
@@ -815,17 +802,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     // Stop audio capture and collect chunks
     const chunks = await stopAudioCapture()
 
-    // [BUG-DEBUG] Stop recording entry point
-    console.log('[BUG-DEBUG] STOP entry:', {
-      chunks_count: chunks.length,
-      total_size_bytes: chunks.reduce((s, c) => s + c.size, 0),
-      lines_count: lines.length,
-      cleanSegments_count: cleanSegments.length,
-      cleanSegments_last_end: cleanSegments.length > 0 ? Math.max(...cleanSegments.map(s => s.end)) : 'N/A',
-      elapsed,
-      accum: accumRef.current,
-    })
-
     // v57.3: Determine if this is RESUME (existing transcript) or FRESH
     const isResume = lines.length > 0
     if (!isResume) {
@@ -866,15 +842,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         }
         const combined = texts.join('\n').trim()
 
-        // [BUG-DEBUG] Transcribe results
-        console.log('[BUG-DEBUG] After transcribe:', {
-          chunks_processed: texts.length,
-          combined_length: combined.length,
-          combined_preview: combined.slice(0, 80),
-          will_append_segment: combined.length > 20,
-          isResume,
-        })
-
         if (combined.length > 20) {
           // v59: Save as a clean segment with timeline (start/end seconds)
           const sessionStart = accumRef.current - Math.max(0, elapsed - accumRef.current)
@@ -891,15 +858,7 @@ export default function LectureRecorder({ id }: { id: string }) {
             language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
             created_at: new Date().toISOString(),
           }
-          setCleanSegments(prev => {
-            const next = [...prev, newSegment]
-            console.log('[BUG-DEBUG] Segment APPENDED:', {
-              prev_count: prev.length,
-              new_count: next.length,
-              new_segment: { start: newSegment.start, end: newSegment.end, text_len: newSegment.text.length, source: newSegment.source },
-            })
-            return next
-          })
+          setCleanSegments(prev => [...prev, newSegment])
 
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
@@ -1659,31 +1618,16 @@ export default function LectureRecorder({ id }: { id: string }) {
               </span>
               {!isEditing && (
                 <>
-                  <button onClick={startEdit} style={{
-                    background: 'transparent', border: '0.5px solid rgba(212, 83, 126, 0.4)',
-                    color: '#993556', padding: '3px 10px', borderRadius: 6,
-                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                  }}>
-                    ✏️ {lang === 'bm' ? 'Edit' : 'Edit'}
+                  <button
+                    onClick={() => window.location.href = `/dashboard/lectures/${id}/document`}
+                    style={{
+                      background: '#993556', border: 'none',
+                      color: '#fff', padding: '4px 12px', borderRadius: 6,
+                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    📝 {lang === 'bm' ? 'Edit Dokumen' : 'Edit Document'}
                   </button>
-                  <label style={{
-                    background: 'transparent', border: '0.5px solid rgba(212, 83, 126, 0.4)',
-                    color: '#993556', padding: '3px 10px', borderRadius: 6,
-                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    opacity: transcriptImages.length >= 5 ? 0.4 : 1,
-                  }}>
-                    {uploadingImage
-                      ? (lang === 'bm' ? '⏳ Uploading...' : '⏳ Uploading...')
-                      : `🖼️ ${lang === 'bm' ? 'Tambah gambar' : 'Add image'} (${transcriptImages.length}/5)`}
-                    <input type="file" accept="image/*" style={{ display: 'none' }}
-                      disabled={uploadingImage || transcriptImages.length >= 5}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) uploadImage(file)
-                        e.target.value = ''
-                      }}
-                    />
-                  </label>
                 </>
               )}
               {isEditing && (
