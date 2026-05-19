@@ -12,6 +12,38 @@ const BRANCH_COLORS: Record<string, string> = {
 
 const COLOR_SEQUENCE = ['blue', 'green', 'pink', 'amber', 'purple', 'orange'] as const
 
+// Word-wrap helper: split text into max N lines, max M chars per line
+function wrapWords(text: string, maxCharsPerLine: number, maxLines: number = 2): string[] {
+  if (!text) return ['']
+  const words = text.trim().split(/\s+/)
+  const lines: string[] = []
+  let current = ''
+
+  for (const w of words) {
+    const tentative = current ? `${current} ${w}` : w
+    if (tentative.length <= maxCharsPerLine) {
+      current = tentative
+    } else {
+      if (current) lines.push(current)
+      current = w
+      if (lines.length >= maxLines - 1) break
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current)
+
+  // If still more text remained, append ellipsis to last line
+  const allText = lines.join(' ')
+  if (allText.length < text.length && lines.length === maxLines) {
+    const last = lines[maxLines - 1]
+    if (last.length + 1 <= maxCharsPerLine) {
+      lines[maxLines - 1] = last + '…'
+    } else {
+      lines[maxLines - 1] = last.slice(0, maxCharsPerLine - 1) + '…'
+    }
+  }
+  return lines.length > 0 ? lines : [text.slice(0, maxCharsPerLine)]
+}
+
 export default function MindMapView({ mindmap }: { mindmap: MindMap | null | undefined }) {
   if (!mindmap || !mindmap.branches || mindmap.branches.length === 0) {
     return (
@@ -35,23 +67,39 @@ export default function MindMapView({ mindmap }: { mindmap: MindMap | null | und
     color: b.color || COLOR_SEQUENCE[i % COLOR_SEQUENCE.length],
   }))
 
-  // Layout: distribute branches around center in a circle
-  const cx = 300
-  const cy = 180
-  const radius = 130
-  const branchWidth = 130
-  const branchHeight = 44
+  // FULL FRAME LAYOUT — bigger viewBox + larger branches + bigger radius
+  const VIEW_W = 900
+  const VIEW_H = 620
+  const cx = VIEW_W / 2
+  const cy = VIEW_H / 2
+  const radius = 230
+  const branchWidth = 200
+  const branchBaseHeight = 60
 
-  const positions = branches.map((branch, i) => {
-    const total = branches.length
-    // Distribute around circle, starting from left side, going clockwise
+  // Pre-wrap text for all branches to determine actual heights
+  const wrappedBranches = branches.map((b) => {
+    const titleLines = wrapWords(b.title || '', 22, 2)
+    const subtitleLines = b.subtitle ? wrapWords(b.subtitle, 26, 2) : []
+    return { ...b, titleLines, subtitleLines }
+  })
+
+  // Wrap center text too
+  const centerLines = wrapWords(mindmap.center || 'Main Topic', 14, 2)
+
+  // Compute branch positions (radial) with dynamic heights
+  const positions = wrappedBranches.map((branch, i) => {
+    const total = wrappedBranches.length
     const angle = -Math.PI + (i / total) * Math.PI * 2
     const x = cx + Math.cos(angle) * radius
-    const y = cy + Math.sin(angle) * radius * 0.85 // squash vertical to fit
+    const y = cy + Math.sin(angle) * radius * 0.82
+    // Dynamic height based on text lines
+    const totalLines = branch.titleLines.length + branch.subtitleLines.length
+    const dynamicHeight = Math.max(branchBaseHeight, totalLines * 18 + 20)
     return {
       ...branch,
       x,
       y,
+      height: dynamicHeight,
       colorHex: BRANCH_COLORS[branch.color] || BRANCH_COLORS.blue,
     }
   })
@@ -66,7 +114,7 @@ export default function MindMapView({ mindmap }: { mindmap: MindMap | null | und
       overflow: 'hidden',
     }}>
       <svg
-        viewBox="0 0 600 360"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
         preserveAspectRatio="xMidYMid meet"
       >
@@ -79,73 +127,87 @@ export default function MindMapView({ mindmap }: { mindmap: MindMap | null | und
             x2={pos.x}
             y2={pos.y}
             stroke={pos.colorHex}
-            strokeWidth="1.5"
-            opacity="0.4"
+            strokeWidth="2"
+            opacity="0.35"
           />
         ))}
 
-        {/* Center node */}
-        <circle cx={cx} cy={cy} r="50" fill="#1d1d1f" />
+        {/* Center node — LARGER */}
+        <circle cx={cx} cy={cy} r="80" fill="#1d1d1f" />
+        {centerLines.map((line, i) => {
+          const lineOffset = (i - (centerLines.length - 1) / 2) * 18
+          return (
+            <text
+              key={`center-${i}`}
+              x={cx}
+              y={cy + lineOffset + 4}
+              textAnchor="middle"
+              fill="#fff"
+              style={{ fontFamily: '-apple-system, sans-serif', fontSize: 15, fontWeight: 700 }}
+            >
+              {line}
+            </text>
+          )
+        })}
         <text
           x={cx}
-          y={cy - 4}
-          textAnchor="middle"
-          fill="#fff"
-          style={{ fontFamily: '-apple-system, sans-serif', fontSize: 13, fontWeight: 600 }}
-        >
-          {truncate(mindmap.center, 14)}
-        </text>
-        <text
-          x={cx}
-          y={cy + 12}
+          y={cy + centerLines.length * 9 + 18}
           textAnchor="middle"
           fill="rgba(255,255,255,0.6)"
-          style={{ fontFamily: '-apple-system, sans-serif', fontSize: 9 }}
+          style={{ fontFamily: '-apple-system, sans-serif', fontSize: 10 }}
         >
           Main Topic
         </text>
 
         {/* Branches */}
-        {positions.map((pos, i) => (
-          <g key={`branch-${i}`}>
-            <rect
-              x={pos.x - branchWidth / 2}
-              y={pos.y - branchHeight / 2}
-              width={branchWidth}
-              height={branchHeight}
-              rx="10"
-              fill="#fff"
-              stroke={pos.colorHex}
-              strokeWidth="1"
-            />
-            <text
-              x={pos.x}
-              y={pos.subtitle ? pos.y - 3 : pos.y + 3}
-              textAnchor="middle"
-              fill="#1d1d1f"
-              style={{ fontFamily: '-apple-system, sans-serif', fontSize: 11, fontWeight: 600 }}
-            >
-              {truncate(pos.title, 18)}
-            </text>
-            {pos.subtitle && (
-              <text
-                x={pos.x}
-                y={pos.y + 11}
-                textAnchor="middle"
-                fill="#6B6B70"
-                style={{ fontFamily: '-apple-system, sans-serif', fontSize: 9 }}
-              >
-                {truncate(pos.subtitle, 22)}
-              </text>
-            )}
-          </g>
-        ))}
+        {positions.map((pos, i) => {
+          const totalLines = pos.titleLines.length + pos.subtitleLines.length
+          const lineSpacing = 16
+          const startY = pos.y - ((totalLines - 1) * lineSpacing) / 2
+
+          return (
+            <g key={`branch-${i}`}>
+              {/* Branch box */}
+              <rect
+                x={pos.x - branchWidth / 2}
+                y={pos.y - pos.height / 2}
+                width={branchWidth}
+                height={pos.height}
+                rx="12"
+                fill="#fff"
+                stroke={pos.colorHex}
+                strokeWidth="2"
+              />
+              {/* Title lines */}
+              {pos.titleLines.map((line, ti) => (
+                <text
+                  key={`t-${i}-${ti}`}
+                  x={pos.x}
+                  y={startY + ti * lineSpacing + 4}
+                  textAnchor="middle"
+                  fill="#1d1d1f"
+                  style={{ fontFamily: '-apple-system, sans-serif', fontSize: 13, fontWeight: 600 }}
+                >
+                  {line}
+                </text>
+              ))}
+              {/* Subtitle lines */}
+              {pos.subtitleLines.map((line, si) => (
+                <text
+                  key={`s-${i}-${si}`}
+                  x={pos.x}
+                  y={startY + (pos.titleLines.length + si) * lineSpacing + 4}
+                  textAnchor="middle"
+                  fill="#6B6B70"
+                  style={{ fontFamily: '-apple-system, sans-serif', fontSize: 10 }}
+                >
+                  {line}
+                </text>
+              ))}
+            </g>
+          )
+        })}
       </svg>
     </div>
   )
-}
-
-function truncate(text: string, max: number): string {
-  if (!text) return ''
-  return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
