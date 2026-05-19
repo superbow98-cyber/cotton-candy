@@ -1,10 +1,10 @@
 import { Suspense } from 'react'
-import LectureRecorder from '@/components/lecture/LectureRecorder'
+import LectureDocument from '@/components/lecture/LectureDocument'
 
-export default function LecturePage({ params }: { params: { id: string } }) {
+export default function LectureDocumentPage({ params }: { params: { id: string } }) {
   return (
     <Suspense fallback={null}>
-      <LectureRecorder id={params.id} />
+      <LectureDocument id={params.id} />
     </Suspense>
   )
 }
