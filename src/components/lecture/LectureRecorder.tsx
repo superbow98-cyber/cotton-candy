@@ -701,6 +701,19 @@ export default function LectureRecorder({ id }: { id: string }) {
       const md = cleanMd.length > 20 ? cleanMd : rawMd
       const wordCount = md.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
       const keywords = extractKeywords(md, 12)
+
+      // [BUG-DEBUG] About to save to DB
+      console.log('[BUG-DEBUG] SAVE to DB:', {
+        finish,
+        lecture_id: lecture.id,
+        cleanSegments_count_being_saved: cleanSegments.length,
+        cleanSegments_summary: cleanSegments.map((s, i) => ({
+          idx: i, start: s.start, end: s.end, text_len: s.text?.length || 0,
+        })),
+        transcript_md_length: md.length,
+        duration_seconds: elapsed,
+      })
+
       const sb = createClient()
       await sb.from('lectures').update({
         transcript_md: md,
@@ -802,6 +815,17 @@ export default function LectureRecorder({ id }: { id: string }) {
     // Stop audio capture and collect chunks
     const chunks = await stopAudioCapture()
 
+    // [BUG-DEBUG] Stop recording entry point
+    console.log('[BUG-DEBUG] STOP entry:', {
+      chunks_count: chunks.length,
+      total_size_bytes: chunks.reduce((s, c) => s + c.size, 0),
+      lines_count: lines.length,
+      cleanSegments_count: cleanSegments.length,
+      cleanSegments_last_end: cleanSegments.length > 0 ? Math.max(...cleanSegments.map(s => s.end)) : 'N/A',
+      elapsed,
+      accum: accumRef.current,
+    })
+
     // v57.3: Determine if this is RESUME (existing transcript) or FRESH
     const isResume = lines.length > 0
     if (!isResume) {
@@ -842,6 +866,15 @@ export default function LectureRecorder({ id }: { id: string }) {
         }
         const combined = texts.join('\n').trim()
 
+        // [BUG-DEBUG] Transcribe results
+        console.log('[BUG-DEBUG] After transcribe:', {
+          chunks_processed: texts.length,
+          combined_length: combined.length,
+          combined_preview: combined.slice(0, 80),
+          will_append_segment: combined.length > 20,
+          isResume,
+        })
+
         if (combined.length > 20) {
           // v59: Save as a clean segment with timeline (start/end seconds)
           const sessionStart = accumRef.current - Math.max(0, elapsed - accumRef.current)
@@ -858,7 +891,15 @@ export default function LectureRecorder({ id }: { id: string }) {
             language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
             created_at: new Date().toISOString(),
           }
-          setCleanSegments(prev => [...prev, newSegment])
+          setCleanSegments(prev => {
+            const next = [...prev, newSegment]
+            console.log('[BUG-DEBUG] Segment APPENDED:', {
+              prev_count: prev.length,
+              new_count: next.length,
+              new_segment: { start: newSegment.start, end: newSegment.end, text_len: newSegment.text.length, source: newSegment.source },
+            })
+            return next
+          })
 
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
