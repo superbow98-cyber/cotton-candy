@@ -253,18 +253,39 @@ export async function lectureToPdf(
     y += 8
   }
 
-  // MIND MAP — render as visual radial diagram (like the lecture page)
+  // MIND MAP — render as visual radial diagram (full frame, word-wrapped)
   if (l.mindmap_json) {
     heading('Mind map')
     const center = stripEmojis(l.mindmap_json.center || title)
     const branches = (l.mindmap_json.branches || []).slice(0, 8)
 
+    // Word-wrap helper (local to PDF)
+    const wrapWords = (text: string, maxChars: number, maxLines: number): string[] => {
+      if (!text) return ['']
+      const words = text.split(/\s+/)
+      const lines: string[] = []
+      let cur = ''
+      for (const w of words) {
+        if (!cur) {
+          cur = w
+        } else if ((cur + ' ' + w).length <= maxChars) {
+          cur += ' ' + w
+        } else {
+          lines.push(cur)
+          cur = w
+          if (lines.length >= maxLines) break
+        }
+      }
+      if (cur && lines.length < maxLines) lines.push(cur)
+      return lines.length > 0 ? lines : ['']
+    }
+
     if (branches.length > 0) {
-      // Reserve space for the diagram
-      const diagramH = 280
+      // MUCH BIGGER FRAME — full page width, taller for word-wrapped text
+      const diagramH = 420  // was 280 (50% taller)
       ensure(diagramH + 20)
 
-      // Diagram bounds
+      // Diagram bounds (use full page width)
       const dW = W - 2 * M
       const dH = diagramH
       const dX = M
@@ -274,14 +295,14 @@ export async function lectureToPdf(
       doc.setFillColor(250, 251, 253)
       doc.setDrawColor(230, 232, 238)
       doc.setLineWidth(0.5)
-      doc.roundedRect(dX, dY, dW, dH, 8, 8, 'FD')
+      doc.roundedRect(dX, dY, dW, dH, 10, 10, 'FD')
 
       // Center coordinates (within diagram)
       const cx = dX + dW / 2
       const cy = dY + dH / 2
-      const radius = Math.min(dW, dH) * 0.32
-      const branchW = Math.min(110, dW / 4)
-      const branchH = 36
+      const radius = Math.min(dW, dH) * 0.34  // larger radius
+      const branchW = Math.min(170, dW / 3.2)  // was 110 — much wider
+      // branchH is dynamic — computed per branch below
 
       // Branch colors palette (matches MindMapView)
       const BRANCH_COLORS: [number, number, number][] = [
@@ -293,25 +314,27 @@ export async function lectureToPdf(
         [255, 112, 67],   // orange
       ]
 
-      // Compute branch positions (radial)
+      // Compute positions + word-wrap text for each branch
       const positions = branches.map((b, i) => {
         const total = branches.length
         const angle = -Math.PI + (i / total) * Math.PI * 2
         const bx = cx + Math.cos(angle) * radius
-        const by = cy + Math.sin(angle) * radius * 0.78
+        const by = cy + Math.sin(angle) * radius * 0.82
+        const titleLines = wrapWords(stripEmojis(b.title), 24, 2)
+        const subLines = b.subtitle ? wrapWords(stripEmojis(b.subtitle), 28, 2) : []
         return {
           ...b,
           x: bx,
           y: by,
+          titleLines,
+          subLines,
           rgb: BRANCH_COLORS[i % BRANCH_COLORS.length],
         }
       })
 
       // Draw connection lines (center → each branch)
       for (const pos of positions) {
-        doc.setDrawColor(pos.rgb[0], pos.rgb[1], pos.rgb[2])
-        doc.setLineWidth(0.8)
-        // dotted/light opacity simulated by lighter color
+        doc.setLineWidth(1)
         doc.setDrawColor(
           Math.round(pos.rgb[0] * 0.6 + 255 * 0.4),
           Math.round(pos.rgb[1] * 0.6 + 255 * 0.4),
@@ -320,56 +343,71 @@ export async function lectureToPdf(
         doc.line(cx, cy, pos.x, pos.y)
       }
 
-      // Draw center node (black circle)
+      // Center node — bigger to fit wrapped center text
+      const centerLines = wrapWords(center, 16, 2)
+      const centerRadius = 48
       doc.setFillColor(29, 29, 31)
-      doc.circle(cx, cy, 35, 'F')
+      doc.circle(cx, cy, centerRadius, 'F')
 
-      // Center text (white)
+      // Center text (white) — supports 2 lines
       doc.setTextColor(255, 255, 255)
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(10)
-      const centerText = stripEmojis(center).slice(0, 16)
-      const centerW = doc.getTextWidth(centerText)
-      doc.text(centerText, cx - centerW / 2, cy - 1)
+      doc.setFontSize(11)
+      const lineHeight = 13
+      const startCenterY = cy - ((centerLines.length - 1) * lineHeight) / 2 - 2
+      centerLines.forEach((line, i) => {
+        const w = doc.getTextWidth(line)
+        doc.text(line, cx - w / 2, startCenterY + i * lineHeight)
+      })
+
+      // "Main Topic" label below center text
       doc.setFontSize(7)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(255, 255, 255)
       const subtitle = 'Main Topic'
       const subW = doc.getTextWidth(subtitle)
-      doc.text(subtitle, cx - subW / 2, cy + 9)
+      const subY = startCenterY + centerLines.length * lineHeight + 4
+      doc.text(subtitle, cx - subW / 2, subY)
 
-      // Draw branches (rounded rects with text)
+      // Draw branches (dynamic height based on text lines)
       for (const pos of positions) {
+        const totalLines = pos.titleLines.length + pos.subLines.length
+        const dynH = Math.max(40, 18 + totalLines * 12)
+
         // Branch rect (white fill, color border)
         doc.setFillColor(255, 255, 255)
         doc.setDrawColor(pos.rgb[0], pos.rgb[1], pos.rgb[2])
-        doc.setLineWidth(0.8)
+        doc.setLineWidth(1)
         doc.roundedRect(
           pos.x - branchW / 2,
-          pos.y - branchH / 2,
+          pos.y - dynH / 2,
           branchW,
-          branchH,
-          6, 6,
+          dynH,
+          8, 8,
           'FD'
         )
 
-        // Branch title
+        // Title lines
         doc.setTextColor(29, 29, 31)
         doc.setFont('helvetica', 'bold')
-        doc.setFontSize(8.5)
-        const titleText = stripEmojis(pos.title).slice(0, 22)
-        const tw = doc.getTextWidth(titleText)
-        const titleY = pos.subtitle ? pos.y - 2 : pos.y + 2
-        doc.text(titleText, pos.x - tw / 2, titleY)
+        doc.setFontSize(9)
+        const titleLineH = 11
+        const startTitleY = pos.y - ((totalLines - 1) * titleLineH) / 2 + 3
+        pos.titleLines.forEach((line, lineIdx) => {
+          const tw = doc.getTextWidth(line)
+          doc.text(line, pos.x - tw / 2, startTitleY + lineIdx * titleLineH)
+        })
 
-        // Branch subtitle (if any)
-        if (pos.subtitle) {
+        // Subtitle lines (below title)
+        if (pos.subLines.length > 0) {
           doc.setFont('helvetica', 'normal')
-          doc.setFontSize(7)
+          doc.setFontSize(7.5)
           doc.setTextColor(107, 107, 112)
-          const subText = stripEmojis(pos.subtitle).slice(0, 26)
-          const sw = doc.getTextWidth(subText)
-          doc.text(subText, pos.x - sw / 2, pos.y + 8)
+          const startSubY = startTitleY + pos.titleLines.length * titleLineH
+          pos.subLines.forEach((line, lineIdx) => {
+            const sw = doc.getTextWidth(line)
+            doc.text(line, pos.x - sw / 2, startSubY + lineIdx * 10)
+          })
         }
       }
 
