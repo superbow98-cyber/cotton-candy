@@ -14,11 +14,6 @@
     "@soniox/speech-to-text-web": "^1.0.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
-    "@tiptap/extension-image": "^2.10.0",
-    "@tiptap/react": "^2.10.0",
-    "@tiptap/starter-kit": "^2.10.0",
-    "docx": "^9.0.0",
-    "file-saver": "^2.0.5",
     "jspdf": "^2.5.2",
     "next": "14.2.18",
     "react": "^18.3.1",
@@ -26,7 +21,6 @@
     "stripe": "^17.3.1"
   },
   "devDependencies": {
-    "@types/file-saver": "^2.0.7",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
