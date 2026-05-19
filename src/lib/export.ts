@@ -253,30 +253,133 @@ export async function lectureToPdf(
     y += 8
   }
 
-  // MIND MAP — render as nested indent
+  // MIND MAP — render as visual radial diagram (like the lecture page)
   if (l.mindmap_json) {
     heading('Mind map')
     const center = stripEmojis(l.mindmap_json.center || title)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    const cls = wrap(`◆ ${center}`, W - 2 * M, 12)
-    for (const line of cls) { ensure(16); doc.text(line, M, y); y += 16 }
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(11)
-    for (const branch of l.mindmap_json.branches || []) {
-      ensure(16)
-      const bls = wrap(`  → ${stripEmojis(branch.title)}`, W - 2 * M - 16, 11)
-      for (const line of bls) { ensure(15); doc.text(line, M + 12, y); y += 15 }
-      if (branch.subtitle) {
-        doc.setTextColor(...gray)
-        doc.setFont('helvetica', 'italic')
-        const sls = wrap(`     ${stripEmojis(branch.subtitle)}`, W - 2 * M - 32, 10)
-        for (const line of sls) { ensure(14); doc.text(line, M + 24, y); y += 14 }
-        doc.setTextColor(...dark)
-        doc.setFont('helvetica', 'normal')
+    const branches = (l.mindmap_json.branches || []).slice(0, 8)
+
+    if (branches.length > 0) {
+      // Reserve space for the diagram
+      const diagramH = 280
+      ensure(diagramH + 20)
+
+      // Diagram bounds
+      const dW = W - 2 * M
+      const dH = diagramH
+      const dX = M
+      const dY = y
+
+      // Background card
+      doc.setFillColor(250, 251, 253)
+      doc.setDrawColor(230, 232, 238)
+      doc.setLineWidth(0.5)
+      doc.roundedRect(dX, dY, dW, dH, 8, 8, 'FD')
+
+      // Center coordinates (within diagram)
+      const cx = dX + dW / 2
+      const cy = dY + dH / 2
+      const radius = Math.min(dW, dH) * 0.32
+      const branchW = Math.min(110, dW / 4)
+      const branchH = 36
+
+      // Branch colors palette (matches MindMapView)
+      const BRANCH_COLORS: [number, number, number][] = [
+        [90, 143, 245],   // blue
+        [52, 168, 83],    // green
+        [248, 180, 217],  // pink
+        [255, 182, 39],   // amber
+        [200, 168, 233],  // purple
+        [255, 112, 67],   // orange
+      ]
+
+      // Compute branch positions (radial)
+      const positions = branches.map((b, i) => {
+        const total = branches.length
+        const angle = -Math.PI + (i / total) * Math.PI * 2
+        const bx = cx + Math.cos(angle) * radius
+        const by = cy + Math.sin(angle) * radius * 0.78
+        return {
+          ...b,
+          x: bx,
+          y: by,
+          rgb: BRANCH_COLORS[i % BRANCH_COLORS.length],
+        }
+      })
+
+      // Draw connection lines (center → each branch)
+      for (const pos of positions) {
+        doc.setDrawColor(pos.rgb[0], pos.rgb[1], pos.rgb[2])
+        doc.setLineWidth(0.8)
+        // dotted/light opacity simulated by lighter color
+        doc.setDrawColor(
+          Math.round(pos.rgb[0] * 0.6 + 255 * 0.4),
+          Math.round(pos.rgb[1] * 0.6 + 255 * 0.4),
+          Math.round(pos.rgb[2] * 0.6 + 255 * 0.4),
+        )
+        doc.line(cx, cy, pos.x, pos.y)
       }
+
+      // Draw center node (black circle)
+      doc.setFillColor(29, 29, 31)
+      doc.circle(cx, cy, 35, 'F')
+
+      // Center text (white)
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      const centerText = stripEmojis(center).slice(0, 16)
+      const centerW = doc.getTextWidth(centerText)
+      doc.text(centerText, cx - centerW / 2, cy - 1)
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(255, 255, 255)
+      const subtitle = 'Main Topic'
+      const subW = doc.getTextWidth(subtitle)
+      doc.text(subtitle, cx - subW / 2, cy + 9)
+
+      // Draw branches (rounded rects with text)
+      for (const pos of positions) {
+        // Branch rect (white fill, color border)
+        doc.setFillColor(255, 255, 255)
+        doc.setDrawColor(pos.rgb[0], pos.rgb[1], pos.rgb[2])
+        doc.setLineWidth(0.8)
+        doc.roundedRect(
+          pos.x - branchW / 2,
+          pos.y - branchH / 2,
+          branchW,
+          branchH,
+          6, 6,
+          'FD'
+        )
+
+        // Branch title
+        doc.setTextColor(29, 29, 31)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8.5)
+        const titleText = stripEmojis(pos.title).slice(0, 22)
+        const tw = doc.getTextWidth(titleText)
+        const titleY = pos.subtitle ? pos.y - 2 : pos.y + 2
+        doc.text(titleText, pos.x - tw / 2, titleY)
+
+        // Branch subtitle (if any)
+        if (pos.subtitle) {
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(7)
+          doc.setTextColor(107, 107, 112)
+          const subText = stripEmojis(pos.subtitle).slice(0, 26)
+          const sw = doc.getTextWidth(subText)
+          doc.text(subText, pos.x - sw / 2, pos.y + 8)
+        }
+      }
+
+      // Reset
+      doc.setTextColor(...dark)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(11)
+
+      y = dY + dH + 12
     }
-    y += 10
   }
 
   // CLEAN TRANSCRIPT
