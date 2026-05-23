@@ -1,5 +1,5 @@
 // src/app/api/transcribe/route.ts
-// v53 — Hybrid: Soniox for BM/Rojak (best accuracy), Whisper Turbo for EN/zh/ta (fast & cheap)
+// v57 — 3-engine: Deepgram (primary BM) → Soniox (fallback BM) → Whisper (EN/last resort)
 // Audio NEVER persisted.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,7 +16,6 @@ export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
 const MODEL_TURBO = 'whisper-large-v3-turbo'
-const MODEL_LARGE = 'whisper-large-v3'  // v56.2: better for BM/Rojak
 
 const VALID_LANGS = ['ms', 'en', 'zh', 'ta'] as const
 
@@ -58,103 +57,110 @@ export async function POST(req: NextRequest) {
     }
 
     if (audio.size > 25 * 1024 * 1024) {
-      return NextResponse.json({
-        error: 'Audio too large.',
-      }, { status: 413 })
+      return NextResponse.json({ error: 'Audio too large.' }, { status: 413 })
     }
 
     const langParam = (form.get('language') as string | null)?.toLowerCase()
     const useLanguageHint = langParam && (VALID_LANGS as readonly string[]).includes(langParam)
 
-    // v56.6: Soniox for BM/Rojak (best Malaysian accuracy + code-switching)
-    //        Whisper Turbo for EN/zh/ta (fast)
     const isMalay = useLanguageHint && langParam === 'ms'
     const isAutoRojak = !useLanguageHint
-    const useSoniox = isMalay || isAutoRojak
+    const useBmEngine = isMalay || isAutoRojak
 
-    if (useSoniox) {
-      // ===== SONIOX PATH =====
-      console.log(`[transcribe] v53 Soniox | language hint: ${isMalay ? 'ms' : 'auto-rojak'}`)
+    const audioMime = (audio as any).type || 'audio/webm'
+    const audioExt = audioMime.includes('mp4') ? 'mp4'
+                   : audioMime.includes('mpeg') ? 'mp3'
+                   : audioMime.includes('ogg') ? 'ogg'
+                   : audioMime.includes('wav') ? 'wav'
+                   : 'webm'
 
-      const languageHints = isMalay ? ['ms'] : ['ms', 'en']
-      const context = isMalay
-        ? "Malaysian speaker. Bahasa Melayu rasmi atau formal. " +
-          "Topics: pendidikan, pelajaran, pembahagian sel, fotosintesis, persamaan, " +
-          "perlembagaan, kemerdekaan, ekonomi, kerajaan, pembangunan, teknologi."
-        : "Malaysian student or professional. Natural rojak (BM + English code-switching). " +
-          "Common phrases: 'okay so kita', 'lepas tu', 'macam ni', 'sebab tu'. " +
-          "Topics: lectures, education, technology, business, science."
-
+    // Helper: update usage + log
+    const updateUsage = async (audioSeconds: number, provider: string, detectedLang: string) => {
+      if (audioSeconds <= 0) return
+      await sb.from('profiles')
+        .update({ audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds })
+        .eq('id', user.id)
       try {
-        // v56.9: Detect actual audio mime/extension (iOS Safari may record mp4, not webm)
-        const audioMime = (audio as any).type || 'audio/webm'
-        const ext = audioMime.includes('mp4') ? 'mp4'
-                  : audioMime.includes('mpeg') ? 'mp3'
-                  : audioMime.includes('ogg') ? 'ogg'
-                  : audioMime.includes('wav') ? 'wav'
-                  : 'webm'
-        const filename = `audio.${ext}`
-        console.log(`[transcribe] v56.9 Soniox uploading audio.${ext} (${audioMime}, ${audio.size} bytes)`)
-
-        const result = await transcribeWithSoniox(audio, filename, {
-          languageHints,
-          context,
+        const cost = provider === 'deepgram'
+          ? audioSeconds * 0.0000983
+          : provider === 'soniox'
+            ? calcSonioxCost('async', audioSeconds)
+            : calcWhisperCost('groq_whisper_turbo' as any, audioSeconds)
+        await logUsage({
+          userId: user.id,
+          service: 'soniox_async' as any,
+          operation: 'transcribe',
+          units: audioSeconds,
+          unit_type: 'audio_seconds',
+          cost_usd: cost,
+          metadata: { language: detectedLang, user_picked: useLanguageHint ? langParam : 'auto', provider },
         })
+      } catch (logErr) {
+        console.error('[transcribe] usage log failed (non-fatal):', logErr)
+      }
+    }
 
-        console.log(`[transcribe] v56.7 Soniox done. detected: ${result.language}, chars: ${result.text.length}, tokens: ${result.tokens.length}`)
-
-        // v56.7: If Soniox returns empty/very short, fall through to Whisper
-        if (!result.text || result.text.trim().length < 3) {
-          console.warn(`[transcribe] Soniox returned empty/short result, falling back to Whisper`)
-          throw new Error('Soniox empty result')
-        }
-
-        const audioSeconds = result.audioSeconds
-
-        if (audioSeconds > 0) {
-          await sb.from('profiles')
-            .update({
-              audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds,
-            })
-            .eq('id', user.id)
-
-          try {
-            const cost = calcSonioxCost('async', audioSeconds)
-            await logUsage({
-              userId: user.id,
-              service: 'soniox_async' as any,
-              operation: 'transcribe',
-              units: audioSeconds,
-              unit_type: 'audio_seconds',
-              cost_usd: cost,
-              metadata: {
-                language: result.language,
-                user_picked: useLanguageHint ? langParam : 'auto',
-                token_count: result.tokens.length,
-              },
-            })
-          } catch (logErr) {
-            console.error('[transcribe] usage log failed (non-fatal):', logErr)
+    // ===== ENGINE 1: DEEPGRAM (PRIMARY for BM/Rojak) =====
+    if (useBmEngine) {
+      const deepgramKey = process.env.DEEPGRAM_API_KEY
+      if (deepgramKey) {
+        try {
+          console.log(`[transcribe] Deepgram | lang: ${isMalay ? 'ms' : 'multi'} | mime: ${audioMime} | ${audio.size}B`)
+          const dgLang = isMalay ? 'ms' : 'multi'
+          const dgUrl = `https://api.deepgram.com/v1/listen?model=nova-2&language=${dgLang}&punctuate=true&smart_format=true`
+          const audioBuffer = await audio.arrayBuffer()
+          const dgRes = await fetch(dgUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Token ${deepgramKey}`, 'Content-Type': audioMime },
+            body: audioBuffer,
+          })
+          if (!dgRes.ok) {
+            const errText = await dgRes.text().catch(() => 'unknown')
+            throw new Error(`Deepgram HTTP ${dgRes.status}: ${errText.slice(0, 200)}`)
           }
+          const dgData = await dgRes.json()
+          const transcript = dgData?.results?.channels?.[0]?.alternatives?.[0]?.transcript || ''
+          const dgDuration = dgData?.metadata?.duration || 0
+          const audioSeconds = Math.ceil(dgDuration)
+          const detectedLang = dgData?.results?.channels?.[0]?.detected_language || (isMalay ? 'ms' : 'auto')
+          console.log(`[transcribe] Deepgram done | detected: ${detectedLang} | chars: ${transcript.length} | ${dgDuration}s`)
+          if (!transcript || transcript.trim().length < 3) throw new Error('Deepgram empty result')
+          await updateUsage(audioSeconds, 'deepgram', detectedLang)
+          const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
+          const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
+          return NextResponse.json({
+            text: transcript,
+            segments: [{ start: 0, end: audioSeconds, text: transcript }],
+            language: detectedLang,
+            audioSeconds,
+            usage: newCheck,
+            provider: 'deepgram',
+          })
+        } catch (deepgramErr: any) {
+          console.error('[transcribe] Deepgram failed, fallback to Soniox:', deepgramErr.message)
         }
+      } else {
+        console.warn('[transcribe] DEEPGRAM_API_KEY not set, skipping Deepgram')
+      }
 
+      // ===== ENGINE 2: SONIOX (FALLBACK for BM/Rojak) =====
+      try {
+        const filename = `audio.${audioExt}`
+        console.log(`[transcribe] Soniox fallback | ${filename} | ${audioMime} | ${audio.size}B`)
+        const languageHints = isMalay ? ['ms'] : ['ms', 'en']
+        const context = isMalay
+          ? "Malaysian speaker. Bahasa Melayu rasmi atau formal."
+          : "Malaysian student. Natural rojak BM + English. Phrases: 'okay so kita', 'lepas tu', 'macam ni'."
+        const result = await transcribeWithSoniox(audio, filename, { languageHints, context })
+        console.log(`[transcribe] Soniox done | detected: ${result.language} | chars: ${result.text.length}`)
+        if (!result.text || result.text.trim().length < 3) throw new Error('Soniox empty result')
+        const audioSeconds = result.audioSeconds
+        await updateUsage(audioSeconds, 'soniox', result.language)
         const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
-        const newCheck = checkAudioCap(
-          plan,
-          newUsage,
-          profile?.audio_reset_at || null,
-          profile?.plan_upgraded_at || null,
-        )
-
-        const segments = result.tokens.length > 0 ? [{
-          start: 0,
-          end: audioSeconds,
-          text: result.text,
-        }] : []
-
+        const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
         return NextResponse.json({
           text: result.text,
-          segments,
+          segments: result.tokens.length > 0 ? [{ start: 0, end: audioSeconds, text: result.text }] : [],
           language: result.language,
           audioSeconds,
           usage: newCheck,
@@ -162,61 +168,34 @@ export async function POST(req: NextRequest) {
         })
       } catch (sonioxErr: any) {
         console.error('[transcribe] Soniox failed, fallback to Whisper:', sonioxErr.message)
-        // Fall through to Whisper Turbo as backup
+        // Fall through to Whisper last resort
       }
     }
 
-    // ===== WHISPER TURBO PATH (for EN/zh/ta OR Soniox fallback) =====
+    // ===== ENGINE 3: WHISPER (EN/zh/ta OR last resort) =====
     const apiKey = process.env.GROQ_API_KEY
     if (!apiKey) {
-      return NextResponse.json({
-        error: 'GROQ_API_KEY not configured.',
-      }, { status: 500 })
+      return NextResponse.json({ error: 'GROQ_API_KEY not configured.' }, { status: 500 })
     }
 
-    // v56.2: Language-specific Whisper prompts (since Soniox disabled)
     let whisperPrompt: string
     if (isMalay) {
-      whisperPrompt = "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. " +
-        "Perkataan biasa: saya, awak, dia, kita, mereka, ini, itu, yang, dengan, untuk, " +
-        "sebab, lepas, kemudian, akhirnya, sebenarnya, maksudnya, contohnya, termasuk. " +
-        "Istilah akademik: pembahagian sel, fotosintesis, persamaan, fungsi, teorem, " +
-        "kajian, eksperimen, perlembagaan, kemerdekaan, ekonomi, kerajaan, pembangunan."
+      whisperPrompt = "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. Perkataan biasa: saya, awak, dia, kita, yang, dengan, untuk, sebab, lepas, kemudian."
     } else if (isAutoRojak) {
-      whisperPrompt = "Malaysian student or professional speaking natural rojak (Malay + English mix). " +
-        "Common Malay: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, " +
-        "sebab, lepas, ni, macam, boleh, tak, kalau, mesti, kena. " +
-        "Common phrases: 'so kita', 'lepas tu', 'macam ni', 'okay so', 'actually'."
+      whisperPrompt = "Malaysian student speaking natural rojak (Malay + English). Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
     } else {
       whisperPrompt = "Speech recording from a Malaysian speaker. Audio is clear and educational."
     }
 
-    // v56.5: BM/Rojak → Whisper Large v3 (better BM accuracy)
-    //        EN/zh/ta → Whisper Turbo (fast)
-    // v56.8: Whisper Turbo untuk SEMUA (laju + murah)
-    // BM/Rojak utama Soniox, fallback Turbo (Whisper v3 pun lemah BM, so guna Turbo je)
-    const useV3 = false
-    const selectedModel = MODEL_TURBO
-
-    // v56.9: Detect actual audio extension for Whisper too
-    const whisperMime = (audio as any).type || 'audio/webm'
-    const whisperExt = whisperMime.includes('mp4') ? 'mp4'
-                     : whisperMime.includes('mpeg') ? 'mp3'
-                     : whisperMime.includes('ogg') ? 'ogg'
-                     : whisperMime.includes('wav') ? 'wav'
-                     : 'webm'
-
     const groqForm = new FormData()
-    groqForm.append('file', audio, `audio.${whisperExt}`)
-    groqForm.append('model', selectedModel)
+    groqForm.append('file', audio, `audio.${audioExt}`)
+    groqForm.append('model', MODEL_TURBO)
     groqForm.append('response_format', 'verbose_json')
     groqForm.append('prompt', whisperPrompt)
     groqForm.append('temperature', '0.0')
-    if (useLanguageHint) {
-      groqForm.append('language', langParam!)
-    }
+    if (useLanguageHint) groqForm.append('language', langParam!)
 
-    console.log(`[transcribe] v56.8 Whisper Turbo${isMalay || isAutoRojak ? ' (Soniox fallback)' : ''} | language: ${useLanguageHint ? langParam : 'auto'}`)
+    console.log(`[transcribe] Whisper Turbo${useBmEngine ? ' (last resort)' : ''} | lang: ${useLanguageHint ? langParam : 'auto'}`)
 
     const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
@@ -234,49 +213,14 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await groqRes.json()
-    console.log(`[transcribe] Whisper done. detected: ${data.language}, chars: ${(data.text || '').length}`)
+    console.log(`[transcribe] Whisper done | detected: ${data.language} | chars: ${(data.text || '').length}`)
 
     const audioSeconds = Math.ceil(
-      data.duration
-      || (data.segments?.[data.segments.length - 1]?.end || 0)
-      || 0
+      data.duration || (data.segments?.[data.segments.length - 1]?.end || 0) || 0
     )
-
-    if (audioSeconds > 0) {
-      await sb.from('profiles')
-        .update({
-          audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds,
-        })
-        .eq('id', user.id)
-
-      try {
-        const serviceKey = useV3 ? 'groq_whisper_v3' : 'groq_whisper_turbo'
-        const cost = calcWhisperCost(serviceKey as any, audioSeconds)
-        await logUsage({
-          userId: user.id,
-          service: serviceKey as any,
-          operation: 'transcribe',
-          units: audioSeconds,
-          unit_type: 'audio_seconds',
-          cost_usd: cost,
-          metadata: {
-            language: data.language || 'auto',
-            user_picked: useLanguageHint ? langParam : 'auto',
-            model: selectedModel,
-          },
-        })
-      } catch (logErr) {
-        console.error('[transcribe] usage log failed (non-fatal):', logErr)
-      }
-    }
-
+    await updateUsage(audioSeconds, 'whisper_turbo', data.language || 'auto')
     const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
-    const newCheck = checkAudioCap(
-      plan,
-      newUsage,
-      profile?.audio_reset_at || null,
-      profile?.plan_upgraded_at || null,
-    )
+    const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
 
     return NextResponse.json({
       text: data.text || '',
@@ -288,8 +232,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (e: any) {
     console.error('[transcribe] Error:', e)
-    return NextResponse.json({
-      error: e.message || 'Transcribe failed',
-    }, { status: 500 })
+    return NextResponse.json({ error: e.message || 'Transcribe failed' }, { status: 500 })
   }
 }
