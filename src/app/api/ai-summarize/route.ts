@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     const [{ data: lecture }, { data: profile }] = await Promise.all([
       supabase.from('lectures').select('*').eq('id', lectureId).eq('user_id', user.id).maybeSingle(),
-      supabase.from('profiles').select('ai_provider').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('plan, ai_provider').eq('id', user.id).maybeSingle(),
     ])
 
     if (!lecture) return NextResponse.json({ error: 'lecture not found' }, { status: 404 })
@@ -30,7 +30,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'transcript too short to summarize' }, { status: 400 })
     }
 
-    // Get recording type meta — drives sections + system prompt
     const typeMeta = getRecordingTypeMeta(lecture.recording_type || 'lecture')
     const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint)
 
@@ -48,9 +47,10 @@ ${truncated}`
       || (profile?.ai_provider as AIProvider)
       || 'auto'
 
-    const { result, usedProvider, fellBack } = await callAI(provider, userMessage, systemPrompt)
+    // Pass plan to callAI — gates GPT + Claude for monthly/yearly only
+    const plan = profile?.plan || 'free'
+    const { result, usedProvider, fellBack } = await callAI(provider, userMessage, systemPrompt, plan)
 
-    // v58.1: Auto-update lecture title from AI inference if user didn't customize
     const userTitle = (lecture.title || '').trim()
     const isDefaultTitle = !userTitle ||
       userTitle === 'Untitled' ||
@@ -73,9 +73,7 @@ ${truncated}`
 
     await supabase.from('lectures').update(updatePayload).eq('id', lectureId)
 
-    // v52: Log usage cost
     try {
-      // Estimate tokens (rough: 1 token ≈ 4 chars for Latin)
       const inputChars = (userMessage?.length || 0) + (systemPrompt?.length || 0)
       const outputChars = JSON.stringify(result).length
       const inputTokens = Math.ceil(inputChars / 4)
@@ -84,7 +82,9 @@ ${truncated}`
       const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
         'gemini-flash': 'gemini_flash',
         'gemini-flash-lite': 'gemini_flash_lite',
-        'groq': 'gemini_flash',  // groq llama3 — approx Gemini cost
+        'groq': 'gemini_flash',
+        'gpt-4o-mini': 'gemini_flash',
+        'claude-haiku': 'gemini_flash',
         'xai': 'xai_grok',
       }
       const serviceKey = serviceMap[usedProvider as string] || 'gemini_flash'
@@ -103,6 +103,7 @@ ${truncated}`
           output_tokens: outputTokens,
           provider: usedProvider,
           fell_back: fellBack,
+          plan,
         },
       })
     } catch (logErr) {
