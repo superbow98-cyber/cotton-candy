@@ -3,7 +3,7 @@
 // Order: Gemini 2.5 Flash → Auto → Groq → Gemini Flash-Lite
 // ============================================================
 
-export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite'
+export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
 
 export type AISummary = {
   // Common
@@ -41,6 +41,8 @@ export const PROVIDER_ORDER: AIProvider[] = [
   'auto',
   'groq',
   'gemini-flash-lite',
+  'gpt-4o-mini',
+  'claude-haiku',
 ]
 
 export const DEFAULT_PROVIDER: AIProvider = 'auto'
@@ -50,7 +52,8 @@ export const PROVIDER_META: Record<AIProvider, {
   shortLabel: string
   descEn: string
   descBm: string
-  logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite'
+  logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite' | 'gpt' | 'claude'
+  proOnly?: boolean
 }> = {
   'gemini-flash': {
     label: 'Gemini 2.5 Flash',
@@ -79,6 +82,22 @@ export const PROVIDER_META: Record<AIProvider, {
     descEn: 'Best for short recaps, daily tutorials, simple notes.',
     descBm: 'Terbaik untuk ringkasan pendek, tutorial harian.',
     logoKey: 'gemini-lite',
+  },
+  'gpt-4o-mini': {
+    label: 'GPT-4o mini',
+    shortLabel: 'GPT-4o',
+    descEn: 'OpenAI\'s efficient model. Consistent and accurate.',
+    descBm: 'Model OpenAI yang cekap. Konsisten dan tepat.',
+    logoKey: 'gpt',
+    proOnly: true,
+  },
+  'claude-haiku': {
+    label: 'Claude Haiku 3.5',
+    shortLabel: 'Claude',
+    descEn: 'Anthropic\'s nimble model. Natural-sounding notes.',
+    descBm: 'Model Anthropic yang pantas. Nota terasa semula jadi.',
+    logoKey: 'claude',
+    proOnly: true,
   },
 }
 
@@ -270,33 +289,118 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   }
 }
 
-// ---------- Main dispatcher ----------
+// ---------- GPT-4o mini ----------
+async function callGPT(userMessage: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0.2,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`GPT ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const json = await res.json()
+  const content = json?.choices?.[0]?.message?.content
+  if (!content) throw new Error('GPT: empty response')
+
+  try { return validateResult(JSON.parse(content)) }
+  catch { throw new Error('GPT: malformed JSON') }
+}
+
+// ---------- Claude Haiku ----------
+async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+      temperature: 0.2,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Claude ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const json = await res.json()
+  const content = json?.content?.[0]?.text
+  if (!content) throw new Error('Claude: empty response')
+
+  // Claude may wrap in markdown — strip fences
+  const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
+  try { return validateResult(JSON.parse(clean)) }
+  catch { throw new Error('Claude: malformed JSON') }
+}
+
+
 // Every single-provider call now has retry + auto-fallback.
 // User's chosen provider is attempted first, then fallback chain.
 // `systemPrompt` is type-aware (built via buildSystemPrompt).
+// `plan` gates GPT-4o mini + Claude Haiku (monthly/yearly only)
 export async function callAI(
   provider: AIProvider,
   userMessage: string,
   systemPrompt: string = SYSTEM_PROMPT,
+  plan?: string,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
-  // Build chain: chosen provider first, then other providers as fallback
+  // Plans allowed to use GPT + Claude
+  const isProPlan = plan === 'pro' || plan === 'max'
+
+  // If user picks pro-only provider but not on pro plan — fallback to auto
+  const effectiveProvider = (provider === 'gpt-4o-mini' || provider === 'claude-haiku') && !isProPlan
+    ? 'auto'
+    : provider
+
+  // Build all providers
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
     { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash', systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
+    { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
+    { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
 
-  // For specific providers, put the chosen one first + others as fallback
+  // Build chain: chosen provider first, others as fallback
   let chain: typeof allProviders
-  if (provider === 'gemini-flash') {
+  if (effectiveProvider === 'gemini-flash') {
     chain = [allProviders[0], allProviders[1], allProviders[2]]
-  } else if (provider === 'groq') {
+  } else if (effectiveProvider === 'groq') {
     chain = [allProviders[1], allProviders[0], allProviders[2]]
-  } else if (provider === 'gemini-flash-lite') {
+  } else if (effectiveProvider === 'gemini-flash-lite') {
     chain = [allProviders[2], allProviders[1], allProviders[0]]
+  } else if (effectiveProvider === 'gpt-4o-mini') {
+    chain = [allProviders[3], allProviders[1], allProviders[0], allProviders[2]]
+  } else if (effectiveProvider === 'claude-haiku') {
+    chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
     // 'auto' — default order: Gemini → Groq → Flash-Lite
-    chain = allProviders
+    chain = [allProviders[0], allProviders[1], allProviders[2]]
   }
 
   const errors: string[] = []
