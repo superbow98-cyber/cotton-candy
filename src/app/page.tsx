@@ -149,7 +149,7 @@ export default function Home() {
       {/* AI MODELS SECTION */}
       <section id="ai" style={{ padding: '80px 20px', textAlign: 'center', maxWidth: 1040, margin: '0 auto' }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: '#5A8FF5', marginBottom: 10 }}>
-          {L('Four AI brains. One tap.', 'Empat AI. Satu tap.')}
+          {L('Six AI brains. One tap.', 'Enam AI. Satu tap.')}
         </div>
         <h2 style={{
           fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 600,
@@ -233,6 +233,39 @@ export default function Home() {
             logoSvg={
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
                 <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
+              </svg>
+            }
+          />
+          {/* GPT-4o mini */}
+          <AICard
+            eyebrow={L('Reliable & sharp', 'Konsisten & tepat')}
+            name="GPT-4o mini"
+            desc={L(
+              'OpenAI\'s efficient model. Consistent, accurate, great for structured notes and summaries.',
+              'Model OpenAI yang cekap. Konsisten, tepat, bagus untuk nota tersusun.'
+            )}
+            logoBg="#000"
+            logoSvg={
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
+                <path d="M22.289 9.94a5.998 5.998 0 0 0-.515-4.926 6.065 6.065 0 0 0-6.525-2.908A5.998 5.998 0 0 0 10.724 0a6.064 6.064 0 0 0-5.781 4.202 5.998 5.998 0 0 0-4.002 2.91 6.065 6.065 0 0 0 .747 7.11 5.998 5.998 0 0 0 .515 4.926 6.065 6.065 0 0 0 6.525 2.908A5.997 5.997 0 0 0 13.276 24a6.064 6.064 0 0 0 5.782-4.202 5.998 5.998 0 0 0 4.001-2.91 6.065 6.065 0 0 0-.77-6.948zM13.276 22.4a4.49 4.49 0 0 1-2.882-1.041l.142-.08 4.783-2.762a.78.78 0 0 0 .396-.68v-6.747l2.023 1.168a.072.072 0 0 1 .04.057v5.585a4.505 4.505 0 0 1-4.502 4.5zm-9.684-4.131a4.49 4.49 0 0 1-.537-3.018l.142.085 4.783 2.762a.779.779 0 0 0 .785 0l5.843-3.373v2.335a.072.072 0 0 1-.029.063l-4.836 2.791a4.504 4.504 0 0 1-6.151-1.645zm-1.261-10.46a4.489 4.489 0 0 1 2.347-1.975V11.5a.769.769 0 0 0 .389.678l5.82 3.361-2.023 1.168a.073.073 0 0 1-.071 0L4.009 13.9a4.505 4.505 0 0 1-.678-6.091zm16.614 3.864l-5.843-3.375 2.023-1.167a.072.072 0 0 1 .071 0l4.783 2.762a4.502 4.502 0 0 1-.696 8.124V12.35a.77.77 0 0 0-.338-.677zm2.014-3.025l-.142-.085-4.783-2.762a.779.779 0 0 0-.785 0L9.406 9.974V7.639a.072.072 0 0 1 .029-.063l4.836-2.79a4.503 4.503 0 0 1 6.688 4.664zm-12.664 4.161L6.272 11.64a.072.072 0 0 1-.04-.057V5.999a4.503 4.503 0 0 1 7.384-3.458l-.142.08-4.783 2.762a.779.779 0 0 0-.396.68zm1.098-2.366l2.602-1.502 2.603 1.5v3l-2.603 1.5-2.602-1.5z"/>
+              </svg>
+            }
+          />
+          {/* Claude Haiku */}
+          <AICard
+            eyebrow={L('Nuanced & fast', 'Bernuansa & pantas')}
+            name="Claude Haiku 3.5"
+            desc={L(
+              "Anthropic's nimble model. Exceptional at nuanced understanding and natural-sounding notes.",
+              'Model Anthropic yang pantas. Cemerlang dalam pemahaman bernuansa dan nota yang terasa semula jadi.'
+            )}
+            logoBg="#DA7756"
+            logoSvg={
+              <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <line x1="50" y1="5" x2="50" y2="95" stroke="white" strokeWidth="12" strokeLinecap="round"/>
+                <line x1="5" y1="50" x2="95" y2="50" stroke="white" strokeWidth="12" strokeLinecap="round"/>
+                <line x1="15" y1="15" x2="85" y2="85" stroke="white" strokeWidth="12" strokeLinecap="round"/>
+                <line x1="85" y1="15" x2="15" y2="85" stroke="white" strokeWidth="12" strokeLinecap="round"/>
               </svg>
             }
           />
