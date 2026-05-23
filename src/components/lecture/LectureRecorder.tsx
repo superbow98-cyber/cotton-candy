@@ -549,7 +549,7 @@ export default function LectureRecorder({ id }: { id: string }) {
         'audio/webm;codecs=opus',
         'audio/webm',
         'audio/mp4',
-        'audio/ogg;codecs=opus',
+        'audio/mpeg',
       ]
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
 
