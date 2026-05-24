@@ -1,10 +1,6 @@
 // src/app/api/transcribe/route.ts
 // v58 — Optimized for Rojak: Soniox (Rojak) → Deepgram (pure BM) → Whisper (fallback)
-<<<<<<< HEAD
 // Audio NEVER persisted. Max file: 100MB
-=======
-// Audio NEVER persisted.
->>>>>>> 3821864634a2fe39951ebe16ecaf649ba3995f0c
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
