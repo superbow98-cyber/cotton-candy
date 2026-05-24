@@ -56,18 +56,16 @@ const STORAGE_KEY = 'cc:recLang'
 function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }) {
   const meta = PROVIDER_META[provider]
   const logoKey = meta.logoKey
-  const wrapSize = size + 12
-  const radius = wrapSize <= 25 ? 8 : 10
   const wrapStyle: React.CSSProperties = {
-    width: wrapSize, height: wrapSize, borderRadius: radius,
+    width: size + 12, height: size + 12, borderRadius: 10,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.1), inset 0 0.5px 0 rgba(255,255,255,0.4)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.1), inset 0 0.5px 0 rgba(255,255,255,0.4)',
   }
 
   if (logoKey === 'auto') {
     return (
-      <div style={{ ...wrapStyle, background: 'linear-gradient(135deg, #FFB7C5, #D4537E)' }}>
+      <div style={{ ...wrapStyle, background: 'linear-gradient(135deg, #FBEAF0, #FFB7C5)' }}>
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#4B1528" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" />
           <path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
@@ -94,6 +92,16 @@ function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }
       </div>
     )
   }
+  // gemini-lite
+  if (logoKey === 'gemini-lite') {
+  return (
+    <div style={{ ...wrapStyle, background: 'linear-gradient(135deg, #4796E3, #34A853)' }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
+        <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
+      </svg>
+    </div>
+  )
+  }
   if (logoKey === 'gpt') {
     return (
       <div style={{ ...wrapStyle, background: '#000' }}>
@@ -103,16 +111,7 @@ function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }
       </div>
     )
   }
-  if (logoKey === 'gemini-lite') {
-    return (
-      <div style={{ ...wrapStyle, background: 'linear-gradient(135deg, #4796E3, #34A853)' }}>
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
-          <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
-        </svg>
-      </div>
-    )
-  }
-  // claude
+  // claude (default)
   return (
     <div style={{ ...wrapStyle, background: '#DA7756' }}>
       <svg width={size} height={size} viewBox="0 0 100 100">
@@ -123,14 +122,16 @@ function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }
       </svg>
     </div>
   )
+}
 
 // ---------------- AI CHIP (under timer) + DROPDOWN ----------------
 function AIChipPicker({
-  value, onChange, disabled,
+  value, onChange, disabled, plan,
 }: {
   value: AIProvider
   onChange: (v: AIProvider) => void
   disabled?: boolean
+  plan?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -144,6 +145,7 @@ function AIChipPicker({
   }, [open])
 
   const meta = PROVIDER_META[value]
+  const isProPlan = plan === 'pro' || plan === 'max'
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
@@ -191,33 +193,43 @@ function AIChipPicker({
           {PROVIDER_ORDER.map((p) => {
             const m = PROVIDER_META[p]
             const selected = p === value
+            const isLocked = m.proOnly && !isProPlan
             return (
               <button
                 key={p}
-                onClick={() => { onChange(p); setOpen(false) }}
+                onClick={() => { if (!isLocked) { onChange(p); setOpen(false) } }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 12px',
                   borderRadius: 12,
-                  cursor: 'pointer',
+                  cursor: isLocked ? 'not-allowed' : 'pointer',
                   background: selected ? 'rgba(255,183,197,0.28)' : 'transparent',
                   border: 'none',
                   textAlign: 'left',
                   transition: 'background 0.15s',
+                  opacity: isLocked ? 0.55 : 1,
                 }}
-                onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'rgba(255,183,197,0.18)' }}
-                onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent' }}
+                onMouseEnter={(e) => { if (!selected && !isLocked) e.currentTarget.style.background = 'rgba(255,183,197,0.18)' }}
+                onMouseLeave={(e) => { if (!selected && !isLocked) e.currentTarget.style.background = 'transparent' }}
               >
                 <AILogo provider={p} size={18} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A0510', letterSpacing: -0.25, lineHeight: 1.3 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A0510', letterSpacing: -0.25, lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {m.label}
+                    {isLocked && (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#D4537E', background: 'rgba(212,83,126,0.1)', padding: '2px 6px', borderRadius: 100 }}>
+                        Monthly / Yearly
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, color: 'rgba(75,21,40,0.58)', lineHeight: 1.4, letterSpacing: -0.1, marginTop: 2 }}>
                     {m.descEn}
                   </div>
                 </div>
-                <span style={{ color: '#D4537E', fontSize: 16, fontWeight: 700, flexShrink: 0, opacity: selected ? 1 : 0 }}>✓</span>
+                {isLocked
+                  ? <span style={{ fontSize: 12, color: 'rgba(75,21,40,0.35)', flexShrink: 0 }}>🔒</span>
+                  : <span style={{ color: '#D4537E', fontSize: 16, fontWeight: 700, flexShrink: 0, opacity: selected ? 1 : 0 }}>✓</span>
+                }
               </button>
             )
           })}
@@ -802,8 +814,8 @@ export default function LectureRecorder({ id }: { id: string }) {
             await sb.from('lectures').update({
               mindmap_json: mindmap,
             }).eq('id', lecture.id)
-            const updated = { ...lectureRef.current, mindmap_json: mindmap }
-            setLecture(updated as any); lectureRef.current = updated as any
+            const updated = { ...lecture, mindmap_json: mindmap }
+            setLecture(updated); lectureRef.current = updated
           } catch (e) {
             console.warn('[mindmap] Generation failed:', e)
           }
@@ -1333,6 +1345,7 @@ export default function LectureRecorder({ id }: { id: string }) {
                 value={aiProvider}
                 onChange={updateAIProvider}
                 disabled={aiProcessing}
+                plan={plan}
               />
             </div>
           </div>
