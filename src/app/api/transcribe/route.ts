@@ -163,10 +163,11 @@ export async function POST(req: NextRequest) {
 
         // Step 2: Request transcription
         const transcriptBody: Record<string, any> = {
-          audio_url: upload_url,
-          punctuate: true,
-          format_text: true,
-        }
+           audio_url: upload_url,
+           speech_models: ['universal-3-pro', 'universal-2'],  // ← tambah ni
+           punctuate: true,
+           format_text: true,
+         }
         if (isMalay) transcriptBody.language_code = 'ms'
         else if (isEnglish) transcriptBody.language_code = 'en'
         else transcriptBody.language_detection = true
