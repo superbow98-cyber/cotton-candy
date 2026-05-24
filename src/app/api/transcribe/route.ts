@@ -1,5 +1,5 @@
 // src/app/api/transcribe/route.ts
-// v60 — Cost optimized: Soniox → AssemblyAI → Whisper/Groq → Deepgram (last resort)
+// v61 — Cost optimized: Soniox → AssemblyAI → Whisper/Groq → Deepgram (last resort)
 // Audio NEVER persisted. Max file: 100MB
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +11,7 @@ import { calcWhisperCost, calcSonioxCost } from '@/lib/usage-pricing'
 import { transcribeWithSoniox } from '@/lib/soniox'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120  // v61: increased for AssemblyAI polling (up to 50s poll + upload overhead)
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
@@ -163,11 +163,11 @@ export async function POST(req: NextRequest) {
 
         // Step 2: Request transcription
         const transcriptBody: Record<string, any> = {
-           audio_url: upload_url,
-           speech_models: ['universal-3-pro', 'universal-2'],  // ← tambah ni
-           punctuate: true,
-           format_text: true,
-         }
+          audio_url: upload_url,
+          speech_models: ['universal-3-pro', 'universal-2'],
+          punctuate: true,
+          format_text: true,
+        }
         if (isMalay) transcriptBody.language_code = 'ms'
         else if (isEnglish) transcriptBody.language_code = 'en'
         else transcriptBody.language_detection = true
@@ -186,12 +186,12 @@ export async function POST(req: NextRequest) {
         }
         const { id: transcriptId } = await transcriptRes.json()
 
-        // Step 3: Poll for completion (max 50s, poll every 2s)
+        // Step 3: Poll for completion (max 90s, poll every 3s = 30 attempts)
         let transcript = ''
         let detectedLang = langParam || 'auto'
         let audioDuration = 0
-        for (let attempt = 0; attempt < 25; attempt++) {
-          await new Promise(r => setTimeout(r, 2000))
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise(r => setTimeout(r, 3000))
           const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
             headers: { 'Authorization': assemblyKey },
           })
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
           } else if (pollData.status === 'error') {
             throw new Error(`AssemblyAI error: ${pollData.error}`)
           }
-          console.log(`[transcribe] AssemblyAI polling... ${attempt + 1}/25 | ${pollData.status}`)
+          console.log(`[transcribe] AssemblyAI polling... ${attempt + 1}/30 | ${pollData.status}`)
         }
 
         if (!transcript || transcript.trim().length < 3) throw new Error('AssemblyAI empty result')
