@@ -3,7 +3,7 @@
 // API docs: https://soniox.com/docs/stt/async/async-transcription
 
 const SONIOX_API_BASE = 'https://api.soniox.com'
-const ASYNC_MODEL = 'stt-async-preview'  // Soniox's main async model
+const ASYNC_MODEL = 'stt-async'  // Soniox's main async model
 const POLL_INTERVAL_MS = 1500
 const POLL_TIMEOUT_MS = 50_000  // matches Vercel maxDuration: 60s
 
