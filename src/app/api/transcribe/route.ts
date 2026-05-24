@@ -1,5 +1,5 @@
 // src/app/api/transcribe/route.ts
-// v59 — Cost optimized: Soniox (primary ALL) → Deepgram (fallback ALL) → Whisper (last resort)
+// v60 — Cost optimized: Soniox → AssemblyAI → Whisper/Groq → Deepgram (last resort)
 // Audio NEVER persisted. Max file: 100MB
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -65,7 +65,6 @@ export async function POST(req: NextRequest) {
 
     const isMalay = useLanguageHint && langParam === 'ms'
     const isEnglish = useLanguageHint && langParam === 'en'
-    const isAutoRojak = !useLanguageHint
 
     // Language hints for Soniox
     const sonioxLangHints = isMalay ? ['ms'] : isEnglish ? ['en'] : ['ms', 'en']
@@ -89,11 +88,13 @@ export async function POST(req: NextRequest) {
         .update({ audio_seconds_used: (profile?.audio_seconds_used || 0) + audioSeconds })
         .eq('id', user.id)
       try {
-        const cost = provider === 'deepgram'
-          ? audioSeconds * 0.0000983
-          : provider === 'soniox'
-            ? calcSonioxCost('async', audioSeconds)
-            : calcWhisperCost('groq_whisper_turbo' as any, audioSeconds)
+        const cost = provider === 'assemblyai'
+          ? audioSeconds * 0.0000417          // $0.15/hr
+          : provider === 'deepgram'
+            ? audioSeconds * 0.0001278        // $0.46/hr
+            : provider === 'soniox'
+              ? calcSonioxCost('async', audioSeconds)
+              : calcWhisperCost('groq_whisper_turbo' as any, audioSeconds)
         await logUsage({
           userId: user.id,
           service: 'soniox_async' as any,
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Helper: build usage response
+    const buildUsageCheck = (audioSeconds: number) => {
+      const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
+      return checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
+    }
+
     // ===== ENGINE 1: SONIOX (PRIMARY — ALL languages) =====
     try {
       const filename = `audio.${audioExt}`
@@ -120,26 +127,162 @@ export async function POST(req: NextRequest) {
       if (!result.text || result.text.trim().length < 3) throw new Error('Soniox empty result')
       const audioSeconds = result.audioSeconds
       await updateUsage(audioSeconds, 'soniox', result.language)
-      const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
-      const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
       return NextResponse.json({
         text: result.text,
         segments: result.tokens.length > 0 ? [{ start: 0, end: audioSeconds, text: result.text }] : [],
         language: result.language,
         audioSeconds,
-        usage: newCheck,
+        usage: buildUsageCheck(audioSeconds),
         provider: 'soniox',
       })
     } catch (sonioxErr: any) {
-      console.error('[transcribe] Soniox failed, fallback to Deepgram:', sonioxErr.message)
+      console.error('[transcribe] Soniox failed, fallback to AssemblyAI:', sonioxErr.message)
     }
 
-    // ===== ENGINE 2: DEEPGRAM (FALLBACK — ALL languages) =====
+    // ===== ENGINE 2: ASSEMBLYAI (FALLBACK) =====
+    const assemblyKey = process.env.ASSEMBLYAI_API_KEY
+    if (assemblyKey) {
+      try {
+        console.log(`[transcribe] AssemblyAI (fallback) | lang: ${langParam || 'auto'} | ${audioMime} | ${audio.size}B`)
+
+        // Step 1: Upload audio
+        const audioBuffer = await audio.arrayBuffer()
+        const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': assemblyKey,
+            'Content-Type': 'application/octet-stream',
+          },
+          body: audioBuffer,
+        })
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text().catch(() => 'unknown')
+          throw new Error(`AssemblyAI upload failed (${uploadRes.status}): ${errText.slice(0, 200)}`)
+        }
+        const { upload_url } = await uploadRes.json()
+
+        // Step 2: Request transcription
+        const transcriptBody: Record<string, any> = {
+          audio_url: upload_url,
+          punctuate: true,
+          format_text: true,
+        }
+        if (isMalay) transcriptBody.language_code = 'ms'
+        else if (isEnglish) transcriptBody.language_code = 'en'
+        else transcriptBody.language_detection = true
+
+        const transcriptRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+          method: 'POST',
+          headers: {
+            'Authorization': assemblyKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(transcriptBody),
+        })
+        if (!transcriptRes.ok) {
+          const errText = await transcriptRes.text().catch(() => 'unknown')
+          throw new Error(`AssemblyAI transcript request failed (${transcriptRes.status}): ${errText.slice(0, 200)}`)
+        }
+        const { id: transcriptId } = await transcriptRes.json()
+
+        // Step 3: Poll for completion (max 50s, poll every 2s)
+        let transcript = ''
+        let detectedLang = langParam || 'auto'
+        let audioDuration = 0
+        for (let attempt = 0; attempt < 25; attempt++) {
+          await new Promise(r => setTimeout(r, 2000))
+          const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+            headers: { 'Authorization': assemblyKey },
+          })
+          if (!pollRes.ok) throw new Error(`AssemblyAI poll failed (${pollRes.status})`)
+          const pollData = await pollRes.json()
+          if (pollData.status === 'completed') {
+            transcript = pollData.text || ''
+            detectedLang = pollData.language_code || detectedLang
+            audioDuration = Math.ceil(pollData.audio_duration || 0)
+            break
+          } else if (pollData.status === 'error') {
+            throw new Error(`AssemblyAI error: ${pollData.error}`)
+          }
+          console.log(`[transcribe] AssemblyAI polling... ${attempt + 1}/25 | ${pollData.status}`)
+        }
+
+        if (!transcript || transcript.trim().length < 3) throw new Error('AssemblyAI empty result')
+        console.log(`[transcribe] AssemblyAI done | detected: ${detectedLang} | chars: ${transcript.length} | ${audioDuration}s`)
+        await updateUsage(audioDuration, 'assemblyai', detectedLang)
+        return NextResponse.json({
+          text: transcript,
+          segments: [{ start: 0, end: audioDuration, text: transcript }],
+          language: detectedLang,
+          audioSeconds: audioDuration,
+          usage: buildUsageCheck(audioDuration),
+          provider: 'assemblyai',
+        })
+      } catch (assemblyErr: any) {
+        console.error('[transcribe] AssemblyAI failed, fallback to Whisper:', assemblyErr.message)
+      }
+    } else {
+      console.warn('[transcribe] ASSEMBLYAI_API_KEY not set, skipping AssemblyAI')
+    }
+
+    // ===== ENGINE 3: WHISPER/GROQ (LAST RESORT) =====
+    const groqKey = process.env.GROQ_API_KEY
+    if (groqKey) {
+      try {
+        const whisperPrompt = isMalay
+          ? "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. Perkataan biasa: saya, awak, dia, kita, yang, dengan, untuk, sebab, lepas, kemudian."
+          : isEnglish
+            ? "Speech recording from a Malaysian speaker. Audio is clear and educational."
+            : "Malaysian student speaking natural rojak (Malay + English). Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
+
+        const groqForm = new FormData()
+        groqForm.append('file', audio, `audio.${audioExt}`)
+        groqForm.append('model', MODEL_TURBO)
+        groqForm.append('response_format', 'verbose_json')
+        groqForm.append('prompt', whisperPrompt)
+        groqForm.append('temperature', '0.0')
+        if (useLanguageHint) groqForm.append('language', langParam!)
+
+        console.log(`[transcribe] Whisper Turbo (last resort) | lang: ${useLanguageHint ? langParam : 'auto'}`)
+
+        const groqRes = await fetch(GROQ_URL, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${groqKey}` },
+          body: groqForm,
+        })
+
+        if (!groqRes.ok) {
+          const errText = await groqRes.text().catch(() => 'unknown')
+          throw new Error(`Whisper failed (${groqRes.status}): ${errText.slice(0, 200)}`)
+        }
+
+        const data = await groqRes.json()
+        console.log(`[transcribe] Whisper done | detected: ${data.language} | chars: ${(data.text || '').length}`)
+        const audioSeconds = Math.ceil(
+          data.duration || (data.segments?.[data.segments.length - 1]?.end || 0) || 0
+        )
+        await updateUsage(audioSeconds, 'whisper_turbo', data.language || 'auto')
+        return NextResponse.json({
+          text: data.text || '',
+          segments: data.segments || [],
+          language: data.language || 'auto',
+          audioSeconds,
+          usage: buildUsageCheck(audioSeconds),
+          provider: 'whisper_turbo',
+        })
+      } catch (whisperErr: any) {
+        console.error('[transcribe] Whisper failed, fallback to Deepgram:', whisperErr.message)
+      }
+    } else {
+      console.warn('[transcribe] GROQ_API_KEY not set, skipping Whisper')
+    }
+
+    // ===== ENGINE 4: DEEPGRAM (EMERGENCY LAST RESORT) =====
     const deepgramKey = process.env.DEEPGRAM_API_KEY
     if (deepgramKey) {
       try {
         const dgLang = isMalay ? 'ms' : isEnglish ? 'en' : 'ms'
-        console.log(`[transcribe] Deepgram (fallback) | lang: ${dgLang} | ${audioMime} | ${audio.size}B`)
+        console.log(`[transcribe] Deepgram (emergency) | lang: ${dgLang} | ${audioMime} | ${audio.size}B`)
         const dgUrl = `https://api.deepgram.com/v1/listen?model=nova-2&language=${dgLang}&punctuate=true&smart_format=true`
         const audioBuffer = await audio.arrayBuffer()
         const dgRes = await fetch(dgUrl, {
@@ -159,78 +302,24 @@ export async function POST(req: NextRequest) {
         console.log(`[transcribe] Deepgram done | detected: ${detectedLang} | chars: ${transcript.length} | ${dgDuration}s`)
         if (!transcript || transcript.trim().length < 3) throw new Error('Deepgram empty result')
         await updateUsage(audioSeconds, 'deepgram', detectedLang)
-        const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
-        const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
         return NextResponse.json({
           text: transcript,
           segments: [{ start: 0, end: audioSeconds, text: transcript }],
           language: detectedLang,
           audioSeconds,
-          usage: newCheck,
+          usage: buildUsageCheck(audioSeconds),
           provider: 'deepgram',
         })
       } catch (deepgramErr: any) {
-        console.error('[transcribe] Deepgram failed, fallback to Whisper:', deepgramErr.message)
+        console.error('[transcribe] Deepgram failed:', deepgramErr.message)
       }
     } else {
       console.warn('[transcribe] DEEPGRAM_API_KEY not set, skipping Deepgram')
     }
 
-    // ===== ENGINE 3: WHISPER (LAST RESORT — ALL languages) =====
-    const apiKey = process.env.GROQ_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GROQ_API_KEY not configured.' }, { status: 500 })
-    }
+    // All engines failed
+    return NextResponse.json({ error: 'All transcription engines failed. Please try again.' }, { status: 502 })
 
-    const whisperPrompt = isMalay
-      ? "Rakaman dalam Bahasa Melayu rasmi. Pelajar atau profesional Malaysia. Perkataan biasa: saya, awak, dia, kita, yang, dengan, untuk, sebab, lepas, kemudian."
-      : isEnglish
-        ? "Speech recording from a Malaysian speaker. Audio is clear and educational."
-        : "Malaysian student speaking natural rojak (Malay + English). Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
-
-    const groqForm = new FormData()
-    groqForm.append('file', audio, `audio.${audioExt}`)
-    groqForm.append('model', MODEL_TURBO)
-    groqForm.append('response_format', 'verbose_json')
-    groqForm.append('prompt', whisperPrompt)
-    groqForm.append('temperature', '0.0')
-    if (useLanguageHint) groqForm.append('language', langParam!)
-
-    console.log(`[transcribe] Whisper Turbo (last resort) | lang: ${useLanguageHint ? langParam : 'auto'}`)
-
-    const groqRes = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: groqForm,
-    })
-
-    if (!groqRes.ok) {
-      const errText = await groqRes.text().catch(() => 'unknown')
-      console.error('[transcribe] Whisper error:', groqRes.status, errText)
-      return NextResponse.json({
-        error: `Transcription failed (${groqRes.status})`,
-        detail: errText.slice(0, 500),
-      }, { status: 502 })
-    }
-
-    const data = await groqRes.json()
-    console.log(`[transcribe] Whisper done | detected: ${data.language} | chars: ${(data.text || '').length}`)
-
-    const audioSeconds = Math.ceil(
-      data.duration || (data.segments?.[data.segments.length - 1]?.end || 0) || 0
-    )
-    await updateUsage(audioSeconds, 'whisper_turbo', data.language || 'auto')
-    const newUsage = (profile?.audio_seconds_used || 0) + audioSeconds
-    const newCheck = checkAudioCap(plan, newUsage, profile?.audio_reset_at || null, profile?.plan_upgraded_at || null)
-
-    return NextResponse.json({
-      text: data.text || '',
-      segments: data.segments || [],
-      language: data.language || 'auto',
-      audioSeconds,
-      usage: newCheck,
-      provider: 'whisper_turbo',
-    })
   } catch (e: any) {
     console.error('[transcribe] Error:', e)
     return NextResponse.json({ error: e.message || 'Transcribe failed' }, { status: 500 })
