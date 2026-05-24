@@ -579,9 +579,9 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       // Pick best supported mime type — Chrome Android prefers webm/opus
       const mimeCandidates = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
         'audio/mp4',
+        'audio/webm',
+        'audio/webm;codecs=opus',
         'audio/mpeg',
       ]
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
