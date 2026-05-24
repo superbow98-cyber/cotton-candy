@@ -1,6 +1,6 @@
 // ============================================================
-// Cotton Candy — Multi-provider AI (Gemini Flash prioritized)
-// Order: Gemini 2.5 Flash → Auto → Groq → Gemini Flash-Lite
+// Cotton Candy — Multi-provider AI (Groq prioritized, Gemini last resort)
+// Order: Auto/Groq → GPT → Claude → Gemini Flash → Flash-Lite
 // ============================================================
 
 export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
@@ -115,7 +115,7 @@ const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: st
   openQuestions:     { type: 'array',  description: 'Questions left unresolved' },
   feedback:          { type: 'array',  description: "Supervisor's feedback on the work" },
   requiredFixes:     { type: 'array',  description: 'Must-do revisions or corrections' },
-  discussionPoints: { type: 'array',  description: 'Points discussed about methodology/findings' },
+  discussionPoints:  { type: 'array',  description: 'Points discussed about methodology/findings' },
   nextMilestones:    { type: 'array',  description: 'Upcoming deadlines or milestones' },
   whatWorked:        { type: 'array',  description: 'Genuine wins, not generic platitudes' },
   whatDidntWork:     { type: 'array',  description: "Specific issues or failures (be candid)" },
@@ -197,7 +197,7 @@ function validateResult(raw: any): AISummary {
     openQuestions:     arr(raw?.openQuestions, 10),
     feedback:          arr(raw?.feedback, 15),
     requiredFixes:     arr(raw?.requiredFixes, 15),
-    discussionPoints: arr(raw?.discussionPoints, 15),
+    discussionPoints:  arr(raw?.discussionPoints, 15),
     nextMilestones:    arr(raw?.nextMilestones, 10),
     whatWorked:        arr(raw?.whatWorked, 15),
     whatDidntWork:     arr(raw?.whatDidntWork, 15),
@@ -358,11 +358,11 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
   catch { throw new Error('Claude: malformed JSON') }
 }
 
-
 // Every single-provider call now has retry + auto-fallback.
 // User's chosen provider is attempted first, then fallback chain.
 // `systemPrompt` is type-aware (built via buildSystemPrompt).
 // `plan` gates GPT-4o mini + Claude Haiku (monthly/yearly only)
+// NOTE: Gemini currently 403 PERMISSION_DENIED — kept last in all chains
 export async function callAI(
   provider: AIProvider,
   userMessage: string,
@@ -386,21 +386,26 @@ export async function callAI(
     { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
 
-  // Build chain: chosen provider first, others as fallback
+  // Build chain: chosen provider first, Groq as stable fallback, Gemini last resort
   let chain: typeof allProviders
   if (effectiveProvider === 'gemini-flash') {
+    // User explicitly wants Gemini Flash — try it, fallback to Groq, then Flash-Lite
     chain = [allProviders[0], allProviders[1], allProviders[2]]
   } else if (effectiveProvider === 'groq') {
-    chain = [allProviders[1], allProviders[0], allProviders[2]]
+    // Groq → GPT → Claude → Gemini (last)
+    chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'gemini-flash-lite') {
+    // Flash-Lite → Groq → Flash
     chain = [allProviders[2], allProviders[1], allProviders[0]]
   } else if (effectiveProvider === 'gpt-4o-mini') {
+    // GPT → Groq → Gemini (last)
     chain = [allProviders[3], allProviders[1], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'claude-haiku') {
+    // Claude → Groq → Gemini (last)
     chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
-    // 'auto' — default order: Gemini → Groq → Flash-Lite
-    chain = [allProviders[0], allProviders[1], allProviders[2]]
+    // 'auto' — Groq first (stable), GPT/Claude if available, Gemini last resort
+    chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   }
 
   const errors: string[] = []
