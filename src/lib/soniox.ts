@@ -30,10 +30,13 @@ function authHeaders() {
 
 /**
  * Upload audio file to Soniox. Returns file_id.
+ * Fix: wrap Blob as File with explicit mime type so Soniox can determine audio duration.
  */
 async function uploadFile(audio: Blob, filename = 'audio.webm'): Promise<string> {
+  const mimeType = audio.type || 'audio/webm'
+  const file = new File([audio], filename, { type: mimeType })
   const form = new FormData()
-  form.append('file', audio, filename)
+  form.append('file', file, filename)
 
   const res = await fetch(`${SONIOX_API_BASE}/v1/files`, {
     method: 'POST',
