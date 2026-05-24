@@ -145,8 +145,7 @@ function AIChipPicker({
   }, [open])
 
   const meta = PROVIDER_META[value]
-  const isProPlan = plan === 'pro' || plan === 'max'
-
+  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'yearly' || plan === 'month' || plan === 'student_pro' || plan === 'day'
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
