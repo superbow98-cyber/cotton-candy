@@ -93,7 +93,6 @@ function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }
     )
   }
   // gemini-lite
-  if (logoKey === 'gemini-lite') {
   return (
     <div style={{ ...wrapStyle, background: 'linear-gradient(135deg, #4796E3, #34A853)' }}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
@@ -101,37 +100,15 @@ function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }
       </svg>
     </div>
   )
-  }
-  if (logoKey === 'gpt') {
-    return (
-      <div style={{ ...wrapStyle, background: '#000' }}>
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
-          <path d="M22.289 9.94a5.998 5.998 0 0 0-.515-4.926 6.065 6.065 0 0 0-6.525-2.908A5.998 5.998 0 0 0 10.724 0a6.064 6.064 0 0 0-5.781 4.202 5.998 5.998 0 0 0-4.002 2.91 6.065 6.065 0 0 0 .747 7.11 5.998 5.998 0 0 0 .515 4.926 6.065 6.065 0 0 0 6.525 2.908A5.997 5.997 0 0 0 13.276 24a6.064 6.064 0 0 0 5.782-4.202 5.998 5.998 0 0 0 4.001-2.91 6.065 6.065 0 0 0-.77-6.948zM13.276 22.4a4.49 4.49 0 0 1-2.882-1.041l.142-.08 4.783-2.762a.78.78 0 0 0 .396-.68v-6.747l2.023 1.168a.072.072 0 0 1 .04.057v5.585a4.505 4.505 0 0 1-4.502 4.5zm-9.684-4.131a4.49 4.49 0 0 1-.537-3.018l.142.085 4.783 2.762a.779.779 0 0 0 .785 0l5.843-3.373v2.335a.072.072 0 0 1-.029.063l-4.836 2.791a4.504 4.504 0 0 1-6.151-1.645zm-1.261-10.46a4.489 4.489 0 0 1 2.347-1.975V11.5a.769.769 0 0 0 .389.678l5.82 3.361-2.023 1.168a.073.073 0 0 1-.071 0L4.009 13.9a4.505 4.505 0 0 1-.678-6.091zm16.614 3.864l-5.843-3.375 2.023-1.167a.072.072 0 0 1 .071 0l4.783 2.762a4.502 4.502 0 0 1-.696 8.124V12.35a.77.77 0 0 0-.338-.677zm2.014-3.025l-.142-.085-4.783-2.762a.779.779 0 0 0-.785 0L9.406 9.974V7.639a.072.072 0 0 1 .029-.063l4.836-2.79a4.503 4.503 0 0 1 6.688 4.664zm-12.664 4.161L6.272 11.64a.072.072 0 0 1-.04-.057V5.999a4.503 4.503 0 0 1 7.384-3.458l-.142.08-4.783 2.762a.779.779 0 0 0-.396.68zm1.098-2.366l2.602-1.502 2.603 1.5v3l-2.603 1.5-2.602-1.5z"/>
-        </svg>
-      </div>
-    )
-  }
-  // claude (default)
-  return (
-    <div style={{ ...wrapStyle, background: '#DA7756' }}>
-      <svg width={size} height={size} viewBox="0 0 100 100">
-        <line x1="50" y1="5" x2="50" y2="95" stroke="white" strokeWidth="12" strokeLinecap="round"/>
-        <line x1="5" y1="50" x2="95" y2="50" stroke="white" strokeWidth="12" strokeLinecap="round"/>
-        <line x1="15" y1="15" x2="85" y2="85" stroke="white" strokeWidth="12" strokeLinecap="round"/>
-        <line x1="85" y1="15" x2="15" y2="85" stroke="white" strokeWidth="12" strokeLinecap="round"/>
-      </svg>
-    </div>
-  )
 }
 
 // ---------------- AI CHIP (under timer) + DROPDOWN ----------------
 function AIChipPicker({
-  value, onChange, disabled, plan,
+  value, onChange, disabled,
 }: {
   value: AIProvider
   onChange: (v: AIProvider) => void
   disabled?: boolean
-  plan?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -145,7 +122,7 @@ function AIChipPicker({
   }, [open])
 
   const meta = PROVIDER_META[value]
-  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'yearly' || plan === 'month' || plan === 'student_pro' || plan === 'day'
+
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -192,43 +169,33 @@ function AIChipPicker({
           {PROVIDER_ORDER.map((p) => {
             const m = PROVIDER_META[p]
             const selected = p === value
-            const isLocked = m.proOnly && !isProPlan
             return (
               <button
                 key={p}
-                onClick={() => { if (!isLocked) { onChange(p); setOpen(false) } }}
+                onClick={() => { onChange(p); setOpen(false) }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 12px',
                   borderRadius: 12,
-                  cursor: isLocked ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   background: selected ? 'rgba(255,183,197,0.28)' : 'transparent',
                   border: 'none',
                   textAlign: 'left',
                   transition: 'background 0.15s',
-                  opacity: isLocked ? 0.55 : 1,
                 }}
-                onMouseEnter={(e) => { if (!selected && !isLocked) e.currentTarget.style.background = 'rgba(255,183,197,0.18)' }}
-                onMouseLeave={(e) => { if (!selected && !isLocked) e.currentTarget.style.background = 'transparent' }}
+                onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'rgba(255,183,197,0.18)' }}
+                onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent' }}
               >
                 <AILogo provider={p} size={18} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A0510', letterSpacing: -0.25, lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A0510', letterSpacing: -0.25, lineHeight: 1.3 }}>
                     {m.label}
-                    {isLocked && (
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#D4537E', background: 'rgba(212,83,126,0.1)', padding: '2px 6px', borderRadius: 100 }}>
-                        Monthly / Yearly
-                      </span>
-                    )}
                   </div>
                   <div style={{ fontSize: 12, color: 'rgba(75,21,40,0.58)', lineHeight: 1.4, letterSpacing: -0.1, marginTop: 2 }}>
                     {m.descEn}
                   </div>
                 </div>
-                {isLocked
-                  ? <span style={{ fontSize: 12, color: 'rgba(75,21,40,0.35)', flexShrink: 0 }}>🔒</span>
-                  : <span style={{ color: '#D4537E', fontSize: 16, fontWeight: 700, flexShrink: 0, opacity: selected ? 1 : 0 }}>✓</span>
-                }
+                <span style={{ color: '#D4537E', fontSize: 16, fontWeight: 700, flexShrink: 0, opacity: selected ? 1 : 0 }}>✓</span>
               </button>
             )
           })}
@@ -579,10 +546,10 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       // Pick best supported mime type — Chrome Android prefers webm/opus
       const mimeCandidates = [
-        'audio/mp4',
-        'audio/webm',
         'audio/webm;codecs=opus',
-        'audio/mpeg',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
       ]
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
 
@@ -684,9 +651,8 @@ export default function LectureRecorder({ id }: { id: string }) {
         // Check per-lecture minute cap (plan limit)
         const perLectureMax = PLANS[plan].minutesPerLecture * 60
         if (nowElapsed >= perLectureMax) {
-          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-finishing')
-          if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-          setTimeout(() => finishLecture(), 0)
+          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-stopping')
+          toggle()  // stops recording
           return
         }
 
@@ -694,10 +660,9 @@ export default function LectureRecorder({ id }: { id: string }) {
         if (usage && usage.allowed) {
           const projected = (usage.usedSeconds || 0) + nowElapsed
           if (projected >= usage.capSeconds) {
-            console.log('[cap] Global audio cap reached — auto-finishing')
+            console.log('[cap] Global audio cap reached — auto-stopping')
             setCapReachedDuringRec(true)
-            if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-            setTimeout(() => finishLecture(), 0)
+            toggle()
           }
         }
       }, 500)
@@ -725,7 +690,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  const save = async (finish: boolean) => {
+  const save = async (finish: boolean, segmentsOverride?: CleanSegment[]) => {
     if (!lecture) return
     setSaving(true)
     try {
@@ -740,7 +705,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       await sb.from('lectures').update({
         transcript_md: md,
         raw_transcript_md: rawMd,
-        clean_segments: cleanSegments,
+        clean_segments: segmentsOverride ?? cleanSegments,
         word_count: wordCount, duration_seconds: elapsed, keywords,
         status: finish ? 'finished' : 'recording',
         ended_at: finish ? new Date().toISOString() : null,
@@ -849,6 +814,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     setEnhanceError(null)
 
     // --- Step 1: enhance transcript with Whisper/Soniox-async (server-side routing) ---
+    let finalSegments: CleanSegment[] = cleanSegments
     if (chunks.length > 0) {
       setEnhancing(true)
       setEnhanceProgress({ done: 0, total: chunks.length })
@@ -893,7 +859,8 @@ export default function LectureRecorder({ id }: { id: string }) {
             language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
             created_at: new Date().toISOString(),
           }
-          setCleanSegments(prev => [...prev, newSegment])
+          finalSegments = [...cleanSegments, newSegment]
+          setCleanSegments(finalSegments)
 
           const whisperLines = whisperTextToLines(combined, elapsed)
           if (whisperLines.length > 0) {
@@ -921,7 +888,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     // --- Step 2: save + run AI ---
     setAiProcessing(true)
     try {
-      await save(true)
+      await save(true, finalSegments)
       await runAI()
     } catch (e: any) {
       setAiError(e.message || 'Failed')
@@ -1346,7 +1313,6 @@ export default function LectureRecorder({ id }: { id: string }) {
                 value={aiProvider}
                 onChange={updateAIProvider}
                 disabled={aiProcessing}
-                plan={plan}
               />
             </div>
           </div>
