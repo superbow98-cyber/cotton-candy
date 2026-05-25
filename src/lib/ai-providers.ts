@@ -370,7 +370,7 @@ export async function callAI(
   plan?: string,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
   // Plans allowed to use GPT + Claude
-  const isProPlan = plan === 'pro' || plan === 'max'
+  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'month'
 
   // If user picks pro-only provider but not on pro plan — fallback to auto
   const effectiveProvider = (provider === 'gpt-4o-mini' || provider === 'claude-haiku') && !isProPlan
