@@ -570,8 +570,8 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAudioCaptureOk(true)
       }
 
-      // 9-minute timeslice — auto-chunk for long lectures
-      rec.start(9 * 60 * 1000)
+      // 30-second timeslice — smaller chunks avoid Soniox corruption
+      rec.start(30 * 1000)
       mediaRecRef.current = rec
       return true
     } catch (e: any) {
@@ -713,7 +713,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       }).eq('id', lecture.id)
       const updated = {
         ...lecture, transcript_md: md, raw_transcript_md: rawMd,
-        clean_segments: cleanSegments,
+        clean_segments: segmentsOverride ?? cleanSegments,
         keywords, word_count: wordCount, duration_seconds: elapsed,
       }
       setLecture(updated); lectureRef.current = updated
