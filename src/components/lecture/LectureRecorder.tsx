@@ -684,8 +684,9 @@ export default function LectureRecorder({ id }: { id: string }) {
         // Check per-lecture minute cap (plan limit)
         const perLectureMax = PLANS[plan].minutesPerLecture * 60
         if (nowElapsed >= perLectureMax) {
-          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-stopping')
-          toggle()  // stops recording
+          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-finishing')
+          if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+          setTimeout(() => finishLecture(), 0)
           return
         }
 
@@ -693,9 +694,10 @@ export default function LectureRecorder({ id }: { id: string }) {
         if (usage && usage.allowed) {
           const projected = (usage.usedSeconds || 0) + nowElapsed
           if (projected >= usage.capSeconds) {
-            console.log('[cap] Global audio cap reached — auto-stopping')
+            console.log('[cap] Global audio cap reached — auto-finishing')
             setCapReachedDuringRec(true)
-            toggle()
+            if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+            setTimeout(() => finishLecture(), 0)
           }
         }
       }, 500)
