@@ -268,6 +268,8 @@ export async function lectureToPdf(
 
   // MIND MAP — render as visual radial diagram (full frame, word-wrapped)
   if (l.mindmap_json) {
+    nextPage()
+    ensure(460)
     heading('Mind map')
     const center = stripEmojis(l.mindmap_json.center || title)
     const branches = (l.mindmap_json.branches || []).slice(0, 8)
@@ -402,6 +404,7 @@ export async function lectureToPdf(
   }
 
   // CLEAN TRANSCRIPT — v61: segments with timestamps (matches dashboard layout)
+  nextPage()
   heading('Clean transcript')
 
   if (l.clean_transcript_edited && l.clean_transcript_edited.trim()) {
