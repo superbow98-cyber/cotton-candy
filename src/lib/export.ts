@@ -69,14 +69,22 @@ export function lectureToMarkdown(
     lines.push('')
   }
 
-  // v60: Clean transcript (edited if available, else from segments, else raw)
+  // v60: Clean transcript with timestamps per segment
   lines.push('## 📝 Clean transcript', '')
-  const cleanText = (l.clean_transcript_edited && l.clean_transcript_edited.trim())
-    ? l.clean_transcript_edited
-    : (l.clean_segments && l.clean_segments.length > 0)
-      ? l.clean_segments.map(s => s.text).join('\n\n')
-      : (l.transcript_md || '_No transcript_')
-  lines.push(cleanText, '')
+  if (l.clean_transcript_edited && l.clean_transcript_edited.trim()) {
+    lines.push(l.clean_transcript_edited, '')
+  } else if (l.clean_segments && l.clean_segments.length > 0) {
+    const fmtTime = (sec: number) => {
+      const m = Math.floor(sec / 60)
+      const s = Math.floor(sec % 60)
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    }
+    for (const seg of l.clean_segments) {
+      lines.push(`**${fmtTime(seg.start)}–${fmtTime(seg.end)}**`, '', seg.text, '')
+    }
+  } else {
+    lines.push(l.transcript_md || '_No transcript_', '')
+  }
 
   // v60: Images
   if (l.transcript_images && l.transcript_images.length > 0) {
@@ -103,7 +111,7 @@ export function downloadText(filename: string, content: string, mime = 'text/pla
   URL.revokeObjectURL(url)
 }
 
-// --------- PDF export (jsPDF) — v60: full content with mind map, images ---------
+// --------- PDF export (jsPDF) — v61: segments with timestamps ---------
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '')
   const r = parseInt(h.slice(0, 2), 16)
@@ -135,17 +143,23 @@ async function imageUrlToBase64(url: string): Promise<{ data: string; format: 'J
 
 // Strip emojis from text (jsPDF helvetica doesn't render them — they appear as garbage)
 function stripEmojis(text: string): string {
-  // Remove emoji unicode ranges + common pictographs
   return text
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')   // Misc symbols and pictographs
-    .replace(/[\u{2600}-\u{27BF}]/gu, '')     // Misc symbols + dingbats
-    .replace(/[\u{2300}-\u{23FF}]/gu, '')     // Misc technical
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')   // Misc emoji
-    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')     // Misc symbols and arrows
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')     // Variation selectors
-    .replace(/[\u{200D}]/gu, '')              // Zero-width joiner
-    .replace(/\s+/g, ' ')                      // Collapse multiple spaces
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u{2300}-\u{23FF}]/gu, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/[\u{200D}]/gu, '')
+    .replace(/\s+/g, ' ')
     .trim()
+}
+
+// Format seconds to MM:SS
+function fmtTime(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export async function lectureToPdf(
@@ -193,7 +207,6 @@ export async function lectureToPdf(
   doc.text(meta.join('  ·  '), M, 74)
   y = 120
 
-  // Section helper (v60.1: strip emojis — jsPDF helvetica can't render them)
   const heading = (text: string, color: [number, number, number] = accent) => {
     ensure(34)
     doc.setTextColor(...color)
@@ -259,7 +272,6 @@ export async function lectureToPdf(
     const center = stripEmojis(l.mindmap_json.center || title)
     const branches = (l.mindmap_json.branches || []).slice(0, 8)
 
-    // Word-wrap helper (local to PDF)
     const wrapWords = (text: string, maxChars: number, maxLines: number): string[] => {
       if (!text) return ['']
       const words = text.split(/\s+/)
@@ -281,40 +293,33 @@ export async function lectureToPdf(
     }
 
     if (branches.length > 0) {
-      // MUCH BIGGER FRAME — full page width, taller for word-wrapped text
-      const diagramH = 420  // was 280 (50% taller)
+      const diagramH = 420
       ensure(diagramH + 20)
 
-      // Diagram bounds (use full page width)
       const dW = W - 2 * M
       const dH = diagramH
       const dX = M
       const dY = y
 
-      // Background card
       doc.setFillColor(250, 251, 253)
       doc.setDrawColor(230, 232, 238)
       doc.setLineWidth(0.5)
       doc.roundedRect(dX, dY, dW, dH, 10, 10, 'FD')
 
-      // Center coordinates (within diagram)
       const cx = dX + dW / 2
       const cy = dY + dH / 2
-      const radius = Math.min(dW, dH) * 0.34  // larger radius
-      const branchW = Math.min(170, dW / 3.2)  // was 110 — much wider
-      // branchH is dynamic — computed per branch below
+      const radius = Math.min(dW, dH) * 0.34
+      const branchW = Math.min(170, dW / 3.2)
 
-      // Branch colors palette (matches MindMapView)
       const BRANCH_COLORS: [number, number, number][] = [
-        [90, 143, 245],   // blue
-        [52, 168, 83],    // green
-        [248, 180, 217],  // pink
-        [255, 182, 39],   // amber
-        [200, 168, 233],  // purple
-        [255, 112, 67],   // orange
+        [90, 143, 245],
+        [52, 168, 83],
+        [248, 180, 217],
+        [255, 182, 39],
+        [200, 168, 233],
+        [255, 112, 67],
       ]
 
-      // Compute positions + word-wrap text for each branch
       const positions = branches.map((b, i) => {
         const total = branches.length
         const angle = -Math.PI + (i / total) * Math.PI * 2
@@ -322,17 +327,9 @@ export async function lectureToPdf(
         const by = cy + Math.sin(angle) * radius * 0.82
         const titleLines = wrapWords(stripEmojis(b.title), 24, 2)
         const subLines = b.subtitle ? wrapWords(stripEmojis(b.subtitle), 28, 2) : []
-        return {
-          ...b,
-          x: bx,
-          y: by,
-          titleLines,
-          subLines,
-          rgb: BRANCH_COLORS[i % BRANCH_COLORS.length],
-        }
+        return { ...b, x: bx, y: by, titleLines, subLines, rgb: BRANCH_COLORS[i % BRANCH_COLORS.length] }
       })
 
-      // Draw connection lines (center → each branch)
       for (const pos of positions) {
         doc.setLineWidth(1)
         doc.setDrawColor(
@@ -343,13 +340,11 @@ export async function lectureToPdf(
         doc.line(cx, cy, pos.x, pos.y)
       }
 
-      // Center node — bigger to fit wrapped center text
       const centerLines = wrapWords(center, 16, 2)
       const centerRadius = 48
       doc.setFillColor(29, 29, 31)
       doc.circle(cx, cy, centerRadius, 'F')
 
-      // Center text (white) — supports 2 lines
       doc.setTextColor(255, 255, 255)
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(11)
@@ -360,7 +355,6 @@ export async function lectureToPdf(
         doc.text(line, cx - w / 2, startCenterY + i * lineHeight)
       })
 
-      // "Main Topic" label below center text
       doc.setFontSize(7)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(255, 255, 255)
@@ -369,25 +363,15 @@ export async function lectureToPdf(
       const subY = startCenterY + centerLines.length * lineHeight + 4
       doc.text(subtitle, cx - subW / 2, subY)
 
-      // Draw branches (dynamic height based on text lines)
       for (const pos of positions) {
         const totalLines = pos.titleLines.length + pos.subLines.length
         const dynH = Math.max(40, 18 + totalLines * 12)
 
-        // Branch rect (white fill, color border)
         doc.setFillColor(255, 255, 255)
         doc.setDrawColor(pos.rgb[0], pos.rgb[1], pos.rgb[2])
         doc.setLineWidth(1)
-        doc.roundedRect(
-          pos.x - branchW / 2,
-          pos.y - dynH / 2,
-          branchW,
-          dynH,
-          8, 8,
-          'FD'
-        )
+        doc.roundedRect(pos.x - branchW / 2, pos.y - dynH / 2, branchW, dynH, 8, 8, 'FD')
 
-        // Title lines
         doc.setTextColor(29, 29, 31)
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(9)
@@ -398,7 +382,6 @@ export async function lectureToPdf(
           doc.text(line, pos.x - tw / 2, startTitleY + lineIdx * titleLineH)
         })
 
-        // Subtitle lines (below title)
         if (pos.subLines.length > 0) {
           doc.setFont('helvetica', 'normal')
           doc.setFontSize(7.5)
@@ -411,44 +394,63 @@ export async function lectureToPdf(
         }
       }
 
-      // Reset
       doc.setTextColor(...dark)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(11)
-
       y = dY + dH + 12
     }
   }
 
-  // CLEAN TRANSCRIPT
+  // CLEAN TRANSCRIPT — v61: segments with timestamps (matches dashboard layout)
   heading('Clean transcript')
-  const cleanText = (l.clean_transcript_edited && l.clean_transcript_edited.trim())
-    ? l.clean_transcript_edited
-    : (l.clean_segments && l.clean_segments.length > 0)
-      ? l.clean_segments.map(s => s.text).join('\n\n')
-      : (l.transcript_md || '_No transcript_')
 
-  const paragraphs = cleanText.split(/\n+/)
-  for (const p of paragraphs) {
-    if (!p.trim()) { y += 6; continue }
-    const isHeading = p.startsWith('##')
-    if (isHeading) {
-      ensure(28)
+  if (l.clean_transcript_edited && l.clean_transcript_edited.trim()) {
+    // Edited text — render as paragraphs
+    const paragraphs = l.clean_transcript_edited.split(/\n+/)
+    for (const p of paragraphs) {
+      if (!p.trim()) { y += 6; continue }
+      const clean = stripEmojis(p.replace(/^[-*]\s*/, '• '))
+      const ls = wrap(clean, W - 2 * M, 11)
+      for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
+      y += 4
+    }
+  } else if (l.clean_segments && l.clean_segments.length > 0) {
+    // Segments with timestamps — matches dashboard layout
+    for (const seg of l.clean_segments) {
+      ensure(40)
+
+      // Timestamp label (gray, small)
+      const tsLabel = `${fmtTime(seg.start)}  –  ${fmtTime(seg.end)}`
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(13)
-      doc.setTextColor(...accent)
-      const txt = stripEmojis(p.replace(/^#+\s*/, ''))
-      const ls = wrap(txt, W - 2 * M, 13)
-      for (const line of ls) { ensure(18); doc.text(line, M, y); y += 18 }
+      doc.setFontSize(8.5)
+      doc.setTextColor(...gray)
+      doc.text(tsLabel, M, y)
+      y += 4
+
+      // Thin separator line
+      doc.setDrawColor(...gray)
+      doc.setLineWidth(0.3)
+      doc.line(M, y, W - M, y)
+      y += 10
+
+      // Segment text
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(11)
       doc.setTextColor(...dark)
-      continue
+      const ls = wrap(stripEmojis(seg.text), W - 2 * M, 11)
+      for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
+      y += 12
     }
-    const clean = stripEmojis(p.replace(/^[-*]\s*/, '• '))
-    const ls = wrap(clean, W - 2 * M, 11)
-    for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
-    y += 4
+  } else {
+    // Fallback raw transcript
+    const paragraphs = (l.transcript_md || '_No transcript_').split(/\n+/)
+    for (const p of paragraphs) {
+      if (!p.trim()) { y += 6; continue }
+      const clean = stripEmojis(p.replace(/^[-*]\s*/, '• '))
+      const ls = wrap(clean, W - 2 * M, 11)
+      for (const line of ls) { ensure(15); doc.text(line, M, y); y += 15 }
+      y += 4
+    }
   }
 
   // IMAGES — embed each on a new section
