@@ -272,10 +272,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FEATURE STRIP */}
+      {/* ── FEATURES SECTION ── */}
       <section id="features" style={{
         background: 'linear-gradient(180deg, #F6F4FF 0%, #EDF2FF 100%)',
-        padding: '80px 20px', textAlign: 'center',
+        padding: '80px 20px',
+        textAlign: 'center',
       }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: '#5A8FF5', marginBottom: 10 }}>
           {L("What's in the box", 'Apa yang ada')}
@@ -294,26 +295,111 @@ export default function Home() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 10, maxWidth: 1000, margin: '0 auto',
         }}>
-          <Feature
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round"><path d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3" /><circle cx="12" cy="12" r="4" /></svg>}
-            title={L('Rojak-ready', 'Rojak-ready')}
-            desc={L('Switch between EN, BM, Chinese, Tamil, Arabic mid-sentence. One tap.', 'Tukar antara EN, BM, Cina, Tamil, Arab di tengah ayat. Satu tap.')}
-          />
-          <Feature
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8m8 4H8" /></svg>}
-            title={L('AI that organizes', 'AI yang menyusun')}
-            desc={L('Topics, key points, formulas, questions, summary — built automatically.', 'Topik, key points, formula, soalan, ringkasan — tersusun automatik.')}
-          />
-          <Feature
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>}
-            title={L('Science-smart', 'Pintar sains')}
-            desc={L('500+ scientific terms auto-corrected. "My toe corner dia" → Mitochondria.', '500+ istilah sains auto-betul. "My toe corner dia" → Mitochondria.')}
-          />
-          <Feature
-            icon={<svg viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>}
-            title={L('Export anywhere', 'Eksport ke mana-mana')}
-            desc={L('Download as .md or .pdf with theme colors. Shareable instantly.', 'Muat turun .md atau .pdf dengan warna tema. Kongsi serta-merta.')}
-          />
+          {[
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  <path d="M2 12h20" />
+                </svg>
+              ),
+              titleEn: 'Rojak-ready', titleBm: 'Rojak-ready',
+              descEn: 'Switch between EN, BM, Chinese, Tamil, Arabic mid-sentence. One tap.',
+              descBm: 'Tukar antara EN, BM, Cina, Tamil, Arab di tengah ayat. Satu tap.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <path d="M14 2v6h6" />
+                  <path d="M16 13H8m8 4H8" />
+                </svg>
+              ),
+              titleEn: 'AI that organizes', titleBm: 'AI yang menyusun',
+              descEn: 'Topics, key points, formulas, questions, summary — built automatically.',
+              descBm: 'Topik, key points, formula, soalan, ringkasan — tersusun automatik.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg>
+              ),
+              titleEn: 'Science-smart', titleBm: 'Pintar sains',
+              descEn: '500+ scientific terms auto-corrected. "My toe corner dia" → Mitochondria.',
+              descBm: '500+ istilah sains auto-betul. "My toe corner dia" → Mitochondria.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              ),
+              titleEn: 'Export anywhere', titleBm: 'Eksport ke mana-mana',
+              descEn: 'Download as .md or .pdf with theme colors. Shareable instantly.',
+              descBm: 'Muat turun .md atau .pdf dengan warna tema. Kongsi serta-merta.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              ),
+              titleEn: 'AI Hearing', titleBm: 'AI Hearing',
+              descEn: "Powered by Deepgram, Soniox & Whisper. Best-in-class STT that hears every word — even your lecturer's accent.",
+              descBm: 'Dikuasakan oleh Deepgram, Soniox & Whisper. STT terbaik yang dengar setiap patah kata — termasuk loghat pensyarah.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <circle cx="3" cy="6" r="2" /><line x1="5" y1="6" x2="9" y2="11" />
+                  <circle cx="21" cy="6" r="2" /><line x1="19" y1="6" x2="15" y2="11" />
+                  <circle cx="3" cy="18" r="2" /><line x1="5" y1="18" x2="9" y2="13" />
+                  <circle cx="21" cy="18" r="2" /><line x1="19" y1="18" x2="15" y2="13" />
+                  <circle cx="12" cy="2" r="2" /><line x1="12" y1="4" x2="12" y2="9" />
+                </svg>
+              ),
+              titleEn: 'Mind Map', titleBm: 'Mind Map',
+              descEn: 'Auto-generated visual mind map from your lecture. See the whole topic at a glance — no drawing needed.',
+              descBm: 'Mind map visual auto-dijana dari kuliah anda. Lihat keseluruhan topik sekilas pandang — tanpa melukis.',
+            },
+          ].map((f, i) => (
+            <div key={i} style={{
+              background: '#fff',
+              borderRadius: 0,
+              padding: '22px 18px',
+              textAlign: 'left',
+              border: '0.5px solid rgba(0,0,0,0.10)',
+            }}>
+              <div style={{
+                width: 36, height: 36,
+                background: 'linear-gradient(135deg, #FFE5EC, #E5F0FF)',
+                borderRadius: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 14,
+              }}>
+                {f.icon}
+              </div>
+              <div style={{
+                fontSize: 15, fontWeight: 600, color: '#1d1d1f',
+                marginBottom: 4, letterSpacing: '-0.015em',
+              }}>
+                {L(f.titleEn, f.titleBm)}
+              </div>
+              <div style={{
+                fontSize: 12.5, color: 'rgba(29,29,31,0.6)', lineHeight: 1.5,
+              }}>
+                {L(f.descEn, f.descBm)}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -564,42 +650,14 @@ function AICard({ eyebrow, name, desc, isDefault, logoBg, logoSvg }: {
   )
 }
 
-function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div style={{
-      background: '#fff', borderRadius: 18, padding: '22px 18px',
-      textAlign: 'left', border: '0.5px solid rgba(0,0,0,0.04)',
-    }}>
-      <div style={{
-        width: 36, height: 36,
-        background: 'linear-gradient(135deg, #FFE5EC, #E5F0FF)',
-        borderRadius: 10,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        marginBottom: 14,
-      }}>
-        <div style={{ width: 18, height: 18, display: 'flex' }}>{icon}</div>
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.015em' }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.6)', lineHeight: 1.5 }}>
-        {desc}
-      </div>
-    </div>
-  )
-}
-
 // Cycles through words with fade + slide-up animation (Apple-style).
-// Width adapts automatically via inline-block + measured span.
 function WordRotator({ words, interval = 2500 }: { words: string[]; interval?: number }) {
   const [i, setI] = useState(0)
   const [visible, setVisible] = useState(true)
 
   useEffect(() => {
     const switchWord = () => {
-      // Phase 1: fade out + slide up (150ms)
       setVisible(false)
-      // Phase 2: swap word + slide in from below
       setTimeout(() => {
         setI((prev) => (prev + 1) % words.length)
         setVisible(true)
@@ -640,7 +698,7 @@ function PricingCard({
   const isFeatured = variant === 'featured'
   const isFree = variant === 'free'
   const isGold = variant === 'gold'
-  const isDark = isFeatured || isGold // shared "dark card" text color logic
+  const isDark = isFeatured || isGold
 
   return (
     <div style={{
@@ -774,14 +832,13 @@ function PricingCard({
 function DemoSection({ lang }: { lang: string }) {
   const L = (en: string, bm: string) => lang === 'bm' ? bm : en
   const [step, setStep] = useState(1)
-  const [seconds, setSeconds] = useState(258) // 4:18
+  const [seconds, setSeconds] = useState(258)
   const [words, setWords] = useState(142)
   const [nbCount, setNbCount] = useState(12)
   const autoTimerRef = useRef<any>(null)
   const tickerRef = useRef<any>(null)
   const wordTickerRef = useRef<any>(null)
 
-  // Auto-cycle steps every 5.5s
   useEffect(() => {
     autoTimerRef.current = setInterval(() => {
       setStep((s) => (s >= 3 ? 1 : s + 1))
@@ -789,7 +846,6 @@ function DemoSection({ lang }: { lang: string }) {
     return () => clearInterval(autoTimerRef.current)
   }, [])
 
-  // Timer only ticks on step 1
   useEffect(() => {
     if (step === 1) {
       tickerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
@@ -798,14 +854,11 @@ function DemoSection({ lang }: { lang: string }) {
       }, 1200)
     }
     if (step === 3) {
-      // Notebook count animates
       setNbCount(12)
       const t1 = setTimeout(() => setNbCount(13), 600)
       const t2 = setTimeout(() => setNbCount(14), 1300)
       const t3 = setTimeout(() => setNbCount(15), 2000)
-      return () => {
-        clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
-      }
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
     }
     return () => {
       if (tickerRef.current) clearInterval(tickerRef.current)
@@ -877,7 +930,6 @@ function DemoSection({ lang }: { lang: string }) {
           )}
         </p>
 
-        {/* Step navigation */}
         <div style={{
           display: 'flex', justifyContent: 'center',
           gap: 10, marginBottom: 30, flexWrap: 'wrap',
@@ -896,7 +948,6 @@ function DemoSection({ lang }: { lang: string }) {
           </button>
         </div>
 
-        {/* Device frame */}
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <div style={{
             background: '#f2f2f4', borderRadius: 28, padding: 14,
@@ -963,7 +1014,6 @@ function Step1({ lang, h, m, sec, pad, words }: {
       <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
         Dr. Aziz · Hall B · 🇲🇾 {L('Malay', 'Melayu')}
       </div>
-
       <div style={{
         background: '#FFFBFC', border: '0.5px solid rgba(0,0,0,0.06)',
         borderRadius: 16, padding: 18,
@@ -1014,7 +1064,6 @@ function Step1({ lang, h, m, sec, pad, words }: {
           </div>
         </div>
       </div>
-
       <div style={{
         background: '#fff', border: '0.5px solid rgba(0,0,0,0.05)',
         borderRadius: 14, padding: '16px 18px',
@@ -1052,7 +1101,6 @@ function Step2({ lang }: { lang: string }) {
       <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
         {L('AI organizing your notes…', 'AI menyusun nota anda…')}
       </div>
-
       <div style={{
         textAlign: 'center', padding: '30px 0 22px',
         border: '2px dashed rgba(212,83,126,0.35)',
@@ -1076,7 +1124,6 @@ function Step2({ lang }: { lang: string }) {
           {L('Extracting topics · key points · formulas · summary', 'Extract topik · key points · formula · ringkasan')}
         </div>
       </div>
-
       {[
         { t: `✨ ${L('Summary', 'Ringkasan')}`, b: L(
           'Class covered mitosis — the 4-phase process of cell division that produces two genetically identical daughter cells.',
@@ -1097,10 +1144,7 @@ function Step2({ lang }: { lang: string }) {
           animation: 'cc-demo-fadeup 0.5s ease-out forwards',
           animationDelay: `${card.delay}s`,
         }}>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: '#1d1d1f',
-            marginBottom: 4, letterSpacing: '-0.01em',
-          }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
             {card.t}
           </div>
           <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.65)', lineHeight: 1.55 }}>
@@ -1122,11 +1166,7 @@ function Step3({ lang, nbCount }: { lang: string; nbCount: number }) {
       <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 18, textAlign: 'left' }}>
         {L('Organize by subject or semester', 'Susun ikut subjek atau semester')}
       </div>
-
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 14, height: 330,
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, height: 330 }}>
         <div style={{
           background: '#FAFAFB', border: '0.5px solid rgba(0,0,0,0.06)',
           borderRadius: 14, padding: 14, textAlign: 'left', overflow: 'hidden',
@@ -1144,8 +1184,7 @@ function Step3({ lang, nbCount }: { lang: string; nbCount: number }) {
           ].map((lec, i) => (
             <div key={i} style={{
               background: '#fff', border: '0.5px solid rgba(0,0,0,0.05)',
-              borderRadius: 10, padding: '8px 10px', marginBottom: 6,
-              fontSize: 12,
+              borderRadius: 10, padding: '8px 10px', marginBottom: 6, fontSize: 12,
               animation: 'cc-demo-fly 2s ease-in-out forwards',
               animationDelay: `${lec.d}s`,
             }}>
@@ -1154,7 +1193,6 @@ function Step3({ lang, nbCount }: { lang: string; nbCount: number }) {
             </div>
           ))}
         </div>
-
         <div style={{
           background: '#FAFAFB', border: '0.5px solid rgba(0,0,0,0.06)',
           borderRadius: 14, padding: 14, textAlign: 'left', overflow: 'hidden',
@@ -1165,25 +1203,16 @@ function Step3({ lang, nbCount }: { lang: string; nbCount: number }) {
           }}>
             {L('Notebook', 'Notebook')}
           </div>
-          <div style={{
-            background: 'linear-gradient(135deg, #FFE5EC, #E5F0FF)',
-            borderRadius: 12, padding: 12,
-          }}>
+          <div style={{ background: 'linear-gradient(135deg, #FFE5EC, #E5F0FF)', borderRadius: 12, padding: 12 }}>
             <div style={{ fontSize: 28, marginBottom: 4 }}>📘</div>
-            <div style={{
-              fontSize: 13, fontWeight: 600, color: '#1d1d1f',
-              letterSpacing: '-0.015em',
-            }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.015em' }}>
               Biology Sem 2
             </div>
             <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.6)', marginTop: 2 }}>
               <span style={{ fontWeight: 700, color: '#5A8FF5' }}>{nbCount}</span> {L('lectures · exam-ready', 'kuliah · siap ujian')}
             </div>
           </div>
-          <div style={{
-            fontSize: 10, color: 'rgba(29,29,31,0.45)',
-            marginTop: 14, textAlign: 'center',
-          }}>
+          <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)', marginTop: 14, textAlign: 'center' }}>
             {L('Export whole notebook as one PDF', 'Eksport semua notebook sebagai satu PDF')}
           </div>
         </div>
