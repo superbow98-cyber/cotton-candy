@@ -612,8 +612,8 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAudioCaptureOk(true)
       }
 
-      // 30-second timeslice — smaller chunks avoid Soniox corruption
-      rec.start(30 * 1000)
+      // 9-second timeslice — smaller chunks avoid Soniox corruption
+      rec.start(9000)
       mediaRecRef.current = rec
       return true
     } catch (e: any) {
