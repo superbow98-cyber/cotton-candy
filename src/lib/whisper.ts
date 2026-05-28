@@ -33,6 +33,7 @@ export type TranscribeResponse = {
   capReached?: boolean
   usage?: AudioUsageInfo
   audioSeconds?: number
+  provider?: 'soniox' | 'assemblyai' | 'whisper_turbo' | 'deepgram'
 }
 
 /**
