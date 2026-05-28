@@ -300,6 +300,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
   const recLangRef = useRef<string>('en-US')
+  const isRecordingRef = useRef(false)
+  const recognitionRestartTimer = useRef<any>(null)
   const lectureRef = useRef<Lecture | null>(null)
   const aiSectionRef = useRef<HTMLDivElement | null>(null)
 
@@ -356,7 +358,11 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   // Load lecture + AI provider preference
   useEffect(() => {
-    (async () => {
+    return () => {
+      isRecordingRef.current = false
+      if (recognitionRestartTimer.current) clearTimeout(recognitionRestartTimer.current)
+    }
+  }, [])
       const sb = createClient()
       const { data: { user } } = await sb.auth.getUser()
       if (!user) return
@@ -431,12 +437,83 @@ export default function LectureRecorder({ id }: { id: string }) {
   const startRecognition = useCallback((langCode: string) => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) { setSupported(false); return null }
+
+    if (recognitionRestartTimer.current) {
+      clearTimeout(recognitionRestartTimer.current)
+      recognitionRestartTimer.current = null
+    }
+
     try {
       const r = new SR()
       r.continuous = true
       r.interimResults = true
       r.lang = langCode
+      r.maxAlternatives = 1
+
       r.onresult = (e: any) => {
+        let finalText = '', interimText = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const chunk = e.results[i][0].transcript
+          if (e.results[i].isFinal) finalText += chunk
+          else interimText += chunk
+        }
+        if (finalText.trim()) {
+          const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
+          const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
+          const corrected = correctScientificTerms(finalText.trim(), subjectHint)
+          setLines((prev) => [...prev, {
+            id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: recLangRef.current,
+          }])
+          setInterim('')
+        } else {
+          setInterim(interimText)
+        }
+      }
+
+      r.onerror = (e: any) => {
+        console.warn('[speech] error:', e.error)
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          setPermission(false)
+          return
+        }
+        if (isRecordingRef.current && (e.error === 'network' || e.error === 'audio-capture' || e.error === 'aborted')) {
+          recognitionRestartTimer.current = setTimeout(() => {
+            if (!isRecordingRef.current) return
+            console.log('[speech] restarting after error:', e.error)
+            try { recRef.current?.stop() } catch {}
+            recRef.current = startRecognition(recLangRef.current)
+          }, 300)
+        }
+      }
+
+      r.onend = () => {
+        if (!isRecordingRef.current) return
+        recognitionRestartTimer.current = setTimeout(() => {
+          if (!isRecordingRef.current) return
+          console.log('[speech] restarting after onend, lang:', recLangRef.current)
+          try {
+            const newR = new SR()
+            newR.continuous = true
+            newR.interimResults = true
+            newR.lang = recLangRef.current
+            newR.maxAlternatives = 1
+            newR.onresult = r.onresult
+            newR.onerror = r.onerror
+            newR.onend = r.onend
+            newR.start()
+            recRef.current = newR
+          } catch (err) {
+            console.warn('[speech] restart failed:', err)
+          }
+        }, 100)
+      }
+
+      r.start()
+      return r
+    } catch {
+      setSupported(false); return null
+    }
+  }, [])
         let finalText = '', interimText = ''
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const chunk = e.results[i][0].transcript
@@ -467,19 +544,37 @@ export default function LectureRecorder({ id }: { id: string }) {
   }, [recording])
 
   const stopRecognition = () => {
+    if (recognitionRestartTimer.current) {
+      clearTimeout(recognitionRestartTimer.current)
+      recognitionRestartTimer.current = null
+    }
     if (recRef.current) {
-      try { recRef.current.onend = null; recRef.current.stop() } catch {}
+      try {
+        recRef.current.onend = null
+        recRef.current.onerror = null
+        recRef.current.stop()
+      } catch {}
       recRef.current = null
     }
   }
-
   const swapLanguage = (newCode: string) => {
     if (!RECOGNITION_LANGS.some(l => l.code === newCode)) return
-    setRecLang(newCode); recLangRef.current = newCode
+    setRecLang(newCode)
+    recLangRef.current = newCode
     try { localStorage.setItem(STORAGE_KEY, newCode) } catch {}
-    if (recording && recRef.current) {
-      stopRecognition()
-      setTimeout(() => { recRef.current = startRecognition(newCode) }, 120)
+    if (isRecordingRef.current) {
+      if (recognitionRestartTimer.current) {
+        clearTimeout(recognitionRestartTimer.current)
+        recognitionRestartTimer.current = null
+      }
+      if (recRef.current) {
+        try { recRef.current.onend = null; recRef.current.stop() } catch {}
+        recRef.current = null
+      }
+      setTimeout(() => {
+        if (!isRecordingRef.current) return
+        recRef.current = startRecognition(newCode)
+      }, 150)
     }
   }
 
@@ -660,6 +755,7 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   const toggle = async () => {
     if (recording) {
+      isRecordingRef.current = false
       stopRecognition()
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
@@ -684,6 +780,7 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       // 3. Start Web Speech API for live preview (messy but instant)
       startRef.current = Date.now()
+      isRecordingRef.current = true
       recRef.current = startRecognition(recLangRef.current)
 
       tickRef.current = setInterval(() => {
@@ -876,15 +973,14 @@ const finishLecture = async () => {
               ? Math.max(...cleanSegments.map(s => s.end))
               : 0
             const segmentEnd = elapsed
-            const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
             const newSegment: CleanSegment = {
-              start: segmentStart,
-              end: segmentEnd,
-              text: combined,
-              source: isMalayMode ? 'soniox_async' : 'whisper_turbo',
-              language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
-              created_at: new Date().toISOString(),
-            }
+                start: segmentStart,
+                end: segmentEnd,
+                text: combined,
+                source: (result.provider || 'soniox') as any,
+                language: result.language || (recordingLang === 'auto' ? 'auto' : recordingLang),
+                created_at: new Date().toISOString(),
+              }
             finalSegments = [...cleanSegments, newSegment]
             setCleanSegments(finalSegments)
 
@@ -1654,7 +1750,7 @@ const finishLecture = async () => {
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
-                {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
+                {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · {cleanSegments[cleanSegments.length - 1]?.source || 'soniox'}
               </span>
               {!isEditing && (
                 <>
