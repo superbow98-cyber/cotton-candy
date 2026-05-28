@@ -342,6 +342,20 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }, [lang])
 
+  // Pre-warm mic permission on page load (fix iOS Safari freeze)
+  useEffect(() => {
+    const prewarmMic = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach(t => t.stop())
+        console.log('[mic] permission pre-granted')
+      } catch (e) {
+        console.warn('[mic] permission denied:', e)
+      }
+    }
+    prewarmMic()
+  }, [])
+
   // Fetch current audio usage from server
   useEffect(() => {
     const fetchUsage = async () => {
