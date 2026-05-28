@@ -745,14 +745,19 @@ export default function LectureRecorder({ id }: { id: string }) {
       }
       setAudioCaptureOk(null)
 
-      // 1. Start audio capture FIRST — grabs mic exclusively for MediaRecorder
-      const audioOk = await startAudioCapture()
-      console.log('[toggle] audio capture ready:', audioOk)
+      // iOS Safari cannot run MediaRecorder + Web Speech simultaneously — skip audio capture
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+      let audioOk = false
+      if (!isIOS) {
+        audioOk = await startAudioCapture()
+        console.log('[toggle] audio capture ready:', audioOk)
+        await new Promise(r => setTimeout(r, 150))
+      } else {
+        console.log('[toggle] iOS detected — skipping MediaRecorder, Web Speech only')
+        setAudioCaptureOk(null)
+      }
 
-      // 2. Small delay to let mic settle
-      await new Promise(r => setTimeout(r, 150))
-
-      // 3. Start Web Speech API for live preview (messy but instant)
+      // Start Web Speech API for live preview
       startRef.current = Date.now()
       isRecordingRef.current = true
       recRef.current = startRecognition(recLangRef.current)
