@@ -363,6 +363,9 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (recognitionRestartTimer.current) clearTimeout(recognitionRestartTimer.current)
     }
   }, [])
+
+  useEffect(() => {
+    (async () => {
       const sb = createClient()
       const { data: { user } } = await sb.auth.getUser()
       if (!user) return
@@ -399,7 +402,6 @@ export default function LectureRecorder({ id }: { id: string }) {
           if (parsed && typeof parsed === 'object' && 'topics' in parsed) setAiResult(parsed as AISummary)
         } catch {}
       }
-
       // Priority: lecture.ai_provider > profile.ai_provider > DEFAULT
       const { data: prof } = await sb.from('profiles').select('plan, ai_provider').eq('id', user.id).maybeSingle()
       setPlan((prof?.plan || 'free') as keyof typeof PLANS)
@@ -514,34 +516,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       setSupported(false); return null
     }
   }, [])
-        let finalText = '', interimText = ''
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const chunk = e.results[i][0].transcript
-          if (e.results[i].isFinal) finalText += chunk
-          else interimText += chunk
-        }
-        if (finalText.trim()) {
-          const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-          const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
-          const corrected = correctScientificTerms(finalText.trim(), subjectHint)
-          setLines((prev) => [...prev, {
-            id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: recLangRef.current,
-          }])
-          setInterim('')
-        } else {
-          setInterim(interimText)
-        }
-      }
-      r.onerror = (e: any) => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setPermission(false)
-      }
-      r.onend = () => { if (recRef.current && recording) { try { r.start() } catch {} } }
-      r.start()
-      return r
-    } catch {
-      setSupported(false); return null
-    }
-  }, [recording])
 
   const stopRecognition = () => {
     if (recognitionRestartTimer.current) {
