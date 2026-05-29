@@ -9,7 +9,8 @@
 "lint": "next lint"
 },
 "dependencies": {
-"@aws-sdk/client-s3": "^3.1042.0",
+  "@aws-sdk/client-s3": "^3.1042.0",
+  "ffmpeg-static": "^5.2.0",
 "@aws-sdk/s3-request-presigner": "^3.1042.0",
 "@soniox/speech-to-text-web": "^1.0.0",
 "@supabase/ssr": "^0.5.2",
