@@ -135,12 +135,13 @@ try {
       const outputPath = join(tmpdir(), `soniox_out_${Date.now()}.wav`)
       writeFileSync(inputPath, Buffer.from(await audio.arrayBuffer()))
       const ffResult = spawnSync(ffmpegPath, ['-i', inputPath, '-ar', '16000', '-ac', '1', '-f', 'wav', '-y', outputPath], { stdio: 'pipe' })
+      console.log(`[transcribe] Soniox: ffmpeg status=${ffResult.status} | stderr=${ffResult.stderr?.toString().slice(0, 200)} | error=${ffResult.error?.message}`)
       if (ffResult.status === 0) {
         sonioxAudio = new Blob([readFileSync(outputPath)], { type: 'audio/wav' })
         sonioxFilename = 'audio.wav'
         console.log(`[transcribe] Soniox: WAV converted | ${sonioxAudio.size}B`)
       } else {
-        console.warn(`[transcribe] Soniox: ffmpeg failed, using original | ${ffResult.stderr?.toString().slice(0, 100)}`)
+        console.warn(`[transcribe] Soniox: ffmpeg failed | status=${ffResult.status} | error=${ffResult.error?.message}`)
       }
       try { unlinkSync(inputPath) } catch {}
       try { unlinkSync(outputPath) } catch {}
