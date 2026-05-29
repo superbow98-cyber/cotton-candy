@@ -458,10 +458,9 @@ export default function LectureRecorder({ id }: { id: string }) {
       r.onerror = (e: any) => {
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setPermission(false)
       }
-      recRef.current = r  // set DULU sebelum start
-     r.onend = () => { if (recRef.current) { try { r.start() } catch {} } }
-     r.start()
-     return r
+      r.onend = () => { if (recRef.current && recording) { try { r.start() } catch {} } }
+      r.start()
+      return r
     } catch {
       setSupported(false); return null
     }
