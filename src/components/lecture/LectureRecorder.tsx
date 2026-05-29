@@ -613,7 +613,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       }
 
       // 9-second timeslice — smaller chunks avoid Soniox corruption
-      rec.start()
+      rec.start(9000)
       mediaRecRef.current = rec
       return true
     } catch (e: any) {
