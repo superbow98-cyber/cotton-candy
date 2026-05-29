@@ -717,7 +717,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     const h = setInterval(() => save(false), 15000)
     return () => clearInterval(h)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording, lines, elapsed])
+  }, [recording, lines, elapsed, cleanSegments])
 
   const linesToMd = (ll: Line[]) => ll.map((l) => `- ${l.text}`).join('\n')
 
