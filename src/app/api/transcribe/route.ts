@@ -116,13 +116,40 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== ENGINE 1: SONIOX (PRIMARY — ALL languages) =====
+    // ===== ENGINE 1: SONIOX (PRIMARY — ALL languages) =====
+try {
+  // Convert WebM/Opus → WAV 16kHz mono supaya Soniox boleh determine duration
+  let sonioxAudio: Blob = audio
+  let sonioxFilename = `audio.${audioExt}`
+  if (!audioMime.includes('wav') && !audioMime.includes('mp3')) {
     try {
-      const filename = `audio.${audioExt}`
-      console.log(`[transcribe] Soniox (primary) | hints: ${sonioxLangHints.join('+')} | ${filename} | ${audioMime} | ${audio.size}B`)
-      const result = await transcribeWithSoniox(audio, filename, {
-        languageHints: sonioxLangHints,
-        context: sonioxContext,
-      })
+      const { spawnSync } = await import('child_process')
+      const { writeFileSync, readFileSync, unlinkSync } = await import('fs')
+      const { tmpdir } = await import('os')
+      const { join } = await import('path')
+      const ffmpegPath = (await import('ffmpeg-static')).default!
+      const inputPath = join(tmpdir(), `soniox_in_${Date.now()}.${audioExt}`)
+      const outputPath = join(tmpdir(), `soniox_out_${Date.now()}.wav`)
+      writeFileSync(inputPath, Buffer.from(await audio.arrayBuffer()))
+      const ffResult = spawnSync(ffmpegPath, ['-i', inputPath, '-ar', '16000', '-ac', '1', '-f', 'wav', '-y', outputPath], { stdio: 'pipe' })
+      if (ffResult.status === 0) {
+        sonioxAudio = new Blob([readFileSync(outputPath)], { type: 'audio/wav' })
+        sonioxFilename = 'audio.wav'
+        console.log(`[transcribe] Soniox: WAV converted | ${sonioxAudio.size}B`)
+      } else {
+        console.warn(`[transcribe] Soniox: ffmpeg failed, using original | ${ffResult.stderr?.toString().slice(0, 100)}`)
+      }
+      try { unlinkSync(inputPath) } catch {}
+      try { unlinkSync(outputPath) } catch {}
+    } catch (convErr: any) {
+      console.warn(`[transcribe] Soniox: conversion skipped | ${convErr.message}`)
+    }
+  }
+  console.log(`[transcribe] Soniox (primary) | hints: ${sonioxLangHints.join('+')} | ${sonioxFilename} | ${audioMime} | ${sonioxAudio.size}B`)
+  const result = await transcribeWithSoniox(sonioxAudio, sonioxFilename, {
+    languageHints: sonioxLangHints,
+    context: sonioxContext,
+  })
       console.log(`[transcribe] Soniox done | detected: ${result.language} | chars: ${result.text.length} | ${result.audioSeconds}s`)
       if (!result.text || result.text.trim().length < 3) throw new Error('Soniox empty result')
       const audioSeconds = result.audioSeconds
