@@ -613,7 +613,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       }
 
       // 9-second timeslice — smaller chunks avoid Soniox corruption
-      rec.start(9000)
+      rec.start()
       mediaRecRef.current = rec
       return true
     } catch (e: any) {
@@ -833,7 +833,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     finally { setAiProcessing(false) }
   }
 
-  const finishLecture = async () => {
+const finishLecture = async () => {
     if (recording) {
       stopRecognition()
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
@@ -859,59 +859,54 @@ export default function LectureRecorder({ id }: { id: string }) {
     let finalSegments: CleanSegment[] = cleanSegments
     if (chunks.length > 0) {
       setEnhancing(true)
-      setEnhanceProgress({ done: 0, total: chunks.length })
+      setEnhanceProgress({ done: 0, total: 1 })
       try {
-        const texts: string[] = []
-        for (let i = 0; i < chunks.length; i++) {
-          try {
-            const result = await transcribeOne(chunks[i], undefined, recordingLang)
-            texts.push(result.text || '')
-            if (result.usage) setUsage(result.usage)
-            setEnhanceProgress({ done: i + 1, total: chunks.length })
-          } catch (chunkErr: any) {
-            if (chunkErr instanceof CapReachedError) {
-              // Cap hit mid-transcription — save what we have + show banner
-              console.warn('[whisper] Cap reached mid-transcription, chunk', i + 1, '/', chunks.length)
-              if (chunkErr.usage) setUsage(chunkErr.usage)
-              setEnhanceError(
-                lang === 'bm'
-                  ? `Had audio tercapai selepas ${i} chunk. Transkrip separa tersimpan.`
-                  : `Audio cap reached after ${i} chunk${i === 1 ? '' : 's'}. Partial transcript saved.`,
-              )
-              break  // stop processing more chunks
-            }
-            throw chunkErr  // other errors bubble up
-          }
-        }
-        const combined = texts.join('\n').trim()
+        // Gabung semua chunks jadi satu Blob yang valid (fix WebM corrupt)
+        const mime = chunks[0]?.type || 'audio/webm'
+        const combinedBlob = new Blob(chunks, { type: mime })
 
-        if (combined.length > 20) {
-          // v59: Save as a clean segment with timeline (start/end seconds)
-          const sessionStart = accumRef.current - Math.max(0, elapsed - accumRef.current)
-          const segmentStart = isResume && cleanSegments.length > 0
-            ? Math.max(...cleanSegments.map(s => s.end))
-            : 0
-          const segmentEnd = elapsed
-          const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
-          const newSegment: CleanSegment = {
-            start: segmentStart,
-            end: segmentEnd,
-            text: combined,
-            source: isMalayMode ? 'soniox_async' : 'whisper_turbo',
-            language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
-            created_at: new Date().toISOString(),
-          }
-          finalSegments = [...cleanSegments, newSegment]
-          setCleanSegments(finalSegments)
+        try {
+          const result = await transcribeOne(combinedBlob, undefined, recordingLang)
+          if (result.usage) setUsage(result.usage)
+          setEnhanceProgress({ done: 1, total: 1 })
+          const combined = result.text?.trim() || ''
 
-          const whisperLines = whisperTextToLines(combined, elapsed)
-          if (whisperLines.length > 0) {
-            // v57.3: APPEND on resume, REPLACE on fresh
-            if (isResume) {
-              setLines(prev => [...prev, ...whisperLines])
-            } else {
-              setLines(whisperLines)
+          if (combined.length > 20) {
+            const segmentStart = isResume && cleanSegments.length > 0
+              ? Math.max(...cleanSegments.map(s => s.end))
+              : 0
+            const segmentEnd = elapsed
+            const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
+            const newSegment: CleanSegment = {
+              start: segmentStart,
+              end: segmentEnd,
+              text: combined,
+              source: isMalayMode ? 'soniox_async' : 'whisper_turbo',
+              language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
+              created_at: new Date().toISOString(),
             }
+            finalSegments = [...cleanSegments, newSegment]
+            setCleanSegments(finalSegments)
+
+            const whisperLines = whisperTextToLines(combined, elapsed)
+            if (whisperLines.length > 0) {
+              if (isResume) {
+                setLines(prev => [...prev, ...whisperLines])
+              } else {
+                setLines(whisperLines)
+              }
+            }
+          }
+        } catch (chunkErr: any) {
+          if (chunkErr instanceof CapReachedError) {
+            if (chunkErr.usage) setUsage(chunkErr.usage)
+            setEnhanceError(
+              lang === 'bm'
+                ? 'Had audio tercapai. Transkrip separa tersimpan.'
+                : 'Audio cap reached. Partial transcript saved.',
+            )
+          } else {
+            throw chunkErr
           }
         }
       } catch (e: any) {
