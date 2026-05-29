@@ -49,13 +49,72 @@ export class CapReachedError extends Error {
   }
 }
 
+/**
+ * Convert any audio Blob (WebM/Opus) → WAV 16kHz mono
+ * using Web Audio API — zero dependencies, runs in browser only.
+ */
+export async function convertToWav(blob: Blob): Promise<Blob> {
+  try {
+    const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext)
+    if (!AudioCtx) return blob
+
+    const audioCtx = new AudioCtx()
+    const arrayBuffer = await blob.arrayBuffer()
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer)
+    audioCtx.close()
+
+    const targetSampleRate = 16000
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetSampleRate), targetSampleRate)
+    const source = offlineCtx.createBufferSource()
+    source.buffer = decoded
+    source.connect(offlineCtx.destination)
+    source.start()
+    const resampled = await offlineCtx.startRendering()
+
+    const pcm = resampled.getChannelData(0)
+    const wavBuffer = encodeWav(pcm, targetSampleRate)
+    return new Blob([wavBuffer], { type: 'audio/wav' })
+  } catch (e) {
+    console.warn('[convertToWav] failed, using original:', e)
+    return blob
+  }
+}
+
+function encodeWav(pcm: Float32Array, sampleRate: number): ArrayBuffer {
+  const int16 = new Int16Array(pcm.length)
+  for (let i = 0; i < pcm.length; i++) {
+    int16[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * 32767)))
+  }
+  const buffer = new ArrayBuffer(44 + int16.byteLength)
+  const view = new DataView(buffer)
+  const write = (off: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i))
+  }
+  write(0, 'RIFF')
+  view.setUint32(4, 36 + int16.byteLength, true)
+  write(8, 'WAVE')
+  write(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  write(36, 'data')
+  view.setUint32(40, int16.byteLength, true)
+  new Int16Array(buffer, 44).set(int16)
+  return buffer
+}
+
 export async function transcribeOne(
   audioBlob: Blob,
   signal?: AbortSignal,
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
 ): Promise<TranscribeResponse> {
   const form = new FormData()
-  form.append('audio', audioBlob, 'chunk.webm')
+  const wavBlob = await convertToWav(audioBlob)
+  form.append('audio', wavBlob, 'chunk.wav')
   // Only pass language if explicitly set (not 'auto')
   if (language && language !== 'auto') {
     form.append('language', language)
