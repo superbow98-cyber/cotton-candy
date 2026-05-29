@@ -127,7 +127,10 @@ try {
       const { writeFileSync, readFileSync, unlinkSync } = await import('fs')
       const { tmpdir } = await import('os')
       const { join } = await import('path')
-      const ffmpegPath = (await import('ffmpeg-static')).default!
+      const ffmpegModule = await import('ffmpeg-static')
+      const ffmpegPath = ffmpegModule.default
+      console.log(`[transcribe] Soniox: ffmpeg path = ${ffmpegPath}`)
+      if (!ffmpegPath) throw new Error('ffmpeg-static returned null')
       const inputPath = join(tmpdir(), `soniox_in_${Date.now()}.${audioExt}`)
       const outputPath = join(tmpdir(), `soniox_out_${Date.now()}.wav`)
       writeFileSync(inputPath, Buffer.from(await audio.arrayBuffer()))
