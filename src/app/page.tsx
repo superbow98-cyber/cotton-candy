@@ -591,7 +591,7 @@ export default function Home() {
             />
             <PricingCard
               name="Day Pass"
-              amount="8"
+              amount="16"
               period={L('One day · Pay once', 'Satu hari · Bayar sekali', '一天 · 一次付款', 'ஒரு நாள் · ஒரு முறை கட்டணம்')}
               tagline={L('Perfect for exam week or sprint week.', 'Sempurna untuk minggu peperiksaan atau sprint.', '适合考试周或冲刺周。', 'தேர்வு வாரத்திற்கு சரியானது.')}
               features={[
@@ -606,7 +606,7 @@ export default function Home() {
             />
             <PricingCard
               name={L('🎓 Student PRO', '🎓 Student PRO', '🎓 学生 PRO', '🎓 மாணவர் PRO')}
-              amount="17"
+              amount="34"
               period={L('30 days · Pay once', '30 hari · Bayar sekali', '30 天 · 一次付款', '30 நாட்கள் · ஒரு முறை கட்டணம்')}
               tagline={L('Built for students. Affordable monthly access.', 'Untuk pelajar. Akses bulanan berpatutan.', '专为学生设计。实惠的月度访问。', 'மாணவர்களுக்காக. மலிவான மாதாந்திர அணுகல்.')}
               features={[
@@ -622,7 +622,7 @@ export default function Home() {
             />
             <PricingCard
               name={L('Monthly', 'Bulanan', '月度', 'மாதாந்திரம்')}
-              amount="25"
+              amount="50"
               period={L('30 days · Pay once', '30 hari · Bayar sekali', '30 天 · 一次付款', '30 நாட்கள் · ஒரு முறை கட்டணம்')}
               tagline={L('The sweet spot for students & teams.', 'Pilihan terbaik untuk pelajar & pasukan.', '学生和团队的最佳选择。', 'மாணவர்கள் & குழுக்களுக்கான சரியான தேர்வு.')}
               features={[
@@ -638,7 +638,7 @@ export default function Home() {
             />
             <PricingCard
               name={L('Yearly', 'Tahunan', '年度', 'வருடாந்திரம்')}
-              amount="100"
+              amount="200"
               period={L('365 days · Pay once', '365 hari · Bayar sekali', '365 天 · 一次付款', '365 நாட்கள் · ஒரு முறை கட்டணம்')}
               tagline={L('Best value. Full year of lectures & meetings.', 'Nilai terbaik. Setahun penuh kuliah & mesyuarat.', '最超值。全年讲座和会议。', 'சிறந்த மதிப்பு. முழு வருட விரிவுரைகள் & கூட்டங்கள்.')}
               features={[
