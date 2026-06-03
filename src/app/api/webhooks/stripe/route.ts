@@ -1,3 +1,6 @@
+// src/app/api/webhooks/stripe/route.ts
+// Added: ambassador commission tracking on checkout.session.completed
+
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { adminClient } from '@/lib/supabase/server'
@@ -30,6 +33,58 @@ export async function POST(req: Request) {
     }).eq('id', userId)
   }
 
+  // ── NEW: credit ambassador commission ─────────────────────
+  const creditAmbassador = async (
+    promoCode: string,
+    referredUserId: string | undefined,
+    amountPaidMyr: number,
+    stripeSessionId: string,
+  ) => {
+    try {
+      // Find ambassador by promo code
+      const { data: ambProfile } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('ambassador_promo_code', promoCode)
+        .maybeSingle()
+
+      if (!ambProfile) {
+        console.log(`[webhook] ambassador promo ${promoCode} — no matching ambassador found`)
+        return
+      }
+
+      const ambassadorUserId = ambProfile.id
+      const commissionMyr = parseFloat((amountPaidMyr * 0.01).toFixed(2)) // 1%
+
+      // Log commission
+      await admin.from('ambassador_commissions').insert({
+        ambassador_user_id: ambassadorUserId,
+        referred_user_id: referredUserId || null,
+        stripe_session_id: stripeSessionId,
+        amount_paid_myr: amountPaidMyr,
+        commission_myr: commissionMyr,
+        promo_code: promoCode,
+      })
+
+      // Increment totals on profiles
+      const { data: current } = await admin
+        .from('profiles')
+        .select('ambassador_commission_total, ambassador_user_count')
+        .eq('id', ambassadorUserId)
+        .maybeSingle()
+
+      await admin.from('profiles').update({
+        ambassador_commission_total: ((current?.ambassador_commission_total || 0) + commissionMyr),
+        ambassador_user_count: ((current?.ambassador_user_count || 0) + 1),
+      }).eq('id', ambassadorUserId)
+
+      console.log(`[webhook] ambassador commission: code=${promoCode} user=${ambassadorUserId} +RM${commissionMyr}`)
+    } catch (e) {
+      console.error('[webhook] creditAmbassador failed:', e)
+    }
+  }
+  // ──────────────────────────────────────────────────────────
+
   try {
     if (event.type === 'checkout.session.completed') {
       const sess = event.data.object as Stripe.Checkout.Session
@@ -37,14 +92,13 @@ export async function POST(req: Request) {
       const plan = sess.metadata?.plan as Plan | undefined
       const promoCode = sess.metadata?.promo_code
       const purchaseType = sess.metadata?.purchase_type
+      const amountMyr = (sess.amount_total || 0) / 100
 
       // v61: Upload credit purchase
       if (userId && purchaseType === 'upload_credits') {
         const quantity = parseInt(sess.metadata?.quantity || '0', 10)
-        const amountMyr = (sess.amount_total || 0) / 100
 
         try {
-          // Get current balance
           const { data: prof } = await admin
             .from('profiles')
             .select('upload_credits, upload_credits_lifetime')
@@ -56,13 +110,11 @@ export async function POST(req: Request) {
           const newBalance = currentBalance + quantity
           const newLifetime = lifetime + quantity
 
-          // Update profile
           await admin.from('profiles').update({
             upload_credits: newBalance,
             upload_credits_lifetime: newLifetime,
           }).eq('id', userId)
 
-          // Log transaction
           await admin.from('upload_credit_transactions').insert({
             user_id: userId,
             type: 'purchase',
@@ -99,8 +151,15 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error('[webhook] promo increment failed:', e)
         }
+
+        // Only credit ambassador for eligible plans (not day pass)
+        if (purchaseType !== 'upload_credits' && plan !== 'day' && amountMyr > 0) {
+          await creditAmbassador(promoCode, userId, amountMyr, sess.id)
+        }
+        // ────────────────────────────────────────────────────────────────
       }
     }
+
     if (event.type === 'invoice.paid') {
       const inv = event.data.object as Stripe.Invoice
       const subId = (inv as any).subscription as string | null
@@ -111,6 +170,7 @@ export async function POST(req: Request) {
         if (userId && plan) await grant(userId, plan)
       }
     }
+
     if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object as Stripe.Subscription
       const userId = sub.metadata?.userId
@@ -123,5 +183,6 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error('webhook handler err', e)
   }
+
   return NextResponse.json({ received: true })
 }
