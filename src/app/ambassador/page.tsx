@@ -336,7 +336,7 @@ export default function AmbassadorPage() {
 
         {/* CTA Button */}
         <Link
-          href="/login"
+          href="/dashboard/ambassador"
           style={{
             display: "inline-block",
             background: "#fff",
