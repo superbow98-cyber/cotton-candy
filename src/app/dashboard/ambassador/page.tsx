@@ -130,81 +130,299 @@ export default function AmbassadorDashboard() {
     )
   }
 
+  // ─── DROP-IN REPLACEMENT ───────────────────────────────────────────────────
+  // Replace the entire  if (!data?.is_ambassador) { return ( ... ) }  block
+  // with this. Everything else in the file stays the same.
+  //
+  // SETUP: put the MacBook photo at  public/ambassador-reg-bg.jpg
+  // ───────────────────────────────────────────────────────────────────────────
+
   if (!data?.is_ambassador) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
-        <div style={{
-          background: '#fff',
-          border: '0.5px solid rgba(0,0,0,0.07)',
-          borderRadius: 18, padding: '40px 32px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 42, marginBottom: 16 }}>🍬</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f' }}>
-            {bm ? 'Jadi Ambassador CottonCandy' : 'Become a CottonCandy Ambassador'}
-          </h2>
-          <p style={{ color: 'rgba(29,29,31,0.6)', fontSize: 14, lineHeight: 1.6, margin: '0 0 28px' }}>
-            {bm
-              ? 'Kongsi kod promo unik kau. Dapat komisen 1% setiap kali kawan kau subscribe. Menang leaderboard + 200 users = MacBook.'
-              : 'Share your unique promo code. Earn 1% commission every time someone subscribes using your code. Top leaderboard + 200 users = MacBook.'}
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 28 }}>
-            {[
-              { emoji: '🎁', label: bm ? 'Kod 50% off untuk kawan' : '50% off code for friends' },
-              { emoji: '💰', label: bm ? '1% komisen setiap sale' : '1% commission per sale' },
-              { emoji: '💻', label: bm ? 'MacBook kalau #1 + 200 users' : 'MacBook for #1 + 200 users' },
-            ].map(p => (
-              <div key={p.emoji} style={{ background: s.cream, borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, marginBottom: 6 }}>{p.emoji}</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.65)', lineHeight: 1.4 }}>{p.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{
-            background: data?.has_active_plan ? '#e6f4eb' : '#fff8e6',
-            border: `0.5px solid ${data?.has_active_plan ? '#7AB883' : '#E5B947'}`,
-            borderRadius: 10, padding: '12px 16px', marginBottom: 20,
-            fontSize: 12.5, color: data?.has_active_plan ? '#2d6a40' : '#7a5a00', lineHeight: 1.5,
-          }}>
-            {data?.has_active_plan
-              ? (bm ? '✓ Plan aktif — kau layak daftar sebagai ambassador.' : '✓ Active plan — you are eligible to register as ambassador.')
-              : (bm ? '⚠ Perlu plan aktif (Student PRO / Monthly / Yearly) untuk jadi ambassador.' : '⚠ Requires an active plan (Student PRO / Monthly / Yearly) to become an ambassador.')}
-          </div>
-
-          {planError && (
-            <div style={{
-              background: '#fff0f0', border: '0.5px solid #E24B4A',
-              borderRadius: 10, padding: '10px 14px', marginBottom: 16,
-              fontSize: 12.5, color: '#c0392b',
-            }}>
-              {bm ? '⚠ Plan kau dah tamat atau tidak layak. Beli plan dahulu.' : '⚠ Your plan has expired or is not eligible. Please purchase a plan first.'}
-            </div>
-          )}
-
-          <button
-            onClick={registerAsAmbassador}
-            disabled={registering || !data?.has_active_plan}
+        <div
+          style={{
+            position: 'relative',
+            borderRadius: 18,
+            overflow: 'hidden',
+            textAlign: 'center',
+          }}
+        >
+          {/* Background image */}
+          <div
             style={{
-              width: '100%', padding: '13px 0', borderRadius: 11,
-              background: data?.has_active_plan ? '#1d1d1f' : 'rgba(29,29,31,0.2)',
-              color: '#fff', fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
-              border: 'none',
-              cursor: (registering || !data?.has_active_plan) ? 'not-allowed' : 'pointer',
-              opacity: registering ? 0.6 : 1,
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: "url('/ambassador-reg-bg.jpg')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center top',
+              zIndex: 0,
+            }}
+          />
+
+          {/* Dark overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0,0,0,0.58)',
+              zIndex: 1,
+            }}
+          />
+
+          {/* Content */}
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              padding: '44px 36px 36px',
             }}
           >
-            {registering
-              ? (bm ? 'Mendaftar…' : 'Registering…')
-              : (bm ? 'Daftar sebagai Ambassador' : 'Register as Ambassador')}
-          </button>
+            {/* Eyebrow */}
+            <p
+              style={{
+                margin: '0 0 10px',
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.5)',
+                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+              }}
+            >
+              {bm ? 'Program Ambassador Kampus' : 'Campus ambassador program'}
+            </p>
 
-          {!data?.has_active_plan && (
-            <a href="/pricing" style={{ display: 'block', marginTop: 12, fontSize: 12.5, color: s.primaryDark, textDecoration: 'none' }}>
-              {bm ? 'Lihat plan →' : 'View plans →'}
-            </a>
-          )}
+            {/* Heading */}
+            <h2
+              style={{
+                margin: '0 0 12px',
+                fontSize: 28,
+                fontWeight: 600,
+                letterSpacing: '-0.025em',
+                lineHeight: 1.15,
+                color: '#fff',
+                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+              }}
+            >
+              {bm ? (
+                <>Jadi Ambassador<br />CottonCandy</>
+              ) : (
+                <>Become a CottonCandy<br />ambassador</>
+              )}
+            </h2>
+
+            {/* Subtitle */}
+            <p
+              style={{
+                margin: '0 auto 32px',
+                maxWidth: 380,
+                fontSize: 14,
+                fontWeight: 300,
+                color: 'rgba(255,255,255,0.65)',
+                lineHeight: 1.65,
+                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+              }}
+            >
+              {bm
+                ? 'Kongsi kod promo unik kau. Dapat komisen 1% setiap kali kawan kau subscribe. Menang leaderboard + 200 users = MacBook.'
+                : 'Share your unique promo code. Earn 1% commission every time someone subscribes. Top leaderboard at 200 users wins a MacBook.'}
+            </p>
+
+            {/* Perks grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 10,
+                marginBottom: 24,
+              }}
+            >
+              {[
+                {
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 14l2 2 4-4"/><path d="M3 6h18M3 12h18M3 18h18"/>
+                      <path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3z"/>
+                    </svg>
+                  ),
+                  title: '50% off',
+                  sub: bm ? 'untuk setiap kawan' : 'for every friend',
+                },
+                {
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9"/><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v1m0 8v1"/>
+                    </svg>
+                  ),
+                  title: bm ? 'Komisen 1%' : '1% commission',
+                  sub: bm ? 'setiap sale' : 'per sale',
+                },
+                {
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 18v2"/>
+                    </svg>
+                  ),
+                  title: 'MacBook',
+                  sub: '#1 + 200 users',
+                },
+              ].map((p, i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '0.5px solid rgba(255,255,255,0.12)',
+                    borderRadius: 12,
+                    padding: '16px 10px',
+                  }}
+                >
+                  <div
+                    style={{
+                      color: 'rgba(255,255,255,0.85)',
+                      marginBottom: 10,
+                      display: 'flex',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {p.icon}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: '#fff',
+                      marginBottom: 3,
+                      fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                    }}
+                  >
+                    {p.title}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'rgba(255,255,255,0.45)',
+                      lineHeight: 1.4,
+                      fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                    }}
+                  >
+                    {p.sub}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Plan eligibility notice */}
+            <div
+              style={{
+                background: 'rgba(255,255,255,0.07)',
+                border: `0.5px solid ${data?.has_active_plan ? 'rgba(100,200,120,0.4)' : 'rgba(255,200,80,0.35)'}`,
+                borderRadius: 10,
+                padding: '11px 14px',
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 9,
+                textAlign: 'left',
+              }}
+            >
+              <svg
+                width="15" height="15"
+                viewBox="0 0 24 24" fill="none"
+                stroke={data?.has_active_plan ? 'rgba(100,220,130,0.9)' : 'rgba(255,200,80,0.9)'}
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, marginTop: 1 }}
+              >
+                {data?.has_active_plan
+                  ? <><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></>
+                  : <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>
+                }
+              </svg>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 12.5,
+                  color: 'rgba(255,255,255,0.6)',
+                  lineHeight: 1.5,
+                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                }}
+              >
+                {data?.has_active_plan
+                  ? (bm ? 'Plan aktif — kau layak daftar sebagai ambassador.' : 'Active plan detected — you are eligible to register.')
+                  : (bm ? 'Perlu plan aktif (Student PRO / Monthly / Yearly) untuk jadi ambassador.' : 'Requires an active plan — Student PRO, Monthly, or Yearly — to register.')}
+              </p>
+            </div>
+
+            {/* Plan error */}
+            {planError && (
+              <div
+                style={{
+                  background: 'rgba(220,60,60,0.15)',
+                  border: '0.5px solid rgba(220,80,80,0.4)',
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  marginBottom: 14,
+                  fontSize: 12.5,
+                  color: 'rgba(255,160,160,0.95)',
+                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                }}
+              >
+                {bm
+                  ? 'Plan kau dah tamat atau tidak layak. Beli plan dahulu.'
+                  : 'Your plan has expired or is not eligible. Please purchase a plan first.'}
+              </div>
+            )}
+
+            {/* CTA button */}
+            <button
+              onClick={registerAsAmbassador}
+              disabled={registering || !data?.has_active_plan}
+              style={{
+                width: '100%',
+                padding: '13px 0',
+                borderRadius: 11,
+                background: data?.has_active_plan
+                  ? 'rgba(255,255,255,0.95)'
+                  : 'rgba(255,255,255,0.12)',
+                color: data?.has_active_plan ? '#1d1d1f' : 'rgba(255,255,255,0.3)',
+                fontSize: 14,
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                border: '0.5px solid rgba(255,255,255,0.15)',
+                cursor: (registering || !data?.has_active_plan) ? 'not-allowed' : 'pointer',
+                opacity: registering ? 0.6 : 1,
+                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                transition: 'background 0.15s',
+              }}
+            >
+              {registering
+                ? (bm ? 'Mendaftar…' : 'Registering…')
+                : (bm ? 'Daftar sebagai ambassador' : 'Register as ambassador')}
+            </button>
+
+            {/* View plans link */}
+            {!data?.has_active_plan && (
+              <a
+                href="/pricing"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  marginTop: 14,
+                  fontSize: 13,
+                  color: 'rgba(255,255,255,0.45)',
+                  textDecoration: 'none',
+                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
+                }}
+              >
+                {bm ? 'Lihat plan' : 'View plans'}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </a>
+            )}
+          </div>
         </div>
       </div>
     )
