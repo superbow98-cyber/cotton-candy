@@ -22,6 +22,10 @@ export interface Profile {
   is_admin?: boolean
   upload_credits?: number          // v61: current upload credit balance
   upload_credits_lifetime?: number // v61: total ever purchased
+  // ambassador
+  ambassador_promo_code?: string | null
+  ambassador_commission_total?: number
+  ambassador_user_count?: number
   created_at: string
 }
 
