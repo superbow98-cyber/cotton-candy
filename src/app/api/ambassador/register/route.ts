@@ -1,15 +1,11 @@
 // src/app/api/ambassador/register/route.ts
 // POST — register current user as ambassador, generate promo code
-
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { adminClient } from '@/lib/supabase/server'
-
 export const runtime = 'nodejs'
 
 function generatePromoCode(fullName: string | null): string {
-  // Format: first name uppercase + "50", e.g. "AMIR50"
-  // Fallback to random 4-char alphanum if no name
   const base = fullName
     ? fullName.trim().split(' ')[0].toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
     : Math.random().toString(36).substring(2, 6).toUpperCase()
@@ -56,7 +52,6 @@ export async function POST() {
       .eq('ambassador_promo_code', promoCode)
       .maybeSingle()
     if (!clash) break
-    // Collision — append random suffix
     promoCode = generatePromoCode(profile?.full_name ?? null) + Math.floor(Math.random() * 90 + 10)
     attempts++
   }
@@ -76,23 +71,26 @@ export async function POST() {
     ambassador_promo_code: promoCode,
   }).eq('id', user.id)
 
-  // Register promo code — ambassador codes only valid for student_pro, month, year
+  // Register promo code in promo_codes table
   const { data: existingCode } = await admin
-  .from('promo_codes')
-  .select('code')
-  .eq('code', promoCode)
-  .maybeSingle()
+    .from('promo_codes')
+    .select('code')
+    .eq('code', promoCode)
+    .maybeSingle()
 
-if (!existingCode) {
-  await admin.from('promo_codes').insert({
-    code: promoCode,
-    plan: 'student_pro',
-    discount_percent: 50,
-    max_uses: 9999,
-    applicable_plans: ['student_pro', 'month', 'year'],
-    active: true,
-  })
-}
+  if (!existingCode) {
+    const { error: promoErr } = await admin.from('promo_codes').insert({
+      code: promoCode,
+      discount_percent: 50,
+      max_uses: 9999,
+      applicable_plans: ['student_pro', 'month', 'year'],
+      active: true,
+    })
+    if (promoErr) {
+      console.error('[ambassador/register] promo_codes insert failed:', promoErr)
+      // Don't return error — ambassador row already created, just log
+    }
+  }
 
   console.log(`[ambassador/register] user=${user.id} code=${promoCode}`)
   return NextResponse.json({ promo_code: promoCode })
