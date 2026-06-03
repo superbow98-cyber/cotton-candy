@@ -22,7 +22,7 @@ const T = {
     ),
     bm: (
       <>
-        Dapat <strong>pakej 50% off</strong>, jana <strong>komisen 1%</strong> setiap payment, dan berpeluang menang <strong>MacBook Neo</strong> bila promote promo code kau.
+        Hasilkan promo code 50% off bersama nama anda sebagai ambassador, jana <strong>komisen 1%</strong> setiap kali promo code 50% digunakan, dan berpeluang menang <strong>MacBook Neo</strong>.
       </>
     ),
     zh: (
@@ -259,7 +259,6 @@ export default function AmbassadorPage() {
                 justifyContent: "center",
               }}
             >
-              {/* Graduation cap icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/>
                 <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>
@@ -293,7 +292,6 @@ export default function AmbassadorPage() {
                 justifyContent: "center",
               }}
             >
-              {/* Shield / verified icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 <path d="M9 12l2 2 4-4"/>
