@@ -1,8 +1,8 @@
 'use client'
 // src/app/dashboard/ambassador/page.tsx
-// PATCH: Redesigned generatePromoCard — dark professional style (teal→purple→pink gradient typography)
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
@@ -185,222 +185,255 @@ const AMBASSADOR_STYLES = `
 `
 
 // ─── Generate dark-professional promo card ────────────────────────────────────
-function generatePromoCard(promoCode: string): Promise<string> {
-  return new Promise((resolve) => {
-    const W = 1080
-    const H = 1080
-    const canvas = document.createElement('canvas')
-    canvas.width = W
-    canvas.height = H
-    const ctx = canvas.getContext('2d')!
+async function generatePromoCard(promoCode: string): Promise<string> {
+  const W = 1080
+  const H = 1080
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
 
-    // ── Background: deep dark ──────────────────────────────────────────────
-    ctx.fillStyle = '#0A0A10'
-    ctx.fillRect(0, 0, W, H)
+  // ── Background: deep dark ──────────────────────────────────────────────
+  ctx.fillStyle = '#0A0A10'
+  ctx.fillRect(0, 0, W, H)
 
-    // Scanline texture
-    for (let y = 0; y < H; y += 3) {
-      ctx.fillStyle = 'rgba(255,255,255,0.012)'
-      ctx.fillRect(0, y, W, 1)
-    }
+  // Scanline texture
+  for (let y = 0; y < H; y += 3) {
+    ctx.fillStyle = 'rgba(255,255,255,0.012)'
+    ctx.fillRect(0, y, W, 1)
+  }
 
-    // Radial glow top-right (teal)
-    const glowTeal = ctx.createRadialGradient(900, 140, 0, 900, 140, 420)
-    glowTeal.addColorStop(0, 'rgba(0,210,160,0.13)')
-    glowTeal.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = glowTeal
-    ctx.fillRect(0, 0, W, H)
+  // Radial glow top-right (teal)
+  const glowTeal = ctx.createRadialGradient(900, 140, 0, 900, 140, 420)
+  glowTeal.addColorStop(0, 'rgba(0,210,160,0.13)')
+  glowTeal.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = glowTeal
+  ctx.fillRect(0, 0, W, H)
 
-    // Radial glow bottom-left (purple)
-    const glowPurple = ctx.createRadialGradient(120, 900, 0, 120, 900, 380)
-    glowPurple.addColorStop(0, 'rgba(168,85,247,0.14)')
-    glowPurple.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = glowPurple
-    ctx.fillRect(0, 0, W, H)
+  // Radial glow bottom-left (purple)
+  const glowPurple = ctx.createRadialGradient(120, 900, 0, 120, 900, 380)
+  glowPurple.addColorStop(0, 'rgba(168,85,247,0.14)')
+  glowPurple.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = glowPurple
+  ctx.fillRect(0, 0, W, H)
 
-    // Fine grid overlay
-    ctx.strokeStyle = 'rgba(255,255,255,0.025)'
-    ctx.lineWidth = 0.5
-    for (let x = 0; x < W; x += 60) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
-    }
-    for (let y = 0; y < H; y += 60) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
-    }
+  // Fine grid overlay
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)'
+  ctx.lineWidth = 0.5
+  for (let x = 0; x < W; x += 60) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+  }
+  for (let y = 0; y < H; y += 60) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
+  }
 
-    // ── Top bar ────────────────────────────────────────────────────────────
-    // Logo pill
-    const pillBg = ctx.createLinearGradient(72, 60, 72 + 220, 60)
-    pillBg.addColorStop(0, 'rgba(255,255,255,0.07)')
-    pillBg.addColorStop(1, 'rgba(255,255,255,0.03)')
-    ctx.fillStyle = pillBg
-    roundRect(ctx, 72, 56, 220, 44, 12)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)'
-    ctx.lineWidth = 0.75
-    roundRect(ctx, 72, 56, 220, 44, 12)
-    ctx.stroke()
+  // ── Top bar ────────────────────────────────────────────────────────────
+  // Logo pill background
+  const pillBg = ctx.createLinearGradient(72, 60, 72 + 220, 60)
+  pillBg.addColorStop(0, 'rgba(255,255,255,0.07)')
+  pillBg.addColorStop(1, 'rgba(255,255,255,0.03)')
+  ctx.fillStyle = pillBg
+  roundRect(ctx, 72, 56, 220, 48, 14)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)'
+  ctx.lineWidth = 0.75
+  roundRect(ctx, 72, 56, 220, 48, 14)
+  ctx.stroke()
 
-    // Logo icon bg
-    const logoBg = ctx.createLinearGradient(82, 62, 82 + 32, 62 + 32)
-    logoBg.addColorStop(0, '#FF6B9D')
-    logoBg.addColorStop(1, '#C471F5')
-    ctx.fillStyle = logoBg
-    roundRect(ctx, 82, 62, 32, 32, 8)
-    ctx.fill()
+  // ── CC logo icon — gradient rounded square matching real app icon ──────
+  const logoSize = 36
+  const logoX = 82
+  const logoY = 62
+  const logoBg = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize)
+  logoBg.addColorStop(0, '#FF6B9D')   // pink top-left
+  logoBg.addColorStop(1, '#C471F5')   // purple bottom-right
+  ctx.fillStyle = logoBg
+  roundRect(ctx, logoX, logoY, logoSize, logoSize, 9)
+  ctx.fill()
 
-    ctx.font = '18px serif'
-    ctx.fillText('🍭', 84, 86)
+  // "cc" text inside logo
+  ctx.font = '700 18px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+  ctx.fillStyle = '#FFFFFF'
+  ctx.textAlign = 'center'
+  ctx.fillText('cc', logoX + logoSize / 2, logoY + 24)
+  ctx.textAlign = 'left'
 
-    ctx.font = '500 18px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.88)'
-    ctx.fillText('Cotton Candy', 124, 84)
+  // "Cotton Candy" wordmark next to logo
+  ctx.font = '500 18px -apple-system, Helvetica, sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+  ctx.fillText('Cotton Candy', 127, 86)
 
-    // Slide label top-right
-    ctx.font = '400 13px monospace'
-    ctx.fillStyle = 'rgba(255,255,255,0.28)'
-    ctx.textAlign = 'right'
-    ctx.fillText('AMBASSADOR', W - 72, 84)
+  // Slide label top-right
+  ctx.font = '400 13px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'
+  ctx.textAlign = 'right'
+  ctx.fillText('AMBASSADOR', W - 72, 86)
+  ctx.textAlign = 'left'
+
+  // ── Tag line ───────────────────────────────────────────────────────────
+  ctx.font = '700 11px monospace'
+  ctx.fillStyle = 'rgba(0,210,160,0.75)'
+  ctx.fillText('// EXCLUSIVE OFFER', 72, 164)
+
+  ctx.strokeStyle = 'rgba(0,210,160,0.2)'
+  ctx.lineWidth = 0.75
+  ctx.beginPath(); ctx.moveTo(72, 172); ctx.lineTo(340, 172); ctx.stroke()
+
+  // ── Main headline ──────────────────────────────────────────────────────
+  ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillText('Get', 72, 280)
+
+  const grad1 = ctx.createLinearGradient(72, 260, 72 + 520, 260)
+  grad1.addColorStop(0, '#00D2A0')
+  grad1.addColorStop(0.5, '#A855F7')
+  grad1.addColorStop(1, '#F472B6')
+  ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+  ctx.fillStyle = grad1
+  ctx.fillText('50% OFF', 72, 380)
+
+  ctx.font = '700 72px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.90)'
+  ctx.fillText('any paid plan.', 72, 466)
+
+  ctx.font = '400 18px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.fillText('AI Lecture Recorder  ·  Malaysian Students', 72, 510)
+
+  // ── "What is Cotton Candy?" card ───────────────────────────────────────
+  const cardX = 72, cardY = 540, cardW = W - 144, cardH = 172
+  ctx.fillStyle = 'rgba(255,255,255,0.045)'
+  roundRect(ctx, cardX, cardY, cardW, cardH, 16)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.09)'
+  ctx.lineWidth = 0.75
+  roundRect(ctx, cardX, cardY, cardW, cardH, 16)
+  ctx.stroke()
+
+  ctx.font = '600 11px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.32)'
+  ctx.fillText('WHAT IS COTTON CANDY?', cardX + 28, cardY + 36)
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+  ctx.lineWidth = 0.5
+  ctx.beginPath(); ctx.moveTo(cardX + 28, cardY + 48); ctx.lineTo(cardX + cardW - 28, cardY + 48); ctx.stroke()
+
+  // Three feature bullets
+  const features = [
+    { icon: '🎙', title: 'Record any lecture', desc: 'Live transcript as you speak' },
+    { icon: '🤖', title: 'AI summarises it', desc: 'Topics, key points & formulas' },
+    { icon: '📄', title: 'Export PDF notes', desc: 'Done in seconds, share instantly' },
+  ]
+  const featureColW = cardW / 3
+  features.forEach((f, i) => {
+    const fx = cardX + i * featureColW + 28
+    ctx.font = '22px serif'
     ctx.textAlign = 'left'
+    ctx.fillText(f.icon, fx, cardY + 82)
 
-    // ── Tag line ───────────────────────────────────────────────────────────
-    ctx.font = '700 11px monospace'
-    ctx.fillStyle = 'rgba(0,210,160,0.75)'
-    ctx.fillText('// EXCLUSIVE OFFER', 72, 164)
+    const featGrad = ctx.createLinearGradient(fx, 0, fx + 200, 0)
+    featGrad.addColorStop(0, '#00D2A0')
+    featGrad.addColorStop(1, '#A855F7')
+    ctx.font = '700 15px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+    ctx.fillStyle = featGrad
+    ctx.fillText(f.title, fx, cardY + 112)
 
-    // Thin rule
-    ctx.strokeStyle = 'rgba(0,210,160,0.2)'
-    ctx.lineWidth = 0.75
-    ctx.beginPath(); ctx.moveTo(72, 172); ctx.lineTo(340, 172); ctx.stroke()
+    ctx.font = '400 12px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.42)'
+    ctx.fillText(f.desc, fx, cardY + 132)
 
-    // ── Main headline (gradient text via workaround) ───────────────────────
-    // "Get" — white
-    ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillText('Get', 72, 280)
-
-    // "50% OFF" — gradient teal→purple
-    const grad1 = ctx.createLinearGradient(72, 260, 72 + 520, 260)
-    grad1.addColorStop(0, '#00D2A0')
-    grad1.addColorStop(0.5, '#A855F7')
-    grad1.addColorStop(1, '#F472B6')
-    ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
-    ctx.fillStyle = grad1
-    ctx.fillText('50% OFF', 72, 380)
-
-    // "any paid plan." — white, slightly smaller
-    ctx.font = '700 72px -apple-system, "SF Pro Display", Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.90)'
-    ctx.fillText('any paid plan.', 72, 472)
-
-    // Sub — monospace muted
-    ctx.font = '400 18px monospace'
-    ctx.fillStyle = 'rgba(255,255,255,0.35)'
-    ctx.fillText('AI Lecture Recorder  ·  Malaysian Students', 72, 520)
-
-    // ── Stats card ─────────────────────────────────────────────────────────
-    const cardX = 72, cardY = 556, cardW = W - 144, cardH = 164
-    ctx.fillStyle = 'rgba(255,255,255,0.045)'
-    roundRect(ctx, cardX, cardY, cardW, cardH, 16)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.09)'
-    ctx.lineWidth = 0.75
-    roundRect(ctx, cardX, cardY, cardW, cardH, 16)
-    ctx.stroke()
-
-    // Stats card label
-    ctx.font = '600 11px monospace'
-    ctx.fillStyle = 'rgba(255,255,255,0.32)'
-    ctx.fillText('SPEECH-TO-TEXT ENGINE', cardX + 28, cardY + 36)
-
-    // Divider under label
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)'
-    ctx.lineWidth = 0.5
-    ctx.beginPath(); ctx.moveTo(cardX + 28, cardY + 48); ctx.lineTo(cardX + cardW - 28, cardY + 48); ctx.stroke()
-
-    // Three stats
-    const stats = [
-      { val: '99+', sub: 'LANGUAGES' },
-      { val: '~10×', sub: 'FASTER REALTIME' },
-      { val: 'SOTA', sub: 'WORD ACCURACY' },
-    ]
-    const colW = cardW / 3
-    stats.forEach((stat, i) => {
-      const cx = cardX + i * colW + colW / 2
-
-      // Gradient value
-      const statGrad = ctx.createLinearGradient(cx - 60, 0, cx + 60, 0)
-      statGrad.addColorStop(0, '#00D2A0')
-      statGrad.addColorStop(1, '#A855F7')
-      ctx.font = '800 38px -apple-system, "SF Pro Display", Helvetica, sans-serif'
-      ctx.fillStyle = statGrad
-      ctx.textAlign = 'center'
-      ctx.fillText(stat.val, cx, cardY + 108)
-
-      // Sub label
-      ctx.font = '600 10px monospace'
-      ctx.fillStyle = 'rgba(255,255,255,0.32)'
-      ctx.fillText(stat.sub, cx, cardY + 134)
-
-      // Vertical divider
-      if (i < 2) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)'
-        ctx.lineWidth = 0.5
-        ctx.beginPath()
-        ctx.moveTo(cardX + (i + 1) * colW, cardY + 56)
-        ctx.lineTo(cardX + (i + 1) * colW, cardY + cardH - 16)
-        ctx.stroke()
-      }
-    })
-    ctx.textAlign = 'left'
-
-    // ── Promo code pill ────────────────────────────────────────────────────
-    const codeX = 72, codeY = 756, codeH = 80
-    // Measure code width
-    ctx.font = '700 32px monospace'
-    const codeTextW = ctx.measureText(promoCode).width
-    const labelW = 120
-    const codeW = labelW + codeTextW + 60
-
-    ctx.fillStyle = 'rgba(168,85,247,0.12)'
-    roundRect(ctx, codeX, codeY, codeW, codeH, 12)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(168,85,247,0.38)'
-    ctx.lineWidth = 0.75
-    roundRect(ctx, codeX, codeY, codeW, codeH, 12)
-    ctx.stroke()
-
-    ctx.font = '600 11px monospace'
-    ctx.fillStyle = 'rgba(168,85,247,0.7)'
-    ctx.fillText('USE CODE', codeX + 24, codeY + 34)
-
-    ctx.font = '700 32px monospace'
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillText(promoCode, codeX + 24, codeY + 62)
-
-    // ── Bottom row ─────────────────────────────────────────────────────────
-    // Left: URL
-    ctx.font = '400 16px monospace'
-    ctx.fillStyle = 'rgba(255,255,255,0.30)'
-    ctx.fillText('cottoncandy-s.com', 72, H - 56)
-
-    // Right: tagline gradient
-    const tagGrad = ctx.createLinearGradient(W - 520, 0, W - 72, 0)
-    tagGrad.addColorStop(0, '#00D2A0')
-    tagGrad.addColorStop(1, '#F472B6')
-    ctx.font = '600 14px monospace'
-    ctx.fillStyle = tagGrad
-    ctx.textAlign = 'right'
-    ctx.fillText('Record  ·  Transcribe  ·  Summarise', W - 72, H - 56)
-    ctx.textAlign = 'left'
-
-    // Thin bottom rule
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-    ctx.lineWidth = 0.75
-    ctx.beginPath(); ctx.moveTo(72, H - 72); ctx.lineTo(W - 72, H - 72); ctx.stroke()
-
-    resolve(canvas.toDataURL('image/png'))
+    if (i < 2) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+      ctx.lineWidth = 0.5
+      ctx.beginPath()
+      ctx.moveTo(cardX + (i + 1) * featureColW, cardY + 56)
+      ctx.lineTo(cardX + (i + 1) * featureColW, cardY + cardH - 16)
+      ctx.stroke()
+    }
   })
+  ctx.textAlign = 'left'
+
+  // ── Promo code — BIG & unmissable ──────────────────────────────────────
+  const pcY = 748
+
+  const pcBg = ctx.createLinearGradient(72, pcY, W - 72, pcY)
+  pcBg.addColorStop(0, 'rgba(168,85,247,0.18)')
+  pcBg.addColorStop(0.5, 'rgba(200,100,255,0.22)')
+  pcBg.addColorStop(1, 'rgba(244,114,182,0.16)')
+  ctx.fillStyle = pcBg
+  roundRect(ctx, 72, pcY, W - 144, 128, 18)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(200,100,255,0.55)'
+  ctx.lineWidth = 1
+  roundRect(ctx, 72, pcY, W - 144, 128, 18)
+  ctx.stroke()
+
+  // "USE CODE" label — teal, prominent
+  ctx.font = '800 13px monospace'
+  ctx.fillStyle = '#00D2A0'
+  ctx.textAlign = 'center'
+  ctx.fillText('▸  USE CODE  ◂', W / 2, pcY + 38)
+
+  // Promo code value — very large, white, bold, glowing
+  ctx.font = `900 72px -apple-system, "SF Pro Display", Helvetica, sans-serif`
+  ctx.fillStyle = '#FFFFFF'
+  ctx.shadowColor = 'rgba(200,100,255,0.6)'
+  ctx.shadowBlur = 32
+  ctx.fillText(promoCode, W / 2, pcY + 105)
+  ctx.shadowBlur = 0
+  ctx.textAlign = 'left'
+
+  // ── Bottom row ─────────────────────────────────────────────────────────
+  const bottomY = H - 52
+
+  // QR code — bottom right, real scannable via qrcode npm package
+  const qrSize = 90
+  const qrX = W - 72 - qrSize
+  const qrY = bottomY - qrSize - 20
+
+  // White background pill for QR
+  ctx.fillStyle = '#FFFFFF'
+  roundRect(ctx, qrX - 6, qrY - 6, qrSize + 12, qrSize + 18, 8)
+  ctx.fill()
+
+  // Generate real scannable QR code onto temp canvas
+  const qrCanvas = document.createElement('canvas')
+  await QRCode.toCanvas(qrCanvas, 'https://cottoncandy-s.com', {
+    width: qrSize,
+    margin: 1,
+    color: {
+      dark: '#0A0A10',
+      light: '#FFFFFF',
+    },
+  })
+  ctx.drawImage(qrCanvas, qrX, qrY)
+
+  // "SCAN ME" label below QR
+  ctx.font = '500 9px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.textAlign = 'center'
+  ctx.fillText('SCAN ME', qrX + qrSize / 2, qrY + qrSize + 14)
+  ctx.textAlign = 'left'
+
+  // URL — left
+  ctx.font = '400 16px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.30)'
+  ctx.fillText('cottoncandy-s.com', 72, bottomY - 36)
+
+  // Tagline gradient — left, below URL
+  const tagGrad = ctx.createLinearGradient(72, 0, 500, 0)
+  tagGrad.addColorStop(0, '#00D2A0')
+  tagGrad.addColorStop(1, '#F472B6')
+  ctx.font = '600 13px monospace'
+  ctx.fillStyle = tagGrad
+  ctx.fillText('Record  ·  Transcribe  ·  Summarise', 72, bottomY - 16)
+
+  // Thin rule above bottom
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+  ctx.lineWidth = 0.75
+  ctx.beginPath(); ctx.moveTo(72, bottomY - 52); ctx.lineTo(W - 72, bottomY - 52); ctx.stroke()
+
+  return canvas.toDataURL('image/png')
 }
 
 // Helper: rounded rect path
