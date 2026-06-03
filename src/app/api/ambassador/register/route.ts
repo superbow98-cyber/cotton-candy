@@ -19,6 +19,24 @@ export async function POST() {
 
   const admin = adminClient()
 
+  // Check active paid plan
+  const now = new Date().toISOString()
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('plan, boost_expires_at, full_name, ambassador_promo_code')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const eligiblePlans = ['student_pro', 'month', 'year']
+  const hasActivePlan =
+    eligiblePlans.includes(profile?.plan) &&
+    profile?.boost_expires_at &&
+    profile.boost_expires_at > now
+
+  if (!hasActivePlan) {
+    return NextResponse.json({ error: 'active_plan_required' }, { status: 403 })
+  }
+
   // Check if already an ambassador
   const { data: existing } = await admin
     .from('ambassadors')
@@ -29,13 +47,6 @@ export async function POST() {
   if (existing) {
     return NextResponse.json({ promo_code: existing.promo_code, already_registered: true })
   }
-
-  // Get profile for name
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('full_name, ambassador_promo_code')
-    .eq('id', user.id)
-    .maybeSingle()
 
   // Already has a promo code somehow
   if (profile?.ambassador_promo_code) {
@@ -88,7 +99,6 @@ export async function POST() {
     })
     if (promoErr) {
       console.error('[ambassador/register] promo_codes insert failed:', promoErr)
-      // Don't return error — ambassador row already created, just log
     }
   }
 
