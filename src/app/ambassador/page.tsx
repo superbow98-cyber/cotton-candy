@@ -112,7 +112,7 @@ export default function AmbassadorPage() {
       {/* Language pill — top right */}
       <div
         style={{
-          position: "fixed",
+          position: "absolute",
           top: 20,
           right: 20,
           zIndex: 20,
@@ -125,6 +125,7 @@ export default function AmbassadorPage() {
           padding: "3px 4px",
           gap: 2,
           border: "0.5px solid rgba(255,255,255,0.22)",
+          whiteSpace: "nowrap",
         }}
       >
         {LANG_OPTIONS.map(({ code, label }) => (
@@ -174,6 +175,7 @@ export default function AmbassadorPage() {
             color: "rgba(255,180,200,0.9)",
             marginBottom: 16,
             textTransform: "uppercase",
+            whiteSpace: "nowrap",
           }}
         >
           {L("eyebrow", lang)}
@@ -182,13 +184,15 @@ export default function AmbassadorPage() {
         {/* Headline */}
         <h1
           style={{
-            fontSize: "clamp(36px, 6vw, 64px)",
+            fontSize: "clamp(28px, 5.5vw, 64px)",
             fontWeight: 700,
-            lineHeight: 1.07,
+            lineHeight: 1.1,
             letterSpacing: "-0.03em",
             color: "#fff",
             marginBottom: 18,
             textTransform: "uppercase",
+            wordBreak: "keep-all",
+            overflowWrap: "break-word",
           }}
         >
           {L("h1a", lang)}
@@ -233,6 +237,8 @@ export default function AmbassadorPage() {
               color: "rgba(255,180,200,0.85)",
               textTransform: "uppercase",
               marginBottom: 16,
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
             }}
           >
             {L("reqTitle", lang)}
