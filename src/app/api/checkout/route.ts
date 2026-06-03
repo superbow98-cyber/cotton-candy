@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, adminClient } from '@/lib/supabase/server'
 import { PLANS, type Plan } from '@/types'
 
 // Map plan key → env var with Price ID
@@ -37,7 +37,10 @@ export async function POST(req: Request) {
 
     if (promo && typeof promo === 'string' && promo.trim()) {
       const code = promo.trim().toUpperCase()
-      const { data: promoData, error: promoErr } = await supabase
+
+      // Use adminClient to bypass RLS on promo_codes table
+      const admin = adminClient()
+      const { data: promoData, error: promoErr } = await admin
         .from('promo_codes')
         .select('*')
         .eq('code', code)
