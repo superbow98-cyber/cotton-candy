@@ -5,6 +5,9 @@ import { useState } from "react";
 
 type Lang = "en" | "bm" | "zh" | "ta";
 
+/* ─────────────────────────────────────────────
+   TRANSLATIONS
+   ───────────────────────────────────────────── */
 const T = {
   eyebrow: {
     en: "Campus Ambassador Program",
@@ -12,54 +15,61 @@ const T = {
     zh: "校园大使计划",
     ta: "கேம்பஸ் அம்பாசிடர் திட்டம்",
   },
-  h1a: { en: "Become an Ambassador.", bm: "Jadi Ambassador.", zh: "成为大使。", ta: "அம்பாசிடராகுங்கள்." },
-  h1b: { en: "Win a MacBook.", bm: "Menang MacBook.", zh: "赢得 MacBook。", ta: "MacBook வெல்லுங்கள்." },
-  body: {
-    en: (
-      <>
-        Get a <strong>50% off package</strong>, earn <strong>1% commission</strong> on every payment, and stand a chance to win a <strong>MacBook Neo</strong> when you promote your promo code.
-      </>
-    ),
-    bm: (
-      <>
-        Hasilkan promo code 50% off bersama nama anda sebagai ambassador, jana <strong>komisen 1%</strong> setiap kali promo code 50% digunakan, dan berpeluang menang <strong>MacBook Neo</strong>.
-      </>
-    ),
-    zh: (
-      <>
-        获得 <strong>50% 折扣套餐</strong>，每笔付款赚取 <strong>1% 佣金</strong>，并有机会在推广你的优惠码时赢得 <strong>MacBook Neo</strong>。
-      </>
-    ),
-    ta: (
-      <>
-        <strong>50% தள்ளுபடி தொகுப்பு</strong> பெறுங்கள், ஒவ்வொரு கட்டணத்திலும் <strong>1% கமிஷன்</strong> சம்பாதியுங்கள், மற்றும் உங்கள் promo code ஐ பிரச்சாரம் செய்வதன் மூலம் <strong>MacBook Neo</strong> வெல்லும் வாய்ப்பு பெறுங்கள்.
-      </>
-    ),
+  h1a: {
+    en: "Become an Ambassador.",
+    bm: "Jadi Ambassador.",
+    zh: "成为大使。",
+    ta: "அம்பாசிடராகுங்கள்.",
   },
-  cta: { en: "Register Now", bm: "Daftar Sekarang", zh: "立即注册", ta: "இப்போது பதிவு செய்யுங்கள்" },
+  h1b: {
+    en: "Win a MacBook.",
+    bm: "Menang MacBook.",
+    zh: "赢得 MacBook。",
+    ta: "MacBook வெல்லுங்கள்.",
+  },
+  body: {
+    en: "Share your personalised 50% off promo code, earn 1% commission on every successful referral, and compete to win a MacBook Neo at the end of each month.",
+    bm: "Kongsi kod promo 50% off peribadi anda, jana komisen 1% bagi setiap rujukan berjaya, dan bersaing untuk memenangi MacBook Neo setiap hujung bulan.",
+    zh: "分享您专属的 50% 折扣优惠码，每次成功推荐可赚取 1% 佣金，并参与每月 MacBook Neo 的赢取竞赛。",
+    ta: "உங்கள் தனிப்பட்ட 50% தள்ளுபடி promo code ஐ பகிர்ந்து, ஒவ்வொரு வெற்றிகரமான பரிந்துரையிலும் 1% கமிஷன் சம்பாதியுங்கள், மேலும் ஒவ்வொரு மாதமும் MacBook Neo வெல்லும் போட்டியில் பங்கேற்கலாம்.",
+  },
+  cta: {
+    en: "Register Now",
+    bm: "Daftar Sekarang",
+    zh: "立即注册",
+    ta: "இப்போது பதிவு செய்யுங்கள்",
+  },
   reqTitle: {
     en: "Eligibility Requirements",
     bm: "Syarat Kelayakan",
     zh: "资格要求",
     ta: "தகுதி தேவைகள்",
   },
-  req1Label: { en: "Students only", bm: "Pelajar sahaja", zh: "仅限学生", ta: "மாணவர்கள் மட்டும்" },
-  req1Desc: {
-    en: "Must be an active student at a recognised IPT or IPTS (public or private university/college).",
-    bm: "Mesti pelajar aktif di IPT atau IPTS yang diiktiraf (universiti/kolej awam atau swasta).",
-    zh: "必须是公认 IPT 或 IPTS（公立或私立大学/学院）的在籍学生。",
-    ta: "அங்கீகரிக்கப்பட்ட IPT அல்லது IPTS (பொது அல்லது தனியார் பல்கலைக்கழகம்/கல்லூரி) இல் செயலில் உள்ள மாணவராக இருக்க வேண்டும்.",
+  req1Label: {
+    en: "Students only",
+    bm: "Pelajar sahaja",
+    zh: "仅限学生",
+    ta: "மாணவர்கள் மட்டும்",
   },
-  req2Label: { en: "Active paid plan", bm: "Plan aktif berbayar", zh: "有效付费套餐", ta: "செயலில் உள்ள கட்டண திட்டம்" },
+  req1Desc: {
+    en: "Must be an active student at a recognised public or private university or college (IPT / IPTS).",
+    bm: "Mesti merupakan pelajar aktif di IPT atau IPTS yang diiktiraf (universiti atau kolej awam / swasta).",
+    zh: "必须是公认公立或私立大学或学院（IPT / IPTS）的在籍学生。",
+    ta: "அங்கீகரிக்கப்பட்ட பொது அல்லது தனியார் பல்கலைக்கழகம் அல்லது கல்லூரியில் (IPT / IPTS) செயலில் உள்ள மாணவராக இருக்க வேண்டும்.",
+  },
+  req2Label: {
+    en: "Active paid plan required",
+    bm: "Perlu plan berbayar aktif",
+    zh: "需要有效付费套餐",
+    ta: "செயலில் உள்ள கட்டண திட்டம் தேவை",
+  },
   req2Desc: {
-    en: "Must hold an active Student PRO, Monthly, or Yearly plan. Free and Day Pass plans are not eligible.",
-    bm: "Mesti ada plan Student PRO, Bulanan, atau Tahunan yang aktif. Plan Free dan Day Pass tidak layak.",
-    zh: "必须持有有效的学生 PRO、月度或年度套餐。免费和日通票套餐不符合资格。",
-    ta: "செயலில் உள்ள Student PRO, மாதாந்திர, அல்லது வருடாந்திர திட்டம் வைத்திருக்க வேண்டும். Free மற்றும் Day Pass திட்டங்கள் தகுதியற்றவை.",
+    en: "You must hold an active Student PRO, Monthly, or Yearly plan. Free and Day Pass plans are not eligible.",
+    bm: "Anda perlu mempunyai plan Student PRO, Bulanan, atau Tahunan yang aktif. Plan Percuma dan Day Pass tidak layak.",
+    zh: "您必须持有有效的学生 PRO、月度或年度套餐。免费和日通票套餐不符合资格。",
+    ta: "நீங்கள் செயலில் உள்ள Student PRO, மாதாந்திர, அல்லது வருடாந்திர திட்டம் வைத்திருக்க வேண்டும். Free மற்றும் Day Pass திட்டங்கள் தகுதியற்றவை.",
   },
 };
-
-const L = (key: keyof typeof T, lang: Lang): any => (T[key] as any)[lang];
 
 const LANG_OPTIONS: { code: Lang; label: string }[] = [
   { code: "en", label: "EN" },
@@ -68,6 +78,9 @@ const LANG_OPTIONS: { code: Lang; label: string }[] = [
   { code: "ta", label: "தமிழ்" },
 ];
 
+/* ─────────────────────────────────────────────
+   PAGE COMPONENT
+   ───────────────────────────────────────────── */
 export default function AmbassadorPage() {
   const [lang, setLang] = useState<Lang>("bm");
 
@@ -81,12 +94,13 @@ export default function AmbassadorPage() {
         justifyContent: "center",
         textAlign: "center",
         overflow: "hidden",
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
         WebkitFontSmoothing: "antialiased",
         letterSpacing: "-0.02em",
       }}
     >
-      {/* Background — same as landing page ambassador section */}
+      {/* ── Background image ── */}
       <div
         style={{
           position: "absolute",
@@ -99,7 +113,7 @@ export default function AmbassadorPage() {
         }}
       />
 
-      {/* Overlay */}
+      {/* ── Dark overlay ── */}
       <div
         style={{
           position: "absolute",
@@ -109,7 +123,7 @@ export default function AmbassadorPage() {
         }}
       />
 
-      {/* Language pill — top right */}
+      {/* ── Language pill — position: absolute (NOT fixed) ── */}
       <div
         style={{
           position: "absolute",
@@ -125,7 +139,6 @@ export default function AmbassadorPage() {
           padding: "3px 4px",
           gap: 2,
           border: "0.5px solid rgba(255,255,255,0.22)",
-          whiteSpace: "nowrap",
         }}
       >
         {LANG_OPTIONS.map(({ code, label }) => (
@@ -139,12 +152,15 @@ export default function AmbassadorPage() {
               cursor: "pointer",
               fontSize: 12,
               fontWeight: lang === code ? 600 : 400,
-              background: lang === code ? "rgba(255,255,255,0.92)" : "transparent",
-              color: lang === code ? "#1d1d1f" : "rgba(255,255,255,0.7)",
-              boxShadow: lang === code ? "0 1px 4px rgba(0,0,0,0.18)" : "none",
+              background:
+                lang === code ? "rgba(255,255,255,0.92)" : "transparent",
+              color:
+                lang === code ? "#1d1d1f" : "rgba(255,255,255,0.7)",
+              boxShadow:
+                lang === code ? "0 1px 4px rgba(0,0,0,0.18)" : "none",
               transition: "all 0.18s ease",
-              letterSpacing: code === "zh" || code === "ta" ? "0" : "-0.02em",
               lineHeight: 1.4,
+              whiteSpace: "nowrap",
               fontFamily:
                 code === "ta"
                   ? '"Noto Sans Tamil", system-ui, sans-serif'
@@ -156,12 +172,12 @@ export default function AmbassadorPage() {
         ))}
       </div>
 
-      {/* Content */}
+      {/* ── Main content ── */}
       <div
         style={{
           position: "relative",
           zIndex: 10,
-          padding: "40px 24px 60px",
+          padding: "80px 24px 60px",
           maxWidth: 580,
           width: "100%",
         }}
@@ -171,14 +187,14 @@ export default function AmbassadorPage() {
           style={{
             fontSize: 13,
             fontWeight: 500,
-            letterSpacing: "0.05em",
+            letterSpacing: "0.06em",
             color: "rgba(255,180,200,0.9)",
-            marginBottom: 16,
+            marginBottom: 14,
             textTransform: "uppercase",
             whiteSpace: "nowrap",
           }}
         >
-          {L("eyebrow", lang)}
+          {T.eyebrow[lang]}
         </p>
 
         {/* Headline */}
@@ -195,9 +211,9 @@ export default function AmbassadorPage() {
             overflowWrap: "break-word",
           }}
         >
-          {L("h1a", lang)}
+          {T.h1a[lang]}
           <br />
-          {L("h1b", lang)}
+          {T.h1b[lang]}
         </h1>
 
         {/* Body */}
@@ -206,17 +222,17 @@ export default function AmbassadorPage() {
             fontSize: "clamp(15px, 2vw, 17px)",
             fontWeight: 300,
             color: "rgba(255,255,255,0.72)",
-            lineHeight: 1.65,
+            lineHeight: 1.7,
             marginBottom: 36,
             maxWidth: 440,
             marginLeft: "auto",
             marginRight: "auto",
           }}
         >
-          {L("body", lang)}
+          {T.body[lang]}
         </p>
 
-        {/* Eligibility card */}
+        {/* ── Eligibility card ── */}
         <div
           style={{
             background: "rgba(255,255,255,0.08)",
@@ -229,6 +245,7 @@ export default function AmbassadorPage() {
             textAlign: "left",
           }}
         >
+          {/* Card header */}
           <p
             style={{
               fontSize: 11,
@@ -237,15 +254,20 @@ export default function AmbassadorPage() {
               color: "rgba(255,180,200,0.85)",
               textTransform: "uppercase",
               marginBottom: 16,
-              wordBreak: "break-word",
-              overflowWrap: "break-word",
             }}
           >
-            {L("reqTitle", lang)}
+            {T.reqTitle[lang]}
           </p>
 
-          {/* Req 1 — IPT/IPTS */}
-          <div style={{ display: "flex", gap: 14, marginBottom: 16, alignItems: "flex-start" }}>
+          {/* Req 1 — Student only */}
+          <div
+            style={{
+              display: "flex",
+              gap: 14,
+              marginBottom: 16,
+              alignItems: "flex-start",
+            }}
+          >
             <div
               style={{
                 flexShrink: 0,
@@ -259,26 +281,59 @@ export default function AmbassadorPage() {
                 justifyContent: "center",
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/>
-                <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>
+              {/* Graduation cap icon */}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z" />
+                <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
               </svg>
             </div>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 3, letterSpacing: "-0.01em" }}>
-                {L("req1Label", lang)}
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#fff",
+                  marginBottom: 3,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {T.req1Label[lang]}
               </p>
-              <p style={{ fontSize: 13, fontWeight: 300, color: "rgba(255,255,255,0.65)", lineHeight: 1.55 }}>
-                {L("req1Desc", lang)}
+              <p
+                style={{
+                  fontSize: 13,
+                  fontWeight: 300,
+                  color: "rgba(255,255,255,0.65)",
+                  lineHeight: 1.55,
+                }}
+              >
+                {T.req1Desc[lang]}
               </p>
             </div>
           </div>
 
           {/* Divider */}
-          <div style={{ height: "0.5px", background: "rgba(255,255,255,0.12)", marginBottom: 16 }} />
+          <div
+            style={{
+              height: "0.5px",
+              background: "rgba(255,255,255,0.12)",
+              marginBottom: 16,
+            }}
+          />
 
           {/* Req 2 — Active plan */}
-          <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div
+            style={{ display: "flex", gap: 14, alignItems: "flex-start" }}
+          >
             <div
               style={{
                 flexShrink: 0,
@@ -292,18 +347,45 @@ export default function AmbassadorPage() {
                 justifyContent: "center",
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <path d="M9 12l2 2 4-4"/>
+              {/* Shield + check icon */}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <path d="M9 12l2 2 4-4" />
               </svg>
             </div>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 3, letterSpacing: "-0.01em" }}>
-                {L("req2Label", lang)}
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#fff",
+                  marginBottom: 3,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {T.req2Label[lang]}
               </p>
-              <p style={{ fontSize: 13, fontWeight: 300, color: "rgba(255,255,255,0.65)", lineHeight: 1.55, marginBottom: 10 }}>
-                {L("req2Desc", lang)}
+              <p
+                style={{
+                  fontSize: 13,
+                  fontWeight: 300,
+                  color: "rgba(255,255,255,0.65)",
+                  lineHeight: 1.55,
+                  marginBottom: 10,
+                }}
+              >
+                {T.req2Desc[lang]}
               </p>
+
               {/* Plan pills */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {["Student PRO", "Monthly", "Yearly"].map((plan) => (
@@ -323,7 +405,15 @@ export default function AmbassadorPage() {
                       backdropFilter: "blur(4px)",
                     }}
                   >
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+                    <span
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: "50%",
+                        background: "#4ade80",
+                        flexShrink: 0,
+                      }}
+                    />
                     {plan}
                   </span>
                 ))}
@@ -332,7 +422,7 @@ export default function AmbassadorPage() {
           </div>
         </div>
 
-        {/* CTA Button */}
+        {/* ── CTA button ── */}
         <Link
           href="/dashboard/ambassador"
           style={{
@@ -347,7 +437,7 @@ export default function AmbassadorPage() {
             letterSpacing: "-0.03em",
           }}
         >
-          {L("cta", lang)}
+          {T.cta[lang]}
         </Link>
       </div>
     </main>
