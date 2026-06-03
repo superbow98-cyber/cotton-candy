@@ -25,7 +25,6 @@ interface AmbassadorData {
   promo_code: string | null
   commission_total: number
   user_count: number
-  trial_expires_at: string | null
   is_ambassador: boolean
 }
 
@@ -62,7 +61,7 @@ export default function AmbassadorDashboard() {
 
       const { data: amb } = await sb
         .from('ambassadors')
-        .select('trial_expires_at, status')
+        .select('status')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -70,12 +69,10 @@ export default function AmbassadorDashboard() {
         promo_code: prof?.ambassador_promo_code || null,
         commission_total: prof?.ambassador_commission_total || 0,
         user_count: prof?.ambassador_user_count || 0,
-        trial_expires_at: amb?.trial_expires_at || null,
         is_ambassador: !!amb,
       })
 
       if (prof?.ambassador_promo_code) {
-        // Load recent commissions
         const { data: comms } = await sb
           .from('ambassador_commissions')
           .select('id, amount_paid_myr, commission_myr, created_at')
@@ -84,7 +81,6 @@ export default function AmbassadorDashboard() {
           .limit(20)
         setCommissions(comms || [])
 
-        // Load leaderboard (current month)
         const { data: lb } = await sb
           .from('ambassador_leaderboard')
           .select('*')
@@ -162,13 +158,6 @@ export default function AmbassadorDashboard() {
             ))}
           </div>
 
-          <div style={{
-            background: s.soft, borderRadius: 10, padding: '12px 16px', marginBottom: 24,
-            fontSize: 12.5, color: 'rgba(29,29,31,0.65)', lineHeight: 1.5,
-          }}>
-            🎉 {bm ? 'Free trial 30 hari untuk ambassador baru.' : '30-day free trial for new ambassadors.'}
-          </div>
-
           <button
             onClick={registerAsAmbassador}
             disabled={registering}
@@ -233,10 +222,10 @@ export default function AmbassadorDashboard() {
           }}
         >
           {copied ? '✓' : (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-  </svg>
-)}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          )}
           {copied ? (bm ? 'Disalin!' : 'Copied!') : (bm ? 'Salin kod' : 'Copy code')}
         </button>
       </div>
@@ -248,13 +237,6 @@ export default function AmbassadorDashboard() {
         <StatCard label={bm ? 'Pengguna bulan ini' : 'Users this month'} value={data.user_count} sub={`/ ${MACBOOK_TARGET} ${bm ? 'untuk MacBook' : 'for MacBook'}`} />
         <StatCard label={bm ? 'Jumlah komisen' : 'Total commission'} value={`RM ${data.commission_total.toFixed(2)}`} sub={bm ? 'terkumpul' : 'earned'} />
         <StatCard label={bm ? 'Ranking bulan ini' : 'This month rank'} value={myRank > 0 ? `#${myRank}` : '—'} sub={bm ? 'dalam leaderboard' : 'on leaderboard'} />
-        {data.trial_expires_at && (
-          <StatCard
-            label={bm ? 'Trial tamat' : 'Trial ends'}
-            value={new Date(data.trial_expires_at).toLocaleDateString(bm ? 'ms-MY' : 'en-GB', { day: 'numeric', month: 'short' })}
-            sub={bm ? 'free ambassador trial' : 'free ambassador trial'}
-          />
-        )}
       </div>
 
       {/* MacBook progress */}
@@ -300,7 +282,7 @@ export default function AmbassadorDashboard() {
             fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)',
             textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14,
           }}>
-            🏆 {bm ? 'Leaderboard bulan ini' : 'This month\'s leaderboard'}
+            🏆 {bm ? 'Leaderboard bulan ini' : "This month's leaderboard"}
           </div>
           {leaderboard.length === 0 ? (
             <div style={{ fontSize: 13, color: 'rgba(29,29,31,0.4)', padding: '12px 0' }}>
@@ -311,7 +293,6 @@ export default function AmbassadorDashboard() {
             return (
               <div key={entry.user_id} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 0',
                 borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)',
                 background: isMe ? s.soft : 'transparent',
                 borderRadius: isMe ? 8 : 0,
