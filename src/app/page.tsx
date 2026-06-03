@@ -38,13 +38,18 @@ export default function Home() {
         borderBottom: '0.5px solid rgba(0, 0, 0, 0.06)',
         position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 15 }}>
-          <span style={{
-            width: 22, height: 22, borderRadius: '50%',
-            background: 'radial-gradient(circle at 30% 28%, #FFCFDB 0%, #FF8FA8 55%, #E56A88 100%)',
-          }} />
-          Cotton Candy
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+  <img
+    src="/cc-logo.png"
+    alt="Cotton Candy"
+    style={{
+      height: 36,
+      width: 36,
+      borderRadius: 10,
+      objectFit: 'contain',
+    }}
+  />
+</div>
 
         <div className="hidden md:flex" style={{ gap: 28, fontSize: 13, color: 'rgba(29,29,31,0.75)' }}>
           <a href="#features" style={{ color: 'inherit', textDecoration: 'none' }}>
