@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       if (promoData.max_uses && promoData.used_count >= promoData.max_uses) {
         return NextResponse.json({ error: 'Promo code usage limit reached' }, { status: 400 })
       }
-      if (!promoData.applicable_plans?.includes(plan)) {
+      if (promoData.applicable_plans && !promoData.applicable_plans.includes(plan)) {
         return NextResponse.json({ error: 'Promo code not valid for this plan' }, { status: 400 })
       }
 
