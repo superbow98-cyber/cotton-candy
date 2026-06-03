@@ -417,6 +417,16 @@ export default function DashboardHome() {
           href="/dashboard/notebooks"
           accent="#f5f5f7"
         />
+        {/* AMBASSADOR BUTTON */}
+        <QuickAction
+          icon={<span style={{ fontSize: 14 }}>🍬</span>}
+          title={lang === 'bm' ? 'Program Ambassador' : 'Ambassador Program'}
+          desc={lang === 'bm'
+            ? 'Kongsi kod, dapat komisen. Boleh menang MacBook!'
+            : 'Share your code, earn commissions. Win a MacBook!'}
+          href="/dashboard/ambassador"
+          accent="#FFF4D6"
+        />
       </div>
 
       {/* v61: Buy credits modal */}
