@@ -128,24 +128,19 @@ export default function Home() {
         background: 'linear-gradient(180deg, #FFFBFC 0%, #FFF5F7 30%, #F8F4FF 70%, #F0F8FF 100%)',
       }}>
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '5px 13px',
-          background: 'rgba(255, 110, 170, 0.1)',
-          border: '0.5px solid rgba(255, 110, 170, 0.25)',
-          borderRadius: 100,
-          fontSize: 12, fontWeight: 500,
-          color: '#D4537E',
-          marginBottom: 20,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF6B9D' }} />
-          {L(
-            'New · Pick your AI brain per lecture',
-            'Baharu · Pilih AI setiap kuliah',
-            '全新 · 每堂课选择你的 AI',
-            'புதியது · ஒவ்வொரு வகுப்பிற்கும் AI தேர்வு'
-          )}
-        </div>
-
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  fontSize: 12, fontWeight: 500,
+  color: '#D4537E',
+  marginBottom: 20,
+}}>
+  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF6B9D', flexShrink: 0 }} />
+  {L(
+    'New · Pick your AI brain per lecture',
+    'Baharu · Pilih AI setiap kuliah',
+    '全新 · 每堂课选择你的 AI',
+    'புதியது · ஒவ்வொரு வகுப்பிற்கும் AI தேர்வு'
+  )}
+</div>
         <h1 style={{
           fontSize: 'clamp(32px, 6vw, 52px)',
           fontWeight: 600,
