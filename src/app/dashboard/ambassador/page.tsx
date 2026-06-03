@@ -1,7 +1,6 @@
 'use client'
 // src/app/dashboard/ambassador/page.tsx
-// PATCH: Added Share Kit stat card + promo card canvas generator + tutorial steps
-// Changes marked with // ← NEW
+// PATCH: Redesigned generatePromoCard — dark professional style (teal→purple→pink gradient typography)
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -155,7 +154,6 @@ const AMBASSADOR_STYLES = `
 }
 .amb-plans-link:hover { color:rgba(255,255,255,0.7); }
 
-/* ← NEW: Share kit styles */
 .amb-sharekit-btn {
   display:inline-flex; align-items:center; gap:6px;
   padding:9px 16px; border-radius:9px;
@@ -186,7 +184,7 @@ const AMBASSADOR_STYLES = `
 }
 `
 
-// ← NEW: Generate promo card using HTML Canvas
+// ─── Generate dark-professional promo card ────────────────────────────────────
 function generatePromoCard(promoCode: string): Promise<string> {
   return new Promise((resolve) => {
     const W = 1080
@@ -196,99 +194,228 @@ function generatePromoCard(promoCode: string): Promise<string> {
     canvas.height = H
     const ctx = canvas.getContext('2d')!
 
-    // Background gradient — pink to purple to blue (matches CottonCandy brand)
-    const bg = ctx.createLinearGradient(0, 0, W, H)
-    bg.addColorStop(0, '#FF6B9D')
-    bg.addColorStop(0.5, '#C471F5')
-    bg.addColorStop(1, '#5A8FF5')
-    ctx.fillStyle = bg
+    // ── Background: deep dark ──────────────────────────────────────────────
+    ctx.fillStyle = '#0A0A10'
     ctx.fillRect(0, 0, W, H)
 
-    // Soft overlay circles for depth
-    ctx.globalAlpha = 0.18
-    ctx.fillStyle = '#fff'
-    ctx.beginPath()
-    ctx.arc(180, 180, 320, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(900, 860, 260, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = 1
+    // Scanline texture
+    for (let y = 0; y < H; y += 3) {
+      ctx.fillStyle = 'rgba(255,255,255,0.012)'
+      ctx.fillRect(0, y, W, 1)
+    }
 
-    // Dark overlay for text legibility
-    const overlay = ctx.createLinearGradient(0, H * 0.3, 0, H)
-    overlay.addColorStop(0, 'rgba(0,0,0,0)')
-    overlay.addColorStop(1, 'rgba(0,0,0,0.55)')
-    ctx.fillStyle = overlay
+    // Radial glow top-right (teal)
+    const glowTeal = ctx.createRadialGradient(900, 140, 0, 900, 140, 420)
+    glowTeal.addColorStop(0, 'rgba(0,210,160,0.13)')
+    glowTeal.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = glowTeal
     ctx.fillRect(0, 0, W, H)
 
-    // App name — top left
-    ctx.font = '600 38px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.fillText('Cotton Candy 🍭', 72, 90)
+    // Radial glow bottom-left (purple)
+    const glowPurple = ctx.createRadialGradient(120, 900, 0, 120, 900, 380)
+    glowPurple.addColorStop(0, 'rgba(168,85,247,0.14)')
+    glowPurple.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = glowPurple
+    ctx.fillRect(0, 0, W, H)
 
-    // Tagline
-    ctx.font = '300 26px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.65)'
-    ctx.fillText('AI-powered lecture notes', 72, 134)
+    // Fine grid overlay
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)'
+    ctx.lineWidth = 0.5
+    for (let x = 0; x < W; x += 60) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+    }
+    for (let y = 0; y < H; y += 60) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
+    }
 
-    // Main headline
-    ctx.font = '700 72px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = '#ffffff'
-    ctx.fillText('Get 50% OFF', 72, 420)
-
-    // Sub headline
-    ctx.font = '400 36px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.fillText('on any paid plan. Record lectures,', 72, 488)
-    ctx.fillText('get AI notes instantly.', 72, 534)
-
-    // Promo code pill background
-    const pillX = 72
-    const pillY = 620
-    const pillW = 420
-    const pillH = 100
-    const pillR = 20
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(pillX + pillR, pillY)
-    ctx.lineTo(pillX + pillW - pillR, pillY)
-    ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR, pillR)
-    ctx.lineTo(pillX + pillW, pillY + pillH - pillR)
-    ctx.arcTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH, pillR)
-    ctx.lineTo(pillX + pillR, pillY + pillH)
-    ctx.arcTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR, pillR)
-    ctx.lineTo(pillX, pillY + pillR)
-    ctx.arcTo(pillX, pillY, pillX + pillR, pillY, pillR)
-    ctx.closePath()
+    // ── Top bar ────────────────────────────────────────────────────────────
+    // Logo pill
+    const pillBg = ctx.createLinearGradient(72, 60, 72 + 220, 60)
+    pillBg.addColorStop(0, 'rgba(255,255,255,0.07)')
+    pillBg.addColorStop(1, 'rgba(255,255,255,0.03)')
+    ctx.fillStyle = pillBg
+    roundRect(ctx, 72, 56, 220, 44, 12)
     ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'
+    ctx.lineWidth = 0.75
+    roundRect(ctx, 72, 56, 220, 44, 12)
     ctx.stroke()
 
-    // Promo code label
-    ctx.font = '500 22px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
-    ctx.fillText('USE CODE', pillX + 28, pillY + 38)
+    // Logo icon bg
+    const logoBg = ctx.createLinearGradient(82, 62, 82 + 32, 62 + 32)
+    logoBg.addColorStop(0, '#FF6B9D')
+    logoBg.addColorStop(1, '#C471F5')
+    ctx.fillStyle = logoBg
+    roundRect(ctx, 82, 62, 32, 32, 8)
+    ctx.fill()
 
-    // Promo code value
-    ctx.font = '800 44px -apple-system, Helvetica, monospace'
-    ctx.fillStyle = '#ffffff'
-    ctx.letterSpacing = '4px'
-    ctx.fillText(promoCode, pillX + 28, pillY + 78)
+    ctx.font = '18px serif'
+    ctx.fillText('🍭', 84, 86)
 
-    // CTA
-    ctx.font = '500 28px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'
-    ctx.fillText('cottoncandy-s.com', 72, 820)
+    ctx.font = '500 18px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.88)'
+    ctx.fillText('Cotton Candy', 124, 84)
 
-    // Bottom tagline
-    ctx.font = '300 22px -apple-system, Helvetica, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.fillText('Record · Transcribe · Summarize · Export PDF', 72, 1010)
+    // Slide label top-right
+    ctx.font = '400 13px monospace'
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'
+    ctx.textAlign = 'right'
+    ctx.fillText('AMBASSADOR', W - 72, 84)
+    ctx.textAlign = 'left'
+
+    // ── Tag line ───────────────────────────────────────────────────────────
+    ctx.font = '700 11px monospace'
+    ctx.fillStyle = 'rgba(0,210,160,0.75)'
+    ctx.fillText('// EXCLUSIVE OFFER', 72, 164)
+
+    // Thin rule
+    ctx.strokeStyle = 'rgba(0,210,160,0.2)'
+    ctx.lineWidth = 0.75
+    ctx.beginPath(); ctx.moveTo(72, 172); ctx.lineTo(340, 172); ctx.stroke()
+
+    // ── Main headline (gradient text via workaround) ───────────────────────
+    // "Get" — white
+    ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText('Get', 72, 280)
+
+    // "50% OFF" — gradient teal→purple
+    const grad1 = ctx.createLinearGradient(72, 260, 72 + 520, 260)
+    grad1.addColorStop(0, '#00D2A0')
+    grad1.addColorStop(0.5, '#A855F7')
+    grad1.addColorStop(1, '#F472B6')
+    ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+    ctx.fillStyle = grad1
+    ctx.fillText('50% OFF', 72, 380)
+
+    // "any paid plan." — white, slightly smaller
+    ctx.font = '700 72px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.90)'
+    ctx.fillText('any paid plan.', 72, 472)
+
+    // Sub — monospace muted
+    ctx.font = '400 18px monospace'
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+    ctx.fillText('AI Lecture Recorder  ·  Malaysian Students', 72, 520)
+
+    // ── Stats card ─────────────────────────────────────────────────────────
+    const cardX = 72, cardY = 556, cardW = W - 144, cardH = 164
+    ctx.fillStyle = 'rgba(255,255,255,0.045)'
+    roundRect(ctx, cardX, cardY, cardW, cardH, 16)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)'
+    ctx.lineWidth = 0.75
+    roundRect(ctx, cardX, cardY, cardW, cardH, 16)
+    ctx.stroke()
+
+    // Stats card label
+    ctx.font = '600 11px monospace'
+    ctx.fillStyle = 'rgba(255,255,255,0.32)'
+    ctx.fillText('SPEECH-TO-TEXT ENGINE', cardX + 28, cardY + 36)
+
+    // Divider under label
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+    ctx.lineWidth = 0.5
+    ctx.beginPath(); ctx.moveTo(cardX + 28, cardY + 48); ctx.lineTo(cardX + cardW - 28, cardY + 48); ctx.stroke()
+
+    // Three stats
+    const stats = [
+      { val: '99+', sub: 'LANGUAGES' },
+      { val: '~10×', sub: 'FASTER REALTIME' },
+      { val: 'SOTA', sub: 'WORD ACCURACY' },
+    ]
+    const colW = cardW / 3
+    stats.forEach((stat, i) => {
+      const cx = cardX + i * colW + colW / 2
+
+      // Gradient value
+      const statGrad = ctx.createLinearGradient(cx - 60, 0, cx + 60, 0)
+      statGrad.addColorStop(0, '#00D2A0')
+      statGrad.addColorStop(1, '#A855F7')
+      ctx.font = '800 38px -apple-system, "SF Pro Display", Helvetica, sans-serif'
+      ctx.fillStyle = statGrad
+      ctx.textAlign = 'center'
+      ctx.fillText(stat.val, cx, cardY + 108)
+
+      // Sub label
+      ctx.font = '600 10px monospace'
+      ctx.fillStyle = 'rgba(255,255,255,0.32)'
+      ctx.fillText(stat.sub, cx, cardY + 134)
+
+      // Vertical divider
+      if (i < 2) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)'
+        ctx.lineWidth = 0.5
+        ctx.beginPath()
+        ctx.moveTo(cardX + (i + 1) * colW, cardY + 56)
+        ctx.lineTo(cardX + (i + 1) * colW, cardY + cardH - 16)
+        ctx.stroke()
+      }
+    })
+    ctx.textAlign = 'left'
+
+    // ── Promo code pill ────────────────────────────────────────────────────
+    const codeX = 72, codeY = 756, codeH = 80
+    // Measure code width
+    ctx.font = '700 32px monospace'
+    const codeTextW = ctx.measureText(promoCode).width
+    const labelW = 120
+    const codeW = labelW + codeTextW + 60
+
+    ctx.fillStyle = 'rgba(168,85,247,0.12)'
+    roundRect(ctx, codeX, codeY, codeW, codeH, 12)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(168,85,247,0.38)'
+    ctx.lineWidth = 0.75
+    roundRect(ctx, codeX, codeY, codeW, codeH, 12)
+    ctx.stroke()
+
+    ctx.font = '600 11px monospace'
+    ctx.fillStyle = 'rgba(168,85,247,0.7)'
+    ctx.fillText('USE CODE', codeX + 24, codeY + 34)
+
+    ctx.font = '700 32px monospace'
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText(promoCode, codeX + 24, codeY + 62)
+
+    // ── Bottom row ─────────────────────────────────────────────────────────
+    // Left: URL
+    ctx.font = '400 16px monospace'
+    ctx.fillStyle = 'rgba(255,255,255,0.30)'
+    ctx.fillText('cottoncandy-s.com', 72, H - 56)
+
+    // Right: tagline gradient
+    const tagGrad = ctx.createLinearGradient(W - 520, 0, W - 72, 0)
+    tagGrad.addColorStop(0, '#00D2A0')
+    tagGrad.addColorStop(1, '#F472B6')
+    ctx.font = '600 14px monospace'
+    ctx.fillStyle = tagGrad
+    ctx.textAlign = 'right'
+    ctx.fillText('Record  ·  Transcribe  ·  Summarise', W - 72, H - 56)
+    ctx.textAlign = 'left'
+
+    // Thin bottom rule
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+    ctx.lineWidth = 0.75
+    ctx.beginPath(); ctx.moveTo(72, H - 72); ctx.lineTo(W - 72, H - 72); ctx.stroke()
 
     resolve(canvas.toDataURL('image/png'))
   })
+}
+
+// Helper: rounded rect path
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.arcTo(x + w, y, x + w, y + r, r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+  ctx.lineTo(x + r, y + h)
+  ctx.arcTo(x, y + h, x, y + h - r, r)
+  ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r)
+  ctx.closePath()
 }
 
 export default function AmbassadorDashboard() {
@@ -303,7 +430,6 @@ export default function AmbassadorDashboard() {
   const [btnError, setBtnError] = useState(false)
   const [showErrBanner, setShowErrBanner] = useState(false)
   const [showPlansLink, setShowPlansLink] = useState(false)
-  // ← NEW: Share kit state
   const [promoCardUrl, setPromoCardUrl] = useState<string | null>(null)
   const [generatingCard, setGeneratingCard] = useState(false)
   const [shareKitOpen, setShareKitOpen] = useState(false)
@@ -404,7 +530,6 @@ export default function AmbassadorDashboard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // ← NEW: Generate + download promo card
   async function handleGenerateCard() {
     if (!data?.promo_code) return
     setGeneratingCard(true)
@@ -522,8 +647,7 @@ export default function AmbassadorDashboard() {
     )
   }
 
-  // ─── AMBASSADOR DASHBOARD (already registered) ────────────────────────────
-  // ← NEW: Tutorial steps data
+  // ─── AMBASSADOR DASHBOARD ─────────────────────────────────────────────────
   const tutorialSteps = bm ? [
     { num: '01', title: 'Daftar akaun', desc: 'Pergi cottoncandy-s.com → klik "Mula percuma" → daftar dengan email atau Google.' },
     { num: '02', title: 'Pilih plan', desc: `Upgrade ke mana-mana plan berbayar. Guna kod ${data.promo_code} untuk 50% off semasa checkout.` },
@@ -537,7 +661,7 @@ export default function AmbassadorDashboard() {
     { num: '03', title: 'Start a new lecture', desc: 'Dashboard → "Record lecture" → name your lecture → pick an AI (Gemini/GPT/Claude) → hit record.' },
     { num: '04', title: 'Record & finish', desc: 'Just speak — live transcript appears in real time. Done → tap "Finish lecture".' },
     { num: '05', title: 'AI notes ready', desc: 'Within seconds — topics, key points, formulas, summary auto-organized by AI.' },
-    { num: '06', title: 'Export as PDF', desc: 'Click "Export PDF" inside the lecture view → choose a color theme → download or share instantly.' },
+    { num: '06', title: 'Export as PDF', desc: 'Click "Export PDF" inside the lecture view → choose a colour theme → download or share instantly.' },
   ]
 
   return (
@@ -574,19 +698,17 @@ export default function AmbassadorDashboard() {
         </button>
       </div>
 
-      {/* ← NEW: Stats grid — 4 cards now */}
+      {/* Stats grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
         <StatCard label={bm ? 'Pengguna bulan ini' : 'Users this month'} value={data.user_count} sub={`/ ${MACBOOK_TARGET} ${bm ? 'untuk MacBook' : 'for MacBook'}`} />
         <StatCard label={bm ? 'Jumlah komisen' : 'Total commission'} value={`RM ${data.commission_total.toFixed(2)}`} sub={bm ? 'terkumpul' : 'earned'} />
         <StatCard label={bm ? 'Ranking bulan ini' : 'This month rank'} value={myRank > 0 ? `#${myRank}` : '—'} sub={bm ? 'dalam leaderboard' : 'on leaderboard'} />
 
-        {/* ← NEW: Share Kit card */}
+        {/* Share Kit card */}
         <div
           onClick={() => setShareKitOpen(o => !o)}
           style={{
-            background: shareKitOpen
-              ? 'linear-gradient(135deg, #fff5f8, #f5f0ff)'
-              : '#fff',
+            background: shareKitOpen ? 'linear-gradient(135deg, #fff5f8, #f5f0ff)' : '#fff',
             border: `0.5px solid ${shareKitOpen ? 'rgba(196,113,245,0.3)' : 'rgba(0,0,0,0.06)'}`,
             borderRadius: 12, padding: '14px 16px',
             cursor: 'pointer',
@@ -600,14 +722,12 @@ export default function AmbassadorDashboard() {
             {shareKitOpen ? '▲' : '▼'}
           </div>
           <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginTop: 4 }}>
-            {shareKitOpen
-              ? (bm ? 'Tutup' : 'Close')
-              : (bm ? 'Promo card + tutorial' : 'Promo card + tutorial')}
+            {shareKitOpen ? (bm ? 'Tutup' : 'Close') : (bm ? 'Promo card + tutorial' : 'Promo card + tutorial')}
           </div>
         </div>
       </div>
 
-      {/* ← NEW: Share Kit expanded panel */}
+      {/* Share Kit expanded */}
       {shareKitOpen && (
         <div style={{
           background: '#fff',
@@ -622,7 +742,6 @@ export default function AmbassadorDashboard() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-
             {/* LEFT: Promo card generator */}
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
@@ -634,7 +753,6 @@ export default function AmbassadorDashboard() {
                   : `Auto-generates a 1080×1080 image with your ${data.promo_code} code. Share directly to Instagram, WhatsApp, TikTok.`}
               </div>
 
-              {/* Preview or placeholder */}
               {promoCardUrl ? (
                 <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', marginBottom: 12, aspectRatio: '1/1' }}>
                   <img src={promoCardUrl} alt="Promo card" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -643,8 +761,8 @@ export default function AmbassadorDashboard() {
                 <div style={{
                   aspectRatio: '1/1',
                   borderRadius: 12,
-                  background: 'linear-gradient(135deg, rgba(255,107,157,0.12), rgba(196,113,245,0.12), rgba(90,143,245,0.12))',
-                  border: '1px dashed rgba(196,113,245,0.3)',
+                  background: 'linear-gradient(135deg, rgba(0,200,160,0.08), rgba(168,85,247,0.08), rgba(244,114,182,0.08))',
+                  border: '1px dashed rgba(168,85,247,0.25)',
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   gap: 8, marginBottom: 12,
@@ -666,8 +784,9 @@ export default function AmbassadorDashboard() {
                   onClick={handleGenerateCard}
                   disabled={generatingCard}
                   style={{
-                    background: generatingCard ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #FF6B9D, #C471F5)',
+                    background: generatingCard ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #0A0A10, #1a0a2e)',
                     color: generatingCard ? 'rgba(29,29,31,0.4)' : '#fff',
+                    border: '0.5px solid rgba(168,85,247,0.4)',
                     flex: 1,
                   }}
                 >
@@ -690,7 +809,6 @@ export default function AmbassadorDashboard() {
                   </button>
                 )}
               </div>
-
               <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             </div>
 
@@ -704,40 +822,26 @@ export default function AmbassadorDashboard() {
                   ? 'Share steps ni kepada kawan-kawan supaya mereka tahu cara guna app ni.'
                   : 'Share these steps with friends so they know exactly how to use the app.'}
               </div>
-
               <div>
                 {tutorialSteps.map((step, i) => (
-                  <div
-                    key={step.num}
-                    className="amb-step-row"
-                    style={{ animationDelay: `${i * 0.06}s` }}
-                  >
+                  <div key={step.num} className="amb-step-row" style={{ animationDelay: `${i * 0.06}s` }}>
                     <div style={{
-                      flexShrink: 0,
-                      width: 28, height: 28,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, rgba(255,107,157,0.15), rgba(196,113,245,0.15))',
-                      border: '0.5px solid rgba(196,113,245,0.25)',
+                      flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
+                      background: 'linear-gradient(135deg, rgba(0,210,160,0.12), rgba(168,85,247,0.12))',
+                      border: '0.5px solid rgba(168,85,247,0.25)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 700,
-                      color: '#C471F5',
-                      letterSpacing: '0.02em',
+                      fontSize: 10, fontWeight: 700, color: '#A855F7', letterSpacing: '0.02em',
                     }}>
                       {step.num}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 2, letterSpacing: '-0.01em' }}>
-                        {step.title}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', lineHeight: 1.55 }}>
-                        {step.desc}
-                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 2, letterSpacing: '-0.01em' }}>{step.title}</div>
+                      <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', lineHeight: 1.55 }}>{step.desc}</div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
           </div>
         </div>
       )}
