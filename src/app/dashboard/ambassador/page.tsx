@@ -57,28 +57,22 @@ export default function AmbassadorDashboard() {
 
       const { data: prof } = await sb
         .from('profiles')
-        .select('ambassador_promo_code, ambassador_commission_total, ambassador_user_count, plan, boost_expires_at')
+        .select('ambassador_promo_code, ambassador_commission_total, ambassador_user_count, plan, plan_expires_at')
         .eq('id', user.id)
-        .maybeSingle()
-
-      const { data: amb } = await sb
-        .from('ambassadors')
-        .select('status')
-        .eq('user_id', user.id)
         .maybeSingle()
 
       const eligiblePlans = ['student_pro', 'month', 'year']
       const now = new Date().toISOString()
       const hasActivePlan =
         eligiblePlans.includes(prof?.plan) &&
-        prof?.boost_expires_at &&
-        prof.boost_expires_at > now
+        prof?.plan_expires_at &&
+        prof.plan_expires_at > now
 
       setData({
         promo_code: prof?.ambassador_promo_code || null,
         commission_total: prof?.ambassador_commission_total || 0,
         user_count: prof?.ambassador_user_count || 0,
-        is_ambassador: !!amb,
+        is_ambassador: !!(prof?.ambassador_promo_code),
         has_active_plan: !!hasActivePlan,
       })
 
@@ -136,7 +130,6 @@ export default function AmbassadorDashboard() {
     )
   }
 
-  // Not yet an ambassador
   if (!data?.is_ambassador) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
@@ -156,24 +149,19 @@ export default function AmbassadorDashboard() {
               : 'Share your unique promo code. Earn 1% commission every time someone subscribes using your code. Top leaderboard + 200 users = MacBook.'}
           </p>
 
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 28,
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 28 }}>
             {[
               { emoji: '🎁', label: bm ? 'Kod 50% off untuk kawan' : '50% off code for friends' },
               { emoji: '💰', label: bm ? '1% komisen setiap sale' : '1% commission per sale' },
               { emoji: '💻', label: bm ? 'MacBook kalau #1 + 200 users' : 'MacBook for #1 + 200 users' },
             ].map(p => (
-              <div key={p.emoji} style={{
-                background: s.cream, borderRadius: 12, padding: '14px 12px', textAlign: 'center',
-              }}>
+              <div key={p.emoji} style={{ background: s.cream, borderRadius: 12, padding: '14px 12px', textAlign: 'center' }}>
                 <div style={{ fontSize: 22, marginBottom: 6 }}>{p.emoji}</div>
                 <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.65)', lineHeight: 1.4 }}>{p.label}</div>
               </div>
             ))}
           </div>
 
-          {/* Plan gate notice */}
           <div style={{
             background: data?.has_active_plan ? '#e6f4eb' : '#fff8e6',
             border: `0.5px solid ${data?.has_active_plan ? '#7AB883' : '#E5B947'}`,
@@ -201,8 +189,7 @@ export default function AmbassadorDashboard() {
             style={{
               width: '100%', padding: '13px 0', borderRadius: 11,
               background: data?.has_active_plan ? '#1d1d1f' : 'rgba(29,29,31,0.2)',
-              color: '#fff',
-              fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
+              color: '#fff', fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
               border: 'none',
               cursor: (registering || !data?.has_active_plan) ? 'not-allowed' : 'pointer',
               opacity: registering ? 0.6 : 1,
@@ -214,10 +201,7 @@ export default function AmbassadorDashboard() {
           </button>
 
           {!data?.has_active_plan && (
-            <a href="/pricing" style={{
-              display: 'block', marginTop: 12,
-              fontSize: 12.5, color: s.primaryDark, textDecoration: 'none',
-            }}>
+            <a href="/pricing" style={{ display: 'block', marginTop: 12, fontSize: 12.5, color: s.primaryDark, textDecoration: 'none' }}>
               {bm ? 'Lihat plan →' : 'View plans →'}
             </a>
           )}
@@ -226,7 +210,6 @@ export default function AmbassadorDashboard() {
     )
   }
 
-  // Ambassador dashboard
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
@@ -240,9 +223,8 @@ export default function AmbassadorDashboard() {
 
       <div style={{
         background: '#fff', border: `1.5px solid ${s.border}`,
-        borderRadius: 14, padding: '20px 20px',
-        marginBottom: 14, display: 'flex',
-        alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        borderRadius: 14, padding: '20px 20px', marginBottom: 14,
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
       }}>
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
@@ -275,18 +257,13 @@ export default function AmbassadorDashboard() {
         </button>
       </div>
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14,
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
         <StatCard label={bm ? 'Pengguna bulan ini' : 'Users this month'} value={data.user_count} sub={`/ ${MACBOOK_TARGET} ${bm ? 'untuk MacBook' : 'for MacBook'}`} />
         <StatCard label={bm ? 'Jumlah komisen' : 'Total commission'} value={`RM ${data.commission_total.toFixed(2)}`} sub={bm ? 'terkumpul' : 'earned'} />
         <StatCard label={bm ? 'Ranking bulan ini' : 'This month rank'} value={myRank > 0 ? `#${myRank}` : '—'} sub={bm ? 'dalam leaderboard' : 'on leaderboard'} />
       </div>
 
-      <div style={{
-        background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)',
-        borderRadius: 14, padding: '18px 20px', marginBottom: 14,
-      }}>
+      <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)', borderRadius: 14, padding: '18px 20px', marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', display: 'flex', alignItems: 'center', gap: 6 }}>
             💻 {bm ? 'Progress MacBook' : 'MacBook Progress'}
