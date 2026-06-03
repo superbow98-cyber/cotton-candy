@@ -53,6 +53,9 @@ export default function Home() {
           <a href="#ai" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('AI models', 'Model AI', 'AI 模型', 'AI மாடல்கள்')}
           </a>
+          <Link href="/ambassador" style={{ color: 'inherit', textDecoration: 'none' }}>
+            {L('Ambassador', 'Ambassador', '大使计划', 'அம்பாசிடர்')}
+          </Link>
           <a href="#pricing" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Pricing', 'Harga', '价格', 'விலை')}
           </a>
@@ -517,6 +520,72 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* AMBASSADOR */}
+      <section style={{
+        padding: '80px 20px',
+        textAlign: 'center',
+        background: '#fff',
+        borderTop: '0.5px solid rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: '#D4537E', marginBottom: 10 }}>
+            {L('Campus Ambassador Program', 'Program Ambassador Kampus', '校园大使计划', 'கேம்பஸ் அம்பாசிடர் திட்டம்')}
+          </div>
+          <h2 style={{
+            fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 600,
+            lineHeight: 1.08, letterSpacing: '-0.03em',
+            color: '#1d1d1f', margin: '0 0 14px',
+          }}>
+            {L('Jadi Ambassador.', 'Jadi Ambassador.', '成为大使。', 'அம்பாசிடராகுங்கள்.')}
+            <br />
+            {L('Menang MacBook.', 'Menang MacBook.', '赢得 MacBook。', 'MacBook வெல்லுங்கள்.')}
+          </h2>
+          <p style={{
+            fontSize: 'clamp(15px, 2vw, 18px)', fontWeight: 400,
+            color: 'rgba(29,29,31,0.65)',
+            maxWidth: 520, margin: '0 auto 14px',
+            lineHeight: 1.5, letterSpacing: '-0.01em',
+          }}>
+            {L(
+              'Get a promo code to give friends 50% off. Earn 1% commission on every payment. Top ambassador each month wins a MacBook Neo.',
+              'Dapat promo code untuk bagi kawan 50% off. Jana komisen 1% setiap payment. Ambassador terbaik setiap bulan menang MacBook Neo.',
+              '获取优惠码为朋友提供 50% 折扣。每笔付款赚取 1% 佣金。每月最佳大使赢得 MacBook Neo。',
+              'நண்பர்களுக்கு 50% தள்ளுபடி கோடு பெறுங்கள். ஒவ்வொரு கட்டணத்திலும் 1% கமிஷன். மாதாந்திர சிறந்த அம்பாசிடர் MacBook Neo வெல்வார்.'
+            )}
+          </p>
+          <div style={{
+            display: 'flex', justifyContent: 'center', gap: 8,
+            flexWrap: 'wrap', marginBottom: 32,
+          }}>
+            {[
+              { en: '50% off for friends', bm: '50% off untuk kawan', zh: '朋友享 50% 折扣', ta: 'நண்பர்களுக்கு 50% தள்ளுபடி' },
+              { en: '1% commission', bm: 'Komisen 1%', zh: '1% 佣金', ta: '1% கமிஷன்' },
+              { en: 'Win MacBook Neo', bm: 'Menang MacBook Neo', zh: '赢 MacBook Neo', ta: 'MacBook Neo வெல்லுங்கள்' },
+            ].map((pill, i) => (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px',
+                background: 'rgba(212,83,126,0.07)',
+                border: '0.5px solid rgba(212,83,126,0.2)',
+                borderRadius: 100,
+                fontSize: 13, fontWeight: 500, color: '#D4537E',
+              }}>
+                {L(pill.en, pill.bm, pill.zh, pill.ta)}
+              </span>
+            ))}
+          </div>
+          <Link href="/ambassador" style={{
+            display: 'inline-block',
+            padding: '13px 28px', borderRadius: 100,
+            background: '#1d1d1f', color: '#fff',
+            fontSize: 14, fontWeight: 500, letterSpacing: '-0.05em',
+            textDecoration: 'none',
+          }}>
+            {L('Learn more →', 'Ketahui lebih →', '了解更多 →', 'மேலும் அறிக →')}
+          </Link>
         </div>
       </section>
 
