@@ -77,6 +77,13 @@ export async function POST() {
   }).eq('id', user.id)
 
   // Register promo code — ambassador codes only valid for student_pro, month, year
+  const { data: existingCode } = await admin
+  .from('promo_codes')
+  .select('code')
+  .eq('code', promoCode)
+  .maybeSingle()
+
+if (!existingCode) {
   await admin.from('promo_codes').insert({
     code: promoCode,
     plan: 'student_pro',
@@ -84,7 +91,8 @@ export async function POST() {
     max_uses: 9999,
     applicable_plans: ['student_pro', 'month', 'year'],
     active: true,
-  }).onConflict('code').ignore()
+  })
+}
 
   console.log(`[ambassador/register] user=${user.id} code=${promoCode}`)
   return NextResponse.json({ promo_code: promoCode })
