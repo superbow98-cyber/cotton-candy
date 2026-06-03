@@ -18,14 +18,14 @@ export async function POST() {
   const now = new Date().toISOString()
   const { data: profile } = await admin
     .from('profiles')
-    .select('plan, boost_expires_at, full_name, ambassador_promo_code')
+    .select('plan, plan_expires_at, full_name, ambassador_promo_code')
     .eq('id', user.id)
     .maybeSingle()
   const eligiblePlans = ['student_pro', 'month', 'year']
   const hasActivePlan =
     eligiblePlans.includes(profile?.plan) &&
-    profile?.boost_expires_at &&
-    profile.boost_expires_at > now
+    profile?.plan_expires_at &&
+    profile.plan_expires_at > now
   if (!hasActivePlan) {
     return NextResponse.json({ error: 'active_plan_required' }, { status: 403 })
   }
