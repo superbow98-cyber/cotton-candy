@@ -1,7 +1,9 @@
 'use client'
 // src/app/dashboard/ambassador/page.tsx
+// PATCH: Added Share Kit stat card + promo card canvas generator + tutorial steps
+// Changes marked with // ← NEW
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
@@ -65,6 +67,10 @@ const AMBASSADOR_STYLES = `
 @keyframes amb-pulse {
   0%,100% { box-shadow:0 0 0 0 rgba(220,60,60,0); }
   50%      { box-shadow:0 0 0 4px rgba(220,60,60,0.18); }
+}
+@keyframes amb-shimmerSlide {
+  0%   { transform:translateX(-100%); }
+  100% { transform:translateX(200%); }
 }
 
 .amb-card { animation: amb-fadeSlideUp 0.55s cubic-bezier(0.22,1,0.36,1) both; }
@@ -148,7 +154,142 @@ const AMBASSADOR_STYLES = `
   font-family:-apple-system,'Helvetica Neue',sans-serif; transition:color 0.2s;
 }
 .amb-plans-link:hover { color:rgba(255,255,255,0.7); }
+
+/* ← NEW: Share kit styles */
+.amb-sharekit-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:9px 16px; border-radius:9px;
+  font-size:13px; font-weight:500; cursor:pointer;
+  border:none; transition: all 0.18s ease;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+}
+.amb-sharekit-btn:hover { transform:translateY(-1px); }
+.amb-sharekit-btn:active { transform:scale(0.97); }
+
+.amb-step-row {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:10px 0;
+  border-bottom:0.5px solid rgba(0,0,0,0.05);
+  animation: amb-fadeSlideUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+.amb-step-row:last-child { border-bottom:none; }
+
+.amb-canvas-shimmer {
+  position:relative; overflow:hidden;
+}
+.amb-canvas-shimmer::after {
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%);
+  transform:translateX(-100%);
+  animation: amb-shimmerSlide 2s ease-in-out infinite;
+}
 `
+
+// ← NEW: Generate promo card using HTML Canvas
+function generatePromoCard(promoCode: string): Promise<string> {
+  return new Promise((resolve) => {
+    const W = 1080
+    const H = 1080
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')!
+
+    // Background gradient — pink to purple to blue (matches CottonCandy brand)
+    const bg = ctx.createLinearGradient(0, 0, W, H)
+    bg.addColorStop(0, '#FF6B9D')
+    bg.addColorStop(0.5, '#C471F5')
+    bg.addColorStop(1, '#5A8FF5')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, W, H)
+
+    // Soft overlay circles for depth
+    ctx.globalAlpha = 0.18
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(180, 180, 320, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(900, 860, 260, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+
+    // Dark overlay for text legibility
+    const overlay = ctx.createLinearGradient(0, H * 0.3, 0, H)
+    overlay.addColorStop(0, 'rgba(0,0,0,0)')
+    overlay.addColorStop(1, 'rgba(0,0,0,0.55)')
+    ctx.fillStyle = overlay
+    ctx.fillRect(0, 0, W, H)
+
+    // App name — top left
+    ctx.font = '600 38px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillText('Cotton Candy 🍭', 72, 90)
+
+    // Tagline
+    ctx.font = '300 26px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.65)'
+    ctx.fillText('AI-powered lecture notes', 72, 134)
+
+    // Main headline
+    ctx.font = '700 72px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText('Get 50% OFF', 72, 420)
+
+    // Sub headline
+    ctx.font = '400 36px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillText('on any paid plan. Record lectures,', 72, 488)
+    ctx.fillText('get AI notes instantly.', 72, 534)
+
+    // Promo code pill background
+    const pillX = 72
+    const pillY = 620
+    const pillW = 420
+    const pillH = 100
+    const pillR = 20
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(pillX + pillR, pillY)
+    ctx.lineTo(pillX + pillW - pillR, pillY)
+    ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR, pillR)
+    ctx.lineTo(pillX + pillW, pillY + pillH - pillR)
+    ctx.arcTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH, pillR)
+    ctx.lineTo(pillX + pillR, pillY + pillH)
+    ctx.arcTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR, pillR)
+    ctx.lineTo(pillX, pillY + pillR)
+    ctx.arcTo(pillX, pillY, pillX + pillR, pillY, pillR)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // Promo code label
+    ctx.font = '500 22px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.fillText('USE CODE', pillX + 28, pillY + 38)
+
+    // Promo code value
+    ctx.font = '800 44px -apple-system, Helvetica, monospace'
+    ctx.fillStyle = '#ffffff'
+    ctx.letterSpacing = '4px'
+    ctx.fillText(promoCode, pillX + 28, pillY + 78)
+
+    // CTA
+    ctx.font = '500 28px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'
+    ctx.fillText('cottoncandy-s.com', 72, 820)
+
+    // Bottom tagline
+    ctx.font = '300 22px -apple-system, Helvetica, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'
+    ctx.fillText('Record · Transcribe · Summarize · Export PDF', 72, 1010)
+
+    resolve(canvas.toDataURL('image/png'))
+  })
+}
 
 export default function AmbassadorDashboard() {
   const { lang } = useLang()
@@ -159,15 +300,17 @@ export default function AmbassadorDashboard() {
   const [loading, setLoading] = useState(true)
   const [registering, setRegistering] = useState(false)
   const [copied, setCopied] = useState(false)
-  // registration UI state
   const [btnError, setBtnError] = useState(false)
   const [showErrBanner, setShowErrBanner] = useState(false)
   const [showPlansLink, setShowPlansLink] = useState(false)
-  const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // ← NEW: Share kit state
+  const [promoCardUrl, setPromoCardUrl] = useState<string | null>(null)
+  const [generatingCard, setGeneratingCard] = useState(false)
+  const [shareKitOpen, setShareKitOpen] = useState(false)
 
+  const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bm = lang === 'bm'
 
-  // inject styles once
   useEffect(() => {
     const id = 'amb-reg-styles'
     if (!document.getElementById(id)) {
@@ -181,9 +324,7 @@ export default function AmbassadorDashboard() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
@@ -235,19 +376,15 @@ export default function AmbassadorDashboard() {
 
   async function registerAsAmbassador() {
     if (!data?.has_active_plan) {
-      // shake + error banner animation
       setBtnError(false)
       setShowErrBanner(false)
       setShowPlansLink(false)
-      // force re-trigger animation
       requestAnimationFrame(() => {
         setBtnError(true)
         setShowErrBanner(true)
         setShowPlansLink(true)
         if (errTimerRef.current) clearTimeout(errTimerRef.current)
-        errTimerRef.current = setTimeout(() => {
-          setBtnError(false)
-        }, 2200)
+        errTimerRef.current = setTimeout(() => setBtnError(false), 2200)
       })
       return
     }
@@ -267,6 +404,26 @@ export default function AmbassadorDashboard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // ← NEW: Generate + download promo card
+  async function handleGenerateCard() {
+    if (!data?.promo_code) return
+    setGeneratingCard(true)
+    try {
+      const url = await generatePromoCard(data.promo_code)
+      setPromoCardUrl(url)
+    } finally {
+      setGeneratingCard(false)
+    }
+  }
+
+  function downloadCard() {
+    if (!promoCardUrl || !data?.promo_code) return
+    const a = document.createElement('a')
+    a.href = promoCardUrl
+    a.download = `cottoncandy-${data.promo_code.toLowerCase()}.png`
+    a.click()
+  }
+
   const macbookProgress = Math.min((data?.user_count || 0) / MACBOOK_TARGET * 100, 100)
   const myRank = leaderboard.findIndex(e => e.promo_code === data?.promo_code) + 1
 
@@ -282,7 +439,6 @@ export default function AmbassadorDashboard() {
   // ─── REGISTRATION CARD ────────────────────────────────────────────────────
   if (!data?.is_ambassador) {
     const hasPlan = !!data?.has_active_plan
-
     const btnClass = [
       'amb-cta-btn',
       btnError ? 'amb-btn-error' : '',
@@ -297,149 +453,69 @@ export default function AmbassadorDashboard() {
 
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
-        <div
-          className="amb-card"
-          style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', textAlign: 'center' }}
-        >
-          {/* Background */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: "#111 url('/ambassador-reg-bg.jpg') center top / cover no-repeat",
-            zIndex: 0,
-          }} />
-          {/* Dark overlay */}
+        <div className="amb-card" style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', textAlign: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: "#111 url('/ambassador-reg-bg.jpg') center top / cover no-repeat", zIndex: 0 }} />
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.58)', zIndex: 1 }} />
-
-          {/* Content */}
           <div style={{ position: 'relative', zIndex: 2, padding: '44px 36px 36px' }}>
-
-            {/* Eyebrow */}
-            <p style={{
-              margin: '0 0 10px', fontSize: 11, fontWeight: 500,
-              letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: '#E8873A',
-              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
-            }}>
+            <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#E8873A', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
               {bm ? 'Program Ambassador Kampus' : 'Campus ambassador program'}
             </p>
-
-            {/* Heading */}
-            <h2 style={{
-              margin: '0 0 12px', fontSize: 28, fontWeight: 600,
-              letterSpacing: '-0.025em', lineHeight: 1.15, color: '#fff',
-              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
-            }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 28, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1.15, color: '#fff', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
               {bm ? <>Jadi Ambassador<br />CottonCandy</> : <>Become a CottonCandy<br />ambassador</>}
             </h2>
-
-            {/* Subtitle */}
-            <p style={{
-              margin: '0 auto 32px', maxWidth: 380,
-              fontSize: 14, fontWeight: 300,
-              color: 'rgba(255,255,255,0.65)', lineHeight: 1.65,
-              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
-            }}>
+            <p style={{ margin: '0 auto 32px', maxWidth: 380, fontSize: 14, fontWeight: 300, color: 'rgba(255,255,255,0.65)', lineHeight: 1.65, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
               {bm
                 ? 'Kongsi kod promo unik kau. Dapat komisen 1% setiap kali kawan kau subscribe. Menang leaderboard + 200 users = MacBook.'
                 : 'Share your unique promo code. Earn 1% commission every time someone subscribes. Top leaderboard at 200 users wins a MacBook.'}
             </p>
-
-            {/* Perks grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 24 }}>
-
               <div className="amb-perk-card">
                 <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 14l2 2 4-4" /><path d="M3 6h18M3 12h18M3 18h18" />
-                    <path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3z" />
-                  </svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14l2 2 4-4" /><path d="M3 6h18M3 12h18M3 18h18" /><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3z" /></svg>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>50% off</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm ? 'untuk setiap kawan' : 'for every friend'}
-                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'untuk setiap kawan' : 'for every friend'}</div>
               </div>
-
               <div className="amb-perk-card">
                 <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" /><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v1m0 8v1" />
-                  </svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v1m0 8v1" /></svg>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm ? 'Komisen 1%' : '1% commission'}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm ? 'setiap sale' : 'per sale'}
-                </div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'Komisen 1%' : '1% commission'}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'setiap sale' : 'per sale'}</div>
               </div>
-
               <div className="amb-perk-card">
                 <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="14" rx="2" /><path d="M8 20h8M12 18v2" />
-                  </svg>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="14" rx="2" /><path d="M8 20h8M12 18v2" /></svg>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>MacBook</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>#1 + 200 users</div>
               </div>
-
             </div>
-
-            {/* Eligibility notice */}
             <div className="amb-elig-row">
-              <svg
-                width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke={hasPlan ? 'rgba(100,220,130,0.85)' : 'rgba(255,200,80,0.85)'}
-                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              >
-                {hasPlan ? (
-                  <><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></>
-                ) : (
-                  <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
-                )}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hasPlan ? 'rgba(100,220,130,0.85)' : 'rgba(255,200,80,0.85)'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {hasPlan ? (<><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></>) : (<><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>)}
               </svg>
-              <p style={{
-                margin: 0, fontSize: 12.5, color: 'rgba(255,255,255,0.45)',
-                lineHeight: 1.5, fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
-              }}>
+              <p style={{ margin: 0, fontSize: 12.5, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
                 {hasPlan
                   ? (bm ? 'Plan aktif — kau layak daftar sebagai ambassador.' : 'Active plan detected — you are eligible to register.')
                   : (bm ? 'Perlu plan aktif (Student PRO / Monthly / Yearly) untuk jadi ambassador.' : 'Requires an active plan — Student PRO, Monthly, or Yearly — to register.')}
               </p>
             </div>
-
-            {/* CTA + error */}
             <div className="amb-cta-wrap">
-              <button
-                className={btnClass}
-                onClick={registerAsAmbassador}
-                disabled={registering}
-              >
-                {btnLabel}
-              </button>
-
+              <button className={btnClass} onClick={registerAsAmbassador} disabled={registering}>{btnLabel}</button>
               <div className={`amb-error-banner${showErrBanner ? ' amb-show' : ''}`}>
-                <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'rgba(255,160,160,0.95)', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm ? 'Plan aktif diperlukan' : 'Active plan required'}
-                </p>
+                <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'rgba(255,160,160,0.95)', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'Plan aktif diperlukan' : 'Active plan required'}</p>
                 <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm
-                    ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses.'
-                    : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access.'}
+                  {bm ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses.' : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access.'}
                 </p>
               </div>
-
               {showPlansLink && (
                 <a href="/pricing" className="amb-plans-link">
                   {bm ? 'Lihat plan' : 'View plans'}
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                 </a>
               )}
             </div>
-
           </div>
         </div>
       </div>
@@ -447,6 +523,23 @@ export default function AmbassadorDashboard() {
   }
 
   // ─── AMBASSADOR DASHBOARD (already registered) ────────────────────────────
+  // ← NEW: Tutorial steps data
+  const tutorialSteps = bm ? [
+    { num: '01', title: 'Daftar akaun', desc: 'Pergi cottoncandy-s.com → klik "Mula percuma" → daftar dengan email atau Google.' },
+    { num: '02', title: 'Pilih plan', desc: `Upgrade ke mana-mana plan berbayar. Guna kod ${data.promo_code} untuk 50% off semasa checkout.` },
+    { num: '03', title: 'Buka kuliah baru', desc: 'Dashboard → "Rakam kuliah" → bagi nama kuliah → pilih AI (Gemini/GPT/Claude) → tekan rekod.' },
+    { num: '04', title: 'Rakam & berhenti', desc: 'Bercakap je — live transcript akan keluar. Selesai → tekan "Habiskan kuliah".' },
+    { num: '05', title: 'Nota AI siap', desc: 'Dalam beberapa saat — topik, key points, formula, ringkasan auto-disusun oleh AI.' },
+    { num: '06', title: 'Export PDF', desc: 'Klik "Export PDF" dalam lecture view → pilih tema warna → download atau share terus.' },
+  ] : [
+    { num: '01', title: 'Create an account', desc: 'Go to cottoncandy-s.com → click "Start free" → sign up with email or Google.' },
+    { num: '02', title: 'Pick a plan', desc: `Upgrade to any paid plan. Use code ${data.promo_code} for 50% off at checkout.` },
+    { num: '03', title: 'Start a new lecture', desc: 'Dashboard → "Record lecture" → name your lecture → pick an AI (Gemini/GPT/Claude) → hit record.' },
+    { num: '04', title: 'Record & finish', desc: 'Just speak — live transcript appears in real time. Done → tap "Finish lecture".' },
+    { num: '05', title: 'AI notes ready', desc: 'Within seconds — topics, key points, formulas, summary auto-organized by AI.' },
+    { num: '06', title: 'Export as PDF', desc: 'Click "Export PDF" inside the lecture view → choose a color theme → download or share instantly.' },
+  ]
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
@@ -458,11 +551,8 @@ export default function AmbassadorDashboard() {
         </div>
       </div>
 
-      <div style={{
-        background: '#fff', border: `1.5px solid ${s.border}`,
-        borderRadius: 14, padding: '20px 20px', marginBottom: 14,
-        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-      }}>
+      {/* Promo code card */}
+      <div style={{ background: '#fff', border: `1.5px solid ${s.border}`, borderRadius: 14, padding: '20px 20px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
             {bm ? 'Kod promosi kau' : 'Your promo code'}
@@ -474,17 +564,7 @@ export default function AmbassadorDashboard() {
             {bm ? 'Bagi kod ni — kawan dapat 50% off' : 'Share this — friends get 50% off'}
           </div>
         </div>
-        <button
-          onClick={copyCode}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '10px 18px', borderRadius: 9,
-            background: copied ? '#e6f4eb' : s.soft,
-            border: `0.5px solid ${copied ? '#7AB883' : s.border}`,
-            color: copied ? '#2d6a40' : '#1d1d1f',
-            fontSize: 13, fontWeight: 500, cursor: 'pointer',
-          }}
-        >
+        <button onClick={copyCode} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, background: copied ? '#e6f4eb' : s.soft, border: `0.5px solid ${copied ? '#7AB883' : s.border}`, color: copied ? '#2d6a40' : '#1d1d1f', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
           {copied ? '✓' : (
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -494,12 +574,175 @@ export default function AmbassadorDashboard() {
         </button>
       </div>
 
+      {/* ← NEW: Stats grid — 4 cards now */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
         <StatCard label={bm ? 'Pengguna bulan ini' : 'Users this month'} value={data.user_count} sub={`/ ${MACBOOK_TARGET} ${bm ? 'untuk MacBook' : 'for MacBook'}`} />
         <StatCard label={bm ? 'Jumlah komisen' : 'Total commission'} value={`RM ${data.commission_total.toFixed(2)}`} sub={bm ? 'terkumpul' : 'earned'} />
         <StatCard label={bm ? 'Ranking bulan ini' : 'This month rank'} value={myRank > 0 ? `#${myRank}` : '—'} sub={bm ? 'dalam leaderboard' : 'on leaderboard'} />
+
+        {/* ← NEW: Share Kit card */}
+        <div
+          onClick={() => setShareKitOpen(o => !o)}
+          style={{
+            background: shareKitOpen
+              ? 'linear-gradient(135deg, #fff5f8, #f5f0ff)'
+              : '#fff',
+            border: `0.5px solid ${shareKitOpen ? 'rgba(196,113,245,0.3)' : 'rgba(0,0,0,0.06)'}`,
+            borderRadius: 12, padding: '14px 16px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <div style={{ fontSize: 11.5, fontWeight: 500, color: 'rgba(29,29,31,0.55)', marginBottom: 6 }}>
+            {bm ? 'Alat Kongsi' : 'Share Kit'}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#1d1d1f', letterSpacing: '-0.025em', lineHeight: 1 }}>
+            {shareKitOpen ? '▲' : '▼'}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginTop: 4 }}>
+            {shareKitOpen
+              ? (bm ? 'Tutup' : 'Close')
+              : (bm ? 'Promo card + tutorial' : 'Promo card + tutorial')}
+          </div>
+        </div>
       </div>
 
+      {/* ← NEW: Share Kit expanded panel */}
+      {shareKitOpen && (
+        <div style={{
+          background: '#fff',
+          border: '0.5px solid rgba(0,0,0,0.07)',
+          borderRadius: 14,
+          padding: '24px 24px',
+          marginBottom: 14,
+          animation: 'amb-fadeSlideUp 0.35s cubic-bezier(0.22,1,0.36,1) both',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 20 }}>
+            🎨 {bm ? 'Alat Kongsi' : 'Share Kit'}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+            {/* LEFT: Promo card generator */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
+                📸 {bm ? 'Promo Card kau' : 'Your Promo Card'}
+              </div>
+              <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 14, lineHeight: 1.5 }}>
+                {bm
+                  ? `Auto-generate gambar 1080×1080 dengan kod ${data.promo_code} kau. Share terus ke Instagram, WhatsApp, TikTok.`
+                  : `Auto-generates a 1080×1080 image with your ${data.promo_code} code. Share directly to Instagram, WhatsApp, TikTok.`}
+              </div>
+
+              {/* Preview or placeholder */}
+              {promoCardUrl ? (
+                <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', marginBottom: 12, aspectRatio: '1/1' }}>
+                  <img src={promoCardUrl} alt="Promo card" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </div>
+              ) : (
+                <div style={{
+                  aspectRatio: '1/1',
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(255,107,157,0.12), rgba(196,113,245,0.12), rgba(90,143,245,0.12))',
+                  border: '1px dashed rgba(196,113,245,0.3)',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  gap: 8, marginBottom: 12,
+                  color: 'rgba(29,29,31,0.35)',
+                  fontSize: 12,
+                }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                  {bm ? 'Preview akan muncul di sini' : 'Preview appears here'}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="amb-sharekit-btn"
+                  onClick={handleGenerateCard}
+                  disabled={generatingCard}
+                  style={{
+                    background: generatingCard ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #FF6B9D, #C471F5)',
+                    color: generatingCard ? 'rgba(29,29,31,0.4)' : '#fff',
+                    flex: 1,
+                  }}
+                >
+                  {generatingCard ? (
+                    <><span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />{bm ? 'Menjana…' : 'Generating…'}</>
+                  ) : (
+                    <>{promoCardUrl ? (bm ? '↺ Jana semula' : '↺ Regenerate') : (bm ? '✦ Jana kad promo' : '✦ Generate promo card')}</>
+                  )}
+                </button>
+                {promoCardUrl && (
+                  <button
+                    className="amb-sharekit-btn"
+                    onClick={downloadCard}
+                    style={{ background: '#f0f0f2', color: '#1d1d1f' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    {bm ? 'Download PNG' : 'Download PNG'}
+                  </button>
+                )}
+              </div>
+
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            </div>
+
+            {/* RIGHT: Tutorial steps */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
+                📋 {bm ? 'Cara guna Cotton Candy' : 'How to use Cotton Candy'}
+              </div>
+              <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 14, lineHeight: 1.5 }}>
+                {bm
+                  ? 'Share steps ni kepada kawan-kawan supaya mereka tahu cara guna app ni.'
+                  : 'Share these steps with friends so they know exactly how to use the app.'}
+              </div>
+
+              <div>
+                {tutorialSteps.map((step, i) => (
+                  <div
+                    key={step.num}
+                    className="amb-step-row"
+                    style={{ animationDelay: `${i * 0.06}s` }}
+                  >
+                    <div style={{
+                      flexShrink: 0,
+                      width: 28, height: 28,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, rgba(255,107,157,0.15), rgba(196,113,245,0.15))',
+                      border: '0.5px solid rgba(196,113,245,0.25)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 700,
+                      color: '#C471F5',
+                      letterSpacing: '0.02em',
+                    }}>
+                      {step.num}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 2, letterSpacing: '-0.01em' }}>
+                        {step.title}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', lineHeight: 1.55 }}>
+                        {step.desc}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MacBook progress */}
       <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)', borderRadius: 14, padding: '18px 20px', marginBottom: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -510,14 +753,7 @@ export default function AmbassadorDashboard() {
           </div>
         </div>
         <div style={{ height: 10, background: '#f0f0f0', borderRadius: 99, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 99,
-            width: `${macbookProgress}%`,
-            background: macbookProgress >= 100
-              ? 'linear-gradient(90deg, #7AB883, #4E9964)'
-              : `linear-gradient(90deg, ${s.primary}, ${s.primaryDark})`,
-            transition: 'width 0.6s ease',
-          }} />
+          <div style={{ height: '100%', borderRadius: 99, width: `${macbookProgress}%`, background: macbookProgress >= 100 ? 'linear-gradient(90deg, #7AB883, #4E9964)' : `linear-gradient(90deg, ${s.primary}, ${s.primaryDark})`, transition: 'width 0.6s ease' }} />
         </div>
         <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.45)', marginTop: 8 }}>
           {data.user_count >= MACBOOK_TARGET
@@ -528,26 +764,18 @@ export default function AmbassadorDashboard() {
         </div>
       </div>
 
+      {/* Leaderboard + Commissions */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)', borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14 }}>
             🏆 {bm ? 'Leaderboard bulan ini' : "This month's leaderboard"}
           </div>
           {leaderboard.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'rgba(29,29,31,0.4)', padding: '12px 0' }}>
-              {bm ? 'Belum ada data.' : 'No data yet.'}
-            </div>
+            <div style={{ fontSize: 13, color: 'rgba(29,29,31,0.4)', padding: '12px 0' }}>{bm ? 'Belum ada data.' : 'No data yet.'}</div>
           ) : leaderboard.map((entry, i) => {
             const isMe = entry.promo_code === data.promo_code
             return (
-              <div key={entry.user_id} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)',
-                background: isMe ? s.soft : 'transparent',
-                borderRadius: isMe ? 8 : 0,
-                padding: isMe ? '9px 8px' : '9px 0',
-                margin: isMe ? '2px -8px' : 0,
-              }}>
+              <div key={entry.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)', background: isMe ? s.soft : 'transparent', borderRadius: isMe ? 8 : 0, padding: isMe ? '9px 8px' : '9px 0', margin: isMe ? '2px -8px' : 0 }}>
                 <div style={{ width: 22, textAlign: 'center', fontSize: i === 0 ? 16 : 12, fontWeight: 700, color: i === 0 ? '#E5B947' : i === 1 ? '#9E9E9E' : i === 2 ? '#CD7F32' : 'rgba(29,29,31,0.4)' }}>
                   {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
                 </div>
@@ -572,9 +800,7 @@ export default function AmbassadorDashboard() {
             💰 {bm ? 'Komisen terkini' : 'Recent commissions'}
           </div>
           {commissions.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'rgba(29,29,31,0.4)', padding: '12px 0' }}>
-              {bm ? 'Belum ada komisen. Kongsi kod kau!' : 'No commissions yet. Share your code!'}
-            </div>
+            <div style={{ fontSize: 13, color: 'rgba(29,29,31,0.4)', padding: '12px 0' }}>{bm ? 'Belum ada komisen. Kongsi kod kau!' : 'No commissions yet. Share your code!'}</div>
           ) : commissions.map((c, i) => (
             <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)' }}>
               <div>
