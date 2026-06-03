@@ -525,37 +525,43 @@ export default function Home() {
 
       {/* AMBASSADOR */}
       <section style={{
-        padding: '80px 20px',
+        position: 'relative',
+        padding: '100px 20px',
         textAlign: 'center',
-        background: '#fff',
+        overflow: 'hidden',
         borderTop: '0.5px solid rgba(0,0,0,0.06)',
       }}>
-        <div style={{ maxWidth: 680, margin: '0 auto' }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: '#D4537E', marginBottom: 10 }}>
+        {/* Background image — full, no crop */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'url(/ambassador-bg.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+        }} />
+        {/* Dark overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(0,0,0,0.50)',
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,180,200,0.9)', marginBottom: 10 }}>
             {L('Campus Ambassador Program', 'Program Ambassador Kampus', '校园大使计划', 'கேம்பஸ் அம்பாசிடர் திட்டம்')}
           </div>
           <h2 style={{
-            fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 600,
-            lineHeight: 1.08, letterSpacing: '-0.03em',
-            color: '#1d1d1f', margin: '0 0 14px',
-          }}>
-            {L('Jadi Ambassador.', 'Jadi Ambassador.', '成为大使。', 'அம்பாசிடராகுங்கள்.')}
-            <br />
-            {L('Menang MacBook.', 'Menang MacBook.', '赢得 MacBook。', 'MacBook வெல்லுங்கள்.')}
-          </h2>
-          <p style={{
-            fontSize: 'clamp(15px, 2vw, 18px)', fontWeight: 400,
-            color: 'rgba(29,29,31,0.65)',
-            maxWidth: 520, margin: '0 auto 14px',
-            lineHeight: 1.5, letterSpacing: '-0.01em',
+            fontSize: 'clamp(28px, 5vw, 52px)', fontWeight: 700,
+            lineHeight: 1.05, letterSpacing: '-0.03em',
+            color: '#fff', margin: '0 0 20px',
+            textTransform: 'uppercase',
           }}>
             {L(
-              'Get a promo code to give friends 50% off. Earn 1% commission on every payment. Top ambassador each month wins a MacBook Neo.',
-              'Dapat promo code untuk bagi kawan 50% off. Jana komisen 1% setiap payment. Ambassador terbaik setiap bulan menang MacBook Neo.',
-              '获取优惠码为朋友提供 50% 折扣。每笔付款赚取 1% 佣金。每月最佳大使赢得 MacBook Neo。',
-              'நண்பர்களுக்கு 50% தள்ளுபடி கோடு பெறுங்கள். ஒவ்வொரு கட்டணத்திலும் 1% கமிஷன். மாதாந்திர சிறந்த அம்பாசிடர் MacBook Neo வெல்வார்.'
+              'GET INCOME AND WIN MACBOOK NEO EVERY MONTH',
+              'DAPAT PENDAPATAN & MENANG MACBOOK NEO SETIAP BULAN',
+              '赚取收入，每月赢得 MacBook Neo',
+              'வருமானம் பெற்று ஒவ்வொரு மாதமும் MacBook Neo வெல்லுங்கள்'
             )}
-          </p>
+          </h2>
           <div style={{
             display: 'flex', justifyContent: 'center', gap: 8,
             flexWrap: 'wrap', marginBottom: 32,
@@ -568,10 +574,11 @@ export default function Home() {
               <span key={i} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '7px 14px',
-                background: 'rgba(212,83,126,0.07)',
-                border: '0.5px solid rgba(212,83,126,0.2)',
+                background: 'rgba(255,255,255,0.15)',
+                border: '0.5px solid rgba(255,255,255,0.35)',
                 borderRadius: 100,
-                fontSize: 13, fontWeight: 500, color: '#D4537E',
+                fontSize: 13, fontWeight: 500, color: '#fff',
+                backdropFilter: 'blur(8px)',
               }}>
                 {L(pill.en, pill.bm, pill.zh, pill.ta)}
               </span>
@@ -580,15 +587,15 @@ export default function Home() {
           <Link href="/ambassador" style={{
             display: 'inline-block',
             padding: '13px 28px', borderRadius: 100,
-            background: '#1d1d1f', color: '#fff',
-            fontSize: 14, fontWeight: 500, letterSpacing: '-0.05em',
+            background: '#fff', color: '#1d1d1f',
+            fontSize: 14, fontWeight: 600, letterSpacing: '-0.05em',
             textDecoration: 'none',
           }}>
             {L('Learn more →', 'Ketahui lebih →', '了解更多 →', 'மேலும் அறிக →')}
           </Link>
         </div>
       </section>
-
+      
       {/* PRICING */}
       <section id="pricing" style={{ padding: '72px 20px 50px', background: '#fafafa' }}>
         <div style={{ maxWidth: 1060, margin: '0 auto' }}>
