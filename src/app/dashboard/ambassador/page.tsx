@@ -1,7 +1,7 @@
 'use client'
 // src/app/dashboard/ambassador/page.tsx
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/i18n/LangProvider'
 import { useTheme } from '@/lib/theme/ThemeProvider'
@@ -31,6 +31,125 @@ interface AmbassadorData {
 
 const MACBOOK_TARGET = 200
 
+// ─── CSS keyframes injected once ─────────────────────────────────────────────
+const AMBASSADOR_STYLES = `
+@keyframes amb-fadeSlideUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes amb-perkIn {
+  from { opacity:0; transform:translateY(8px) scale(0.97); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes amb-btnShimmer {
+  0%   { background-position:-200% center; }
+  100% { background-position:200% center; }
+}
+@keyframes amb-perkShimmer {
+  0%   { transform:translateX(-100%) skewX(-12deg); }
+  100% { transform:translateX(300%) skewX(-12deg); }
+}
+@keyframes amb-shake {
+  0%,100% { transform:translateX(0); }
+  15%  { transform:translateX(-6px); }
+  30%  { transform:translateX(6px); }
+  45%  { transform:translateX(-4px); }
+  60%  { transform:translateX(4px); }
+  75%  { transform:translateX(-2px); }
+  90%  { transform:translateX(2px); }
+}
+@keyframes amb-errorIn {
+  from { opacity:0; transform:translateY(-6px) scale(0.97); max-height:0; }
+  to   { opacity:1; transform:translateY(0) scale(1); max-height:120px; }
+}
+@keyframes amb-pulse {
+  0%,100% { box-shadow:0 0 0 0 rgba(220,60,60,0); }
+  50%      { box-shadow:0 0 0 4px rgba(220,60,60,0.18); }
+}
+
+.amb-card { animation: amb-fadeSlideUp 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+
+.amb-perk-card {
+  background:rgba(235,235,235,0.18);
+  border:0.5px solid rgba(255,255,255,0.28);
+  border-radius:12px; padding:16px 10px;
+  opacity:0;
+  animation: amb-perkIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  position:relative; overflow:hidden;
+}
+.amb-perk-card::after {
+  content:'';
+  position:absolute; top:0; left:0;
+  width:40%; height:100%;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  transform:translateX(-100%) skewX(-12deg);
+}
+.amb-perk-card:hover::after { animation: amb-perkShimmer 0.65s cubic-bezier(0.22,1,0.36,1) forwards; }
+.amb-perk-card:hover { background:rgba(245,245,245,0.26); border-color:rgba(255,255,255,0.42); transform:translateY(-2px); }
+.amb-perk-card:nth-child(1) { animation-delay:0.15s; }
+.amb-perk-card:nth-child(2) { animation-delay:0.25s; }
+.amb-perk-card:nth-child(3) { animation-delay:0.35s; }
+
+.amb-elig-row {
+  display:flex; align-items:center; gap:7px;
+  margin-bottom:16px; justify-content:center;
+  animation: amb-fadeSlideUp 0.5s 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+.amb-cta-wrap {
+  animation: amb-fadeSlideUp 0.5s 0.5s cubic-bezier(0.22,1,0.36,1) both;
+  display:flex; flex-direction:column; align-items:center;
+  width:100%;
+}
+
+.amb-cta-btn {
+  display:inline-block; width:100%;
+  padding:13px 32px; border-radius:12px;
+  font-size:15px; font-weight:700; letter-spacing:-0.02em;
+  border:none; cursor:pointer;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  position:relative; overflow:hidden;
+  transition: transform 0.15s cubic-bezier(0.22,1,0.36,1), opacity 0.15s, background 0.3s, color 0.3s;
+  background:#fff; color:#1d1d1f; white-space:nowrap;
+}
+.amb-cta-btn::after {
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.55) 50%, transparent 60%);
+  background-size:200% 100%; background-position:200% center;
+}
+.amb-cta-btn:hover::after  { animation: amb-btnShimmer 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+.amb-cta-btn:hover  { transform:scale(1.012); }
+.amb-cta-btn:active { transform:scale(0.985); opacity:0.85; }
+.amb-cta-btn.amb-btn-disabled {
+  background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.25); cursor:not-allowed;
+}
+.amb-cta-btn.amb-btn-disabled::after { display:none; }
+.amb-cta-btn.amb-btn-error {
+  background:rgba(210,50,50,0.9); color:#fff;
+  animation: amb-shake 0.45s cubic-bezier(0.22,1,0.36,1), amb-pulse 0.6s 0.45s ease-out;
+}
+.amb-cta-btn.amb-btn-error::after { display:none; }
+.amb-cta-btn.amb-btn-loading { opacity:0.6; cursor:not-allowed; pointer-events:none; }
+
+.amb-error-banner {
+  display:none; width:100%;
+  background:rgba(180,30,30,0.18);
+  border:0.5px solid rgba(220,80,80,0.45);
+  border-radius:10px; padding:12px 14px; margin-top:10px; overflow:hidden;
+  text-align:left;
+}
+.amb-error-banner.amb-show { display:block; animation: amb-errorIn 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+
+.amb-plans-link {
+  display:inline-flex; align-items:center; gap:4px; margin-top:14px;
+  font-size:13px; color:rgba(255,255,255,0.4); text-decoration:none;
+  font-family:-apple-system,'Helvetica Neue',sans-serif; transition:color 0.2s;
+}
+.amb-plans-link:hover { color:rgba(255,255,255,0.7); }
+`
+
 export default function AmbassadorDashboard() {
   const { lang } = useLang()
   const { tokens: s } = useTheme()
@@ -40,9 +159,27 @@ export default function AmbassadorDashboard() {
   const [loading, setLoading] = useState(true)
   const [registering, setRegistering] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [planError, setPlanError] = useState(false)
+  // registration UI state
+  const [btnError, setBtnError] = useState(false)
+  const [showErrBanner, setShowErrBanner] = useState(false)
+  const [showPlansLink, setShowPlansLink] = useState(false)
+  const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const bm = lang === 'bm'
+
+  // inject styles once
+  useEffect(() => {
+    const id = 'amb-reg-styles'
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style')
+      el.id = id
+      el.textContent = AMBASSADOR_STYLES
+      document.head.appendChild(el)
+    }
+    return () => {
+      if (errTimerRef.current) clearTimeout(errTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     load()
@@ -97,14 +234,26 @@ export default function AmbassadorDashboard() {
   }
 
   async function registerAsAmbassador() {
-    setPlanError(false)
+    if (!data?.has_active_plan) {
+      // shake + error banner animation
+      setBtnError(false)
+      setShowErrBanner(false)
+      setShowPlansLink(false)
+      // force re-trigger animation
+      requestAnimationFrame(() => {
+        setBtnError(true)
+        setShowErrBanner(true)
+        setShowPlansLink(true)
+        if (errTimerRef.current) clearTimeout(errTimerRef.current)
+        errTimerRef.current = setTimeout(() => {
+          setBtnError(false)
+        }, 2200)
+      })
+      return
+    }
     setRegistering(true)
     try {
       const res = await fetch('/api/ambassador/register', { method: 'POST' })
-      if (res.status === 403) {
-        setPlanError(true)
-        return
-      }
       if (res.ok) await load()
     } finally {
       setRegistering(false)
@@ -130,304 +279,174 @@ export default function AmbassadorDashboard() {
     )
   }
 
-  // ─── DROP-IN REPLACEMENT ───────────────────────────────────────────────────
-  // Replace the entire  if (!data?.is_ambassador) { return ( ... ) }  block
-  // with this. Everything else in the file stays the same.
-  //
-  // SETUP: put the MacBook photo at  public/ambassador-reg-bg.jpg
-  // ───────────────────────────────────────────────────────────────────────────
-
+  // ─── REGISTRATION CARD ────────────────────────────────────────────────────
   if (!data?.is_ambassador) {
+    const hasPlan = !!data?.has_active_plan
+
+    const btnClass = [
+      'amb-cta-btn',
+      btnError ? 'amb-btn-error' : '',
+      registering ? 'amb-btn-loading' : '',
+    ].filter(Boolean).join(' ')
+
+    const btnLabel = registering
+      ? (bm ? 'Mendaftar…' : 'Registering…')
+      : btnError
+        ? (bm ? 'Plan aktif diperlukan' : 'Active plan required')
+        : (bm ? 'Daftar sebagai ambassador' : 'Register as ambassador')
+
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
         <div
-          style={{
-            position: 'relative',
-            borderRadius: 18,
-            overflow: 'hidden',
-            textAlign: 'center',
-          }}
+          className="amb-card"
+          style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', textAlign: 'center' }}
         >
-          {/* Background image */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: "url('/ambassador-reg-bg.jpg')",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center top',
-              zIndex: 0,
-            }}
-          />
-
+          {/* Background */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: "#111 url('/ambassador-reg-bg.jpg') center top / cover no-repeat",
+            zIndex: 0,
+          }} />
           {/* Dark overlay */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(0,0,0,0.58)',
-              zIndex: 1,
-            }}
-          />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.58)', zIndex: 1 }} />
 
           {/* Content */}
-          <div
-            style={{
-              position: 'relative',
-              zIndex: 2,
-              padding: '44px 36px 36px',
-            }}
-          >
+          <div style={{ position: 'relative', zIndex: 2, padding: '44px 36px 36px' }}>
+
             {/* Eyebrow */}
-            <p
-              style={{
-                margin: '0 0 10px',
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.5)',
-                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-              }}
-            >
+            <p style={{
+              margin: '0 0 10px', fontSize: 11, fontWeight: 500,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: '#E8873A',
+              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+            }}>
               {bm ? 'Program Ambassador Kampus' : 'Campus ambassador program'}
             </p>
 
             {/* Heading */}
-            <h2
-              style={{
-                margin: '0 0 12px',
-                fontSize: 28,
-                fontWeight: 600,
-                letterSpacing: '-0.025em',
-                lineHeight: 1.15,
-                color: '#fff',
-                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-              }}
-            >
-              {bm ? (
-                <>Jadi Ambassador<br />CottonCandy</>
-              ) : (
-                <>Become a CottonCandy<br />ambassador</>
-              )}
+            <h2 style={{
+              margin: '0 0 12px', fontSize: 28, fontWeight: 600,
+              letterSpacing: '-0.025em', lineHeight: 1.15, color: '#fff',
+              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+            }}>
+              {bm ? <>Jadi Ambassador<br />CottonCandy</> : <>Become a CottonCandy<br />ambassador</>}
             </h2>
 
             {/* Subtitle */}
-            <p
-              style={{
-                margin: '0 auto 32px',
-                maxWidth: 380,
-                fontSize: 14,
-                fontWeight: 300,
-                color: 'rgba(255,255,255,0.65)',
-                lineHeight: 1.65,
-                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-              }}
-            >
+            <p style={{
+              margin: '0 auto 32px', maxWidth: 380,
+              fontSize: 14, fontWeight: 300,
+              color: 'rgba(255,255,255,0.65)', lineHeight: 1.65,
+              fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+            }}>
               {bm
                 ? 'Kongsi kod promo unik kau. Dapat komisen 1% setiap kali kawan kau subscribe. Menang leaderboard + 200 users = MacBook.'
                 : 'Share your unique promo code. Earn 1% commission every time someone subscribes. Top leaderboard at 200 users wins a MacBook.'}
             </p>
 
             {/* Perks grid */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: 10,
-                marginBottom: 24,
-              }}
-            >
-              {[
-                {
-                  icon: (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 14l2 2 4-4"/><path d="M3 6h18M3 12h18M3 18h18"/>
-                      <path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3z"/>
-                    </svg>
-                  ),
-                  title: '50% off',
-                  sub: bm ? 'untuk setiap kawan' : 'for every friend',
-                },
-                {
-                  icon: (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="9"/><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v1m0 8v1"/>
-                    </svg>
-                  ),
-                  title: bm ? 'Komisen 1%' : '1% commission',
-                  sub: bm ? 'setiap sale' : 'per sale',
-                },
-                {
-                  icon: (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 18v2"/>
-                    </svg>
-                  ),
-                  title: 'MacBook',
-                  sub: '#1 + 200 users',
-                },
-              ].map((p, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '0.5px solid rgba(255,255,255,0.12)',
-                    borderRadius: 12,
-                    padding: '16px 10px',
-                  }}
-                >
-                  <div
-                    style={{
-                      color: 'rgba(255,255,255,0.85)',
-                      marginBottom: 10,
-                      display: 'flex',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {p.icon}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: '#fff',
-                      marginBottom: 3,
-                      fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                    }}
-                  >
-                    {p.title}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: 'rgba(255,255,255,0.45)',
-                      lineHeight: 1.4,
-                      fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                    }}
-                  >
-                    {p.sub}
-                  </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 24 }}>
+
+              <div className="amb-perk-card">
+                <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 14l2 2 4-4" /><path d="M3 6h18M3 12h18M3 18h18" />
+                    <path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3z" />
+                  </svg>
                 </div>
-              ))}
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>50% off</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+                  {bm ? 'untuk setiap kawan' : 'for every friend'}
+                </div>
+              </div>
+
+              <div className="amb-perk-card">
+                <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v1m0 8v1" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+                  {bm ? 'Komisen 1%' : '1% commission'}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+                  {bm ? 'setiap sale' : 'per sale'}
+                </div>
+              </div>
+
+              <div className="amb-perk-card">
+                <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="14" rx="2" /><path d="M8 20h8M12 18v2" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', marginBottom: 3, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>MacBook</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>#1 + 200 users</div>
+              </div>
+
             </div>
 
-            {/* Plan eligibility notice */}
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.07)',
-                border: `0.5px solid ${data?.has_active_plan ? 'rgba(100,200,120,0.4)' : 'rgba(255,200,80,0.35)'}`,
-                borderRadius: 10,
-                padding: '11px 14px',
-                marginBottom: 16,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 9,
-                textAlign: 'left',
-              }}
-            >
+            {/* Eligibility notice */}
+            <div className="amb-elig-row">
               <svg
-                width="15" height="15"
-                viewBox="0 0 24 24" fill="none"
-                stroke={data?.has_active_plan ? 'rgba(100,220,130,0.9)' : 'rgba(255,200,80,0.9)'}
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                style={{ flexShrink: 0, marginTop: 1 }}
+                width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke={hasPlan ? 'rgba(100,220,130,0.85)' : 'rgba(255,200,80,0.85)'}
+                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
               >
-                {data?.has_active_plan
-                  ? <><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></>
-                  : <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>
-                }
+                {hasPlan ? (
+                  <><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></>
+                ) : (
+                  <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
+                )}
               </svg>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12.5,
-                  color: 'rgba(255,255,255,0.6)',
-                  lineHeight: 1.5,
-                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                }}
-              >
-                {data?.has_active_plan
+              <p style={{
+                margin: 0, fontSize: 12.5, color: 'rgba(255,255,255,0.45)',
+                lineHeight: 1.5, fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+              }}>
+                {hasPlan
                   ? (bm ? 'Plan aktif — kau layak daftar sebagai ambassador.' : 'Active plan detected — you are eligible to register.')
                   : (bm ? 'Perlu plan aktif (Student PRO / Monthly / Yearly) untuk jadi ambassador.' : 'Requires an active plan — Student PRO, Monthly, or Yearly — to register.')}
               </p>
             </div>
 
-            {/* Plan error */}
-            {planError && (
-              <div
-                style={{
-                  background: 'rgba(220,60,60,0.15)',
-                  border: '0.5px solid rgba(220,80,80,0.4)',
-                  borderRadius: 10,
-                  padding: '10px 14px',
-                  marginBottom: 14,
-                  fontSize: 12.5,
-                  color: 'rgba(255,160,160,0.95)',
-                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                }}
+            {/* CTA + error */}
+            <div className="amb-cta-wrap">
+              <button
+                className={btnClass}
+                onClick={registerAsAmbassador}
+                disabled={registering}
               >
-                {bm
-                  ? 'Plan kau dah tamat atau tidak layak. Beli plan dahulu.'
-                  : 'Your plan has expired or is not eligible. Please purchase a plan first.'}
+                {btnLabel}
+              </button>
+
+              <div className={`amb-error-banner${showErrBanner ? ' amb-show' : ''}`}>
+                <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'rgba(255,160,160,0.95)', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+                  {bm ? 'Plan aktif diperlukan' : 'Active plan required'}
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+                  {bm
+                    ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses.'
+                    : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access.'}
+                </p>
               </div>
-            )}
 
-            {/* CTA button */}
-            <button
-              onClick={registerAsAmbassador}
-              disabled={registering || !data?.has_active_plan}
-              style={{
-                width: '100%',
-                padding: '13px 0',
-                borderRadius: 11,
-                background: data?.has_active_plan
-                  ? 'rgba(255,255,255,0.95)'
-                  : 'rgba(255,255,255,0.12)',
-                color: data?.has_active_plan ? '#1d1d1f' : 'rgba(255,255,255,0.3)',
-                fontSize: 14,
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-                border: '0.5px solid rgba(255,255,255,0.15)',
-                cursor: (registering || !data?.has_active_plan) ? 'not-allowed' : 'pointer',
-                opacity: registering ? 0.6 : 1,
-                fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                transition: 'background 0.15s',
-              }}
-            >
-              {registering
-                ? (bm ? 'Mendaftar…' : 'Registering…')
-                : (bm ? 'Daftar sebagai ambassador' : 'Register as ambassador')}
-            </button>
+              {showPlansLink && (
+                <a href="/pricing" className="amb-plans-link">
+                  {bm ? 'Lihat plan' : 'View plans'}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </a>
+              )}
+            </div>
 
-            {/* View plans link */}
-            {!data?.has_active_plan && (
-              <a
-                href="/pricing"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 4,
-                  marginTop: 14,
-                  fontSize: 13,
-                  color: 'rgba(255,255,255,0.45)',
-                  textDecoration: 'none',
-                  fontFamily: "-apple-system, 'Helvetica Neue', sans-serif",
-                }}
-              >
-                {bm ? 'Lihat plan' : 'View plans'}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </a>
-            )}
           </div>
         </div>
       </div>
     )
   }
 
+  // ─── AMBASSADOR DASHBOARD (already registered) ────────────────────────────
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
@@ -468,7 +487,7 @@ export default function AmbassadorDashboard() {
         >
           {copied ? '✓' : (
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
           )}
           {copied ? (bm ? 'Disalin!' : 'Copied!') : (bm ? 'Salin kod' : 'Copy code')}
