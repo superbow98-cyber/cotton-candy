@@ -290,7 +290,11 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [recordingLang, setRecordingLang] = useState<'auto' | 'ms' | 'en' | 'zh' | 'ta'>('auto')
   const [aiUsedProvider, setAiUsedProvider] = useState<string | null>(null)
   const [aiProvider, setAiProvider] = useState<AIProvider>(DEFAULT_PROVIDER)
-  const [recLang, setRecLang] = useState<string>('en-US')
+  const [recLang, setRecLang] = useState<string>('ms-MY')  // FIX: default ms-MY for rojak
+
+  // FIX: detect Safari for live preview notice
+  const isSafari = typeof navigator !== 'undefined'
+    && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 
   const recRef = useRef<any>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -299,7 +303,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const startRef = useRef<number>(0)
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
-  const recLangRef = useRef<string>('en-US')
+  const recLangRef = useRef<string>('ms-MY')  // FIX: default ms-MY
   const lectureRef = useRef<Lecture | null>(null)
   const aiSectionRef = useRef<HTMLDivElement | null>(null)
 
@@ -331,14 +335,30 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (saved && RECOGNITION_LANGS.some(l => l.code === saved)) {
         setRecLang(saved); recLangRef.current = saved
       } else {
-        const initial = lang === 'bm' ? 'ms-MY' : 'en-US'
+        // FIX: default ms-MY for rojak BM+EN detection
+        const initial = 'ms-MY'
         setRecLang(initial); recLangRef.current = initial
       }
     } catch {
-      const initial = lang === 'bm' ? 'ms-MY' : 'en-US'
+      const initial = 'ms-MY'
       setRecLang(initial); recLangRef.current = initial
     }
   }, [lang])
+
+  // FIX: Sync recLang (Web Speech) ikut recordingLang dropdown
+  useEffect(() => {
+    const map: Record<string, string> = {
+      'auto': 'ms-MY',  // rojak → ms-MY paling baik untuk BM+EN mix
+      'ms':   'ms-MY',
+      'en':   'en-US',
+      'zh':   'zh-CN',
+      'ta':   'ta-MY',
+    }
+    const mapped = map[recordingLang] || 'ms-MY'
+    setRecLang(mapped)
+    recLangRef.current = mapped
+    try { localStorage.setItem(STORAGE_KEY, mapped) } catch {}
+  }, [recordingLang])
 
   // Fetch current audio usage from server
   useEffect(() => {
@@ -1365,6 +1385,20 @@ const finishLecture = async () => {
             }
           </Button>
         </div>
+
+        {/* FIX: Safari live preview notice */}
+        {isSafari && recording && (
+          <div style={{
+            marginTop: 10,
+            fontSize: 11, color: 'rgba(29,29,31,0.45)',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <span>ℹ</span>
+            {lang === 'bm'
+              ? 'Safari: live preview terhad — transkrip penuh selepas stop'
+              : 'Safari: live preview is limited — full transcript ready after stop'}
+          </div>
+        )}
       </div>
 
       {/* v56: LIVE MIC LEVEL METER (opt-in via settings) */}
