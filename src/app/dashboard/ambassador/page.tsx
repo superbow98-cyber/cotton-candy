@@ -182,7 +182,170 @@ const AMBASSADOR_STYLES = `
   transform:translateX(-100%);
   animation: amb-shimmerSlide 2s ease-in-out infinite;
 }
+
+.amb-tpl-card {
+  background: rgba(0,0,0,0.025);
+  border: 0.5px solid rgba(0,0,0,0.07);
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: background 0.15s, border-color 0.15s;
+  cursor: default;
+}
+.amb-tpl-card:hover {
+  background: rgba(0,0,0,0.045);
+  border-color: rgba(0,0,0,0.11);
+}
+
+.amb-tpl-scroll::-webkit-scrollbar { width: 3px; }
+.amb-tpl-scroll::-webkit-scrollbar-track { background: transparent; }
+.amb-tpl-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
 `
+
+// ─── Content templates generator ─────────────────────────────────────────────
+function getTemplates(code: string) {
+  const link = 'cottoncandy-s.com'
+  const fullLink = 'https://cottoncandy-s.com'
+  return [
+    {
+      tag: 'Informal Ad',
+      tagColor: '#FF6B9D',
+      title: 'FOMO hook',
+      platform: 'Threads · Instagram',
+      content: `korang masih type nota sendiri masa lecturer cakap?? 😭
+
+bro aku dah upgrade. Cotton Candy — rakam kuliah, dia auto buat nota sendiri. topik, key points, formula — siap dalam saat.
+
+guna code ${code} dapat 50% off 🍬
+${fullLink}`,
+    },
+    {
+      tag: 'Function',
+      tagColor: '#A855F7',
+      title: 'What it does',
+      platform: 'WhatsApp Status · Telegram',
+      content: `Cotton Candy buat apa sebenarnya?
+
+🎙 Rakam kuliah dalam bahasa apa pun
+📝 Live transcript keluar masa kau cakap
+🤖 AI (Gemini / GPT / Claude) summarize terus
+📄 Export jadi PDF nota cantik
+
+semua dalam satu app. dari RM8 je.
+code ${code} → 50% off`,
+    },
+    {
+      tag: 'Tutorial',
+      tagColor: '#00C9A7',
+      title: 'Step-by-step',
+      platform: 'TikTok caption · Reels',
+      content: `cara aku buat nota kuliah dalam 30 saat 👇
+
+1️⃣ buka Cotton Candy
+2️⃣ tekan rekod — cakap je macam biasa
+3️⃣ habis kuliah → tekan Finish
+4️⃣ AI auto susun nota — topik, points, formula
+5️⃣ export PDF → terus boleh study
+
+code ${code} → 50% off masa checkout
+${fullLink}`,
+    },
+    {
+      tag: 'Viral',
+      tagColor: '#F59E0B',
+      title: 'Student pain point',
+      platform: 'Twitter/X · Threads',
+      content: `POV: kau nod-nod faham dalam kelas tapi nota kosong
+
+padahal solution dah ada 😭
+Cotton Candy rakam + AI buat nota sendiri. kau duduk je.
+
+cuba free dulu → ${link}
+nak 50% off guna code ${code}`,
+    },
+    {
+      tag: 'Informal Ad',
+      tagColor: '#FF6B9D',
+      title: 'Bahasa rojak',
+      platform: 'WhatsApp · Instagram',
+      content: `weh serious best gila app ni
+
+aku rakam kuliah biochem tadi (lecturer cakap laju gila) — dalam 10 saat dah dapat nota lengkap. formula pun ada sekali. tak tipu.
+
+nama dia Cotton Candy 🍬
+${link} — guna code ${code} 50% off`,
+    },
+    {
+      tag: 'Spotlight',
+      tagColor: '#3B82F6',
+      title: 'Multilingual flex',
+      platform: 'LinkedIn · Facebook',
+      content: `lecturer kau cakap BI campur BM campur istilah teknikal?
+
+Cotton Candy faham semua tu. rojak pun okay. auto detect bahasa + 500+ science terms built-in.
+
+nota kau nanti clean, organised, siap nak exam.
+${fullLink}
+guna ${code} → 50% off mana-mana plan`,
+    },
+    {
+      tag: 'Viral',
+      tagColor: '#F59E0B',
+      title: 'Before / After',
+      platform: 'Threads · TikTok',
+      content: `before Cotton Candy:
+❌ tulis nota sendiri
+❌ terlepas info penting
+❌ habis kuliah penat gila
+
+after Cotton Candy:
+✅ rakam je
+✅ AI buat nota
+✅ boleh fokus dengar
+
+50% off → code ${code}
+${link}`,
+    },
+    {
+      tag: 'Soft Sell',
+      tagColor: '#10B981',
+      title: 'Genuine rec',
+      platform: 'WhatsApp Status · Story',
+      content: `aku tak selalu recommend apps tapi yang ni lain sikit
+
+Cotton Candy — rakam kuliah, dapat nota AI. dah 2 minggu guna, serious jimat masa study. ada export PDF, ada mind map auto.
+
+kalau nak cuba → ${link}
+code ${code} untuk 50% off (valid semua plan)`,
+    },
+    {
+      tag: 'One-liner',
+      tagColor: '#8B5CF6',
+      title: 'Short & punchy',
+      platform: 'Instagram caption · Bio link',
+      content: `nota kuliah dalam saat. bukan tipu.
+
+🍬 Cotton Candy — record → AI notes → PDF
+${link}
+
+code ${code} → 50% off`,
+    },
+    {
+      tag: 'Story',
+      tagColor: '#EC4899',
+      title: 'Personal story',
+      platform: 'Instagram Story text · Threads',
+      content: `okay cerita sikit —
+
+sem ni aku amik 5 subjek. nota memang tak kejar dah. then kawan suggest Cotton Candy.
+
+sekarang aku just rakam je semua kuliah. app buat semua kerja — transcript, nota, export PDF. AI pilihan ada Gemini, Claude, GPT.
+
+kalau kau pun overwhelmed → try la
+${fullLink}
+code ${code} → 50% off`,
+    },
+  ]
+}
 
 // ─── Generate dark-professional promo card ────────────────────────────────────
 async function generatePromoCard(promoCode: string): Promise<string> {
@@ -193,31 +356,26 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   canvas.height = H
   const ctx = canvas.getContext('2d')!
 
-  // ── Background: deep dark ──────────────────────────────────────────────
   ctx.fillStyle = '#0A0A10'
   ctx.fillRect(0, 0, W, H)
 
-  // Scanline texture
   for (let y = 0; y < H; y += 3) {
     ctx.fillStyle = 'rgba(255,255,255,0.012)'
     ctx.fillRect(0, y, W, 1)
   }
 
-  // Radial glow top-right (teal)
   const glowTeal = ctx.createRadialGradient(900, 140, 0, 900, 140, 420)
   glowTeal.addColorStop(0, 'rgba(0,210,160,0.13)')
   glowTeal.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glowTeal
   ctx.fillRect(0, 0, W, H)
 
-  // Radial glow bottom-left (purple)
   const glowPurple = ctx.createRadialGradient(120, 900, 0, 120, 900, 380)
   glowPurple.addColorStop(0, 'rgba(168,85,247,0.14)')
   glowPurple.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glowPurple
   ctx.fillRect(0, 0, W, H)
 
-  // Fine grid overlay
   ctx.strokeStyle = 'rgba(255,255,255,0.025)'
   ctx.lineWidth = 0.5
   for (let x = 0; x < W; x += 60) {
@@ -227,8 +385,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
   }
 
-  // ── Top bar ────────────────────────────────────────────────────────────
-  // Logo pill background
   const pillBg = ctx.createLinearGradient(72, 60, 72 + 220, 60)
   pillBg.addColorStop(0, 'rgba(255,255,255,0.07)')
   pillBg.addColorStop(1, 'rgba(255,255,255,0.03)')
@@ -240,37 +396,32 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   roundRect(ctx, 72, 56, 220, 48, 14)
   ctx.stroke()
 
-  // ── CC logo icon — gradient rounded square matching real app icon ──────
   const logoSize = 36
   const logoX = 82
   const logoY = 62
   const logoBg = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize)
-  logoBg.addColorStop(0, '#FF6B9D')   // pink top-left
-  logoBg.addColorStop(1, '#C471F5')   // purple bottom-right
+  logoBg.addColorStop(0, '#FF6B9D')
+  logoBg.addColorStop(1, '#C471F5')
   ctx.fillStyle = logoBg
   roundRect(ctx, logoX, logoY, logoSize, logoSize, 9)
   ctx.fill()
 
-  // "cc" text inside logo
   ctx.font = '700 18px -apple-system, "SF Pro Display", Helvetica, sans-serif'
   ctx.fillStyle = '#FFFFFF'
   ctx.textAlign = 'center'
   ctx.fillText('cc', logoX + logoSize / 2, logoY + 24)
   ctx.textAlign = 'left'
 
-  // "Cotton Candy" wordmark next to logo
   ctx.font = '500 18px -apple-system, Helvetica, sans-serif'
   ctx.fillStyle = 'rgba(255,255,255,0.88)'
   ctx.fillText('Cotton Candy', 127, 86)
 
-  // Slide label top-right
   ctx.font = '400 13px monospace'
   ctx.fillStyle = 'rgba(255,255,255,0.28)'
   ctx.textAlign = 'right'
   ctx.fillText('AMBASSADOR', W - 72, 86)
   ctx.textAlign = 'left'
 
-  // ── Tag line ───────────────────────────────────────────────────────────
   ctx.font = '700 11px monospace'
   ctx.fillStyle = 'rgba(0,210,160,0.75)'
   ctx.fillText('// EXCLUSIVE OFFER', 72, 164)
@@ -279,7 +430,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   ctx.lineWidth = 0.75
   ctx.beginPath(); ctx.moveTo(72, 172); ctx.lineTo(340, 172); ctx.stroke()
 
-  // ── Main headline ──────────────────────────────────────────────────────
   ctx.font = '800 96px -apple-system, "SF Pro Display", Helvetica, sans-serif'
   ctx.fillStyle = '#FFFFFF'
   ctx.fillText('Get', 72, 280)
@@ -300,7 +450,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   ctx.fillStyle = 'rgba(255,255,255,0.35)'
   ctx.fillText('AI Lecture Recorder  ·  Malaysian Students', 72, 510)
 
-  // ── "What is Cotton Candy?" card ───────────────────────────────────────
   const cardX = 72, cardY = 540, cardW = W - 144, cardH = 172
   ctx.fillStyle = 'rgba(255,255,255,0.045)'
   roundRect(ctx, cardX, cardY, cardW, cardH, 16)
@@ -318,7 +467,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   ctx.lineWidth = 0.5
   ctx.beginPath(); ctx.moveTo(cardX + 28, cardY + 48); ctx.lineTo(cardX + cardW - 28, cardY + 48); ctx.stroke()
 
-  // Three feature bullets
   const features = [
     { icon: '🎙', title: 'Record any lecture', desc: 'Live transcript as you speak' },
     { icon: '🤖', title: 'AI summarises it', desc: 'Topics, key points & formulas' },
@@ -353,9 +501,7 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   })
   ctx.textAlign = 'left'
 
-  // ── Promo code — BIG & unmissable ──────────────────────────────────────
   const pcY = 748
-
   const pcBg = ctx.createLinearGradient(72, pcY, W - 72, pcY)
   pcBg.addColorStop(0, 'rgba(168,85,247,0.18)')
   pcBg.addColorStop(0.5, 'rgba(200,100,255,0.22)')
@@ -368,13 +514,11 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   roundRect(ctx, 72, pcY, W - 144, 128, 18)
   ctx.stroke()
 
-  // "USE CODE" label — teal, prominent
   ctx.font = '800 13px monospace'
   ctx.fillStyle = '#00D2A0'
   ctx.textAlign = 'center'
   ctx.fillText('▸  USE CODE  ◂', W / 2, pcY + 38)
 
-  // Promo code value — very large, white, bold, glowing
   ctx.font = `900 72px -apple-system, "SF Pro Display", Helvetica, sans-serif`
   ctx.fillStyle = '#FFFFFF'
   ctx.shadowColor = 'rgba(200,100,255,0.6)'
@@ -383,44 +527,33 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   ctx.shadowBlur = 0
   ctx.textAlign = 'left'
 
-  // ── Bottom row ─────────────────────────────────────────────────────────
   const bottomY = H - 52
-
-  // QR code — bottom right, real scannable via qrcode npm package
   const qrSize = 90
   const qrX = W - 72 - qrSize
   const qrY = bottomY - qrSize - 20
 
-  // White background pill for QR
   ctx.fillStyle = '#FFFFFF'
   roundRect(ctx, qrX - 6, qrY - 6, qrSize + 12, qrSize + 18, 8)
   ctx.fill()
 
-  // Generate real scannable QR code onto temp canvas
   const qrCanvas = document.createElement('canvas')
   await QRCode.toCanvas(qrCanvas, 'https://cottoncandy-s.com', {
     width: qrSize,
     margin: 1,
-    color: {
-      dark: '#0A0A10',
-      light: '#FFFFFF',
-    },
+    color: { dark: '#0A0A10', light: '#FFFFFF' },
   })
   ctx.drawImage(qrCanvas, qrX, qrY)
 
-  // "SCAN ME" label below QR
   ctx.font = '500 9px monospace'
   ctx.fillStyle = 'rgba(255,255,255,0.35)'
   ctx.textAlign = 'center'
   ctx.fillText('SCAN ME', qrX + qrSize / 2, qrY + qrSize + 14)
   ctx.textAlign = 'left'
 
-  // URL — left
   ctx.font = '400 16px monospace'
   ctx.fillStyle = 'rgba(255,255,255,0.30)'
   ctx.fillText('cottoncandy-s.com', 72, bottomY - 36)
 
-  // Tagline gradient — left, below URL
   const tagGrad = ctx.createLinearGradient(72, 0, 500, 0)
   tagGrad.addColorStop(0, '#00D2A0')
   tagGrad.addColorStop(1, '#F472B6')
@@ -428,7 +561,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   ctx.fillStyle = tagGrad
   ctx.fillText('Record  ·  Transcribe  ·  Summarise', 72, bottomY - 16)
 
-  // Thin rule above bottom
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'
   ctx.lineWidth = 0.75
   ctx.beginPath(); ctx.moveTo(72, bottomY - 52); ctx.lineTo(W - 72, bottomY - 52); ctx.stroke()
@@ -436,7 +568,6 @@ async function generatePromoCard(promoCode: string): Promise<string> {
   return canvas.toDataURL('image/png')
 }
 
-// Helper: rounded rect path
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
   ctx.moveTo(x + r, y)
@@ -466,6 +597,7 @@ export default function AmbassadorDashboard() {
   const [promoCardUrl, setPromoCardUrl] = useState<string | null>(null)
   const [generatingCard, setGeneratingCard] = useState(false)
   const [shareKitOpen, setShareKitOpen] = useState(false)
+  const [copiedTemplate, setCopiedTemplate] = useState<number | null>(null)
 
   const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bm = lang === 'bm'
@@ -561,6 +693,12 @@ export default function AmbassadorDashboard() {
     navigator.clipboard.writeText(data.promo_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function copyTemplate(text: string, idx: number) {
+    navigator.clipboard.writeText(text)
+    setCopiedTemplate(idx)
+    setTimeout(() => setCopiedTemplate(null), 2200)
   }
 
   async function handleGenerateCard() {
@@ -681,21 +819,7 @@ export default function AmbassadorDashboard() {
   }
 
   // ─── AMBASSADOR DASHBOARD ─────────────────────────────────────────────────
-  const tutorialSteps = bm ? [
-    { num: '01', title: 'Daftar akaun', desc: 'Pergi cottoncandy-s.com → klik "Mula percuma" → daftar dengan email atau Google.' },
-    { num: '02', title: 'Pilih plan', desc: `Upgrade ke mana-mana plan berbayar. Guna kod ${data.promo_code} untuk 50% off semasa checkout.` },
-    { num: '03', title: 'Buka kuliah baru', desc: 'Dashboard → "Rakam kuliah" → bagi nama kuliah → pilih AI (Gemini/GPT/Claude) → tekan rekod.' },
-    { num: '04', title: 'Rakam & berhenti', desc: 'Bercakap je — live transcript akan keluar. Selesai → tekan "Habiskan kuliah".' },
-    { num: '05', title: 'Nota AI siap', desc: 'Dalam beberapa saat — topik, key points, formula, ringkasan auto-disusun oleh AI.' },
-    { num: '06', title: 'Export PDF', desc: 'Klik "Export PDF" dalam lecture view → pilih tema warna → download atau share terus.' },
-  ] : [
-    { num: '01', title: 'Create an account', desc: 'Go to cottoncandy-s.com → click "Start free" → sign up with email or Google.' },
-    { num: '02', title: 'Pick a plan', desc: `Upgrade to any paid plan. Use code ${data.promo_code} for 50% off at checkout.` },
-    { num: '03', title: 'Start a new lecture', desc: 'Dashboard → "Record lecture" → name your lecture → pick an AI (Gemini/GPT/Claude) → hit record.' },
-    { num: '04', title: 'Record & finish', desc: 'Just speak — live transcript appears in real time. Done → tap "Finish lecture".' },
-    { num: '05', title: 'AI notes ready', desc: 'Within seconds — topics, key points, formulas, summary auto-organized by AI.' },
-    { num: '06', title: 'Export as PDF', desc: 'Click "Export PDF" inside the lecture view → choose a colour theme → download or share instantly.' },
-  ]
+  const templates = getTemplates(data.promo_code!)
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -755,7 +879,7 @@ export default function AmbassadorDashboard() {
             {shareKitOpen ? '▲' : '▼'}
           </div>
           <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginTop: 4 }}>
-            {shareKitOpen ? (bm ? 'Tutup' : 'Close') : (bm ? 'Promo card + tutorial' : 'Promo card + tutorial')}
+            {shareKitOpen ? (bm ? 'Tutup' : 'Close') : (bm ? 'Promo card + konten' : 'Promo card + content')}
           </div>
         </div>
       </div>
@@ -774,7 +898,8 @@ export default function AmbassadorDashboard() {
             🎨 {bm ? 'Alat Kongsi' : 'Share Kit'}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+
             {/* LEFT: Promo card generator */}
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
@@ -845,31 +970,97 @@ export default function AmbassadorDashboard() {
               <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             </div>
 
-            {/* RIGHT: Tutorial steps */}
-            <div>
+            {/* RIGHT: Content templates */}
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 4, letterSpacing: '-0.01em' }}>
-                📋 {bm ? 'Cara guna Cotton Candy' : 'How to use Cotton Candy'}
+                ✍️ {bm ? 'Template Konten Siap Copy' : 'Ready-to-Copy Content Templates'}
               </div>
               <div style={{ fontSize: 12, color: 'rgba(29,29,31,0.5)', marginBottom: 14, lineHeight: 1.5 }}>
                 {bm
-                  ? 'Share steps ni kepada kawan-kawan supaya mereka tahu cara guna app ni.'
-                  : 'Share these steps with friends so they know exactly how to use the app.'}
+                  ? `10 caption dah siap tulis — dah ada kod ${data.promo_code} kau. Copy terus ke Threads, IG, WhatsApp, TikTok.`
+                  : `10 captions pre-written with your ${data.promo_code} code inside. Copy straight to Threads, IG, WhatsApp, TikTok.`}
               </div>
-              <div>
-                {tutorialSteps.map((step, i) => (
-                  <div key={step.num} className="amb-step-row" style={{ animationDelay: `${i * 0.06}s` }}>
-                    <div style={{
-                      flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
-                      background: 'linear-gradient(135deg, rgba(0,210,160,0.12), rgba(168,85,247,0.12))',
-                      border: '0.5px solid rgba(168,85,247,0.25)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 700, color: '#A855F7', letterSpacing: '0.02em',
-                    }}>
-                      {step.num}
+
+              {/* Scrollable template list */}
+              <div
+                className="amb-tpl-scroll"
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                  maxHeight: 460, overflowY: 'auto', paddingRight: 4,
+                }}
+              >
+                {templates.map((tpl, i) => (
+                  <div
+                    key={i}
+                    className="amb-tpl-card"
+                    style={{ animation: `amb-fadeSlideUp 0.35s ${i * 0.04}s cubic-bezier(0.22,1,0.36,1) both` }}
+                  >
+                    {/* Header row: tag + title + copy button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7, gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+                          textTransform: 'uppercase',
+                          background: `${tpl.tagColor}18`,
+                          color: tpl.tagColor,
+                          border: `0.5px solid ${tpl.tagColor}40`,
+                          borderRadius: 5, padding: '2px 6px',
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                        }}>
+                          {tpl.tag}
+                        </span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 600, color: '#1d1d1f',
+                          letterSpacing: '-0.01em',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {tpl.title}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => copyTemplate(tpl.content, i)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '4px 10px', borderRadius: 6,
+                          fontSize: 11, fontWeight: 600, flexShrink: 0,
+                          border: `0.5px solid ${copiedTemplate === i ? '#7AB883' : 'rgba(0,0,0,0.12)'}`,
+                          background: copiedTemplate === i ? '#e6f4eb' : '#fff',
+                          color: copiedTemplate === i ? '#2d6a40' : '#1d1d1f',
+                          cursor: 'pointer',
+                          transition: 'all 0.18s ease',
+                        }}
+                      >
+                        {copiedTemplate === i ? (
+                          <>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            {bm ? 'Disalin!' : 'Copied!'}
+                          </>
+                        ) : (
+                          <>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                            Copy
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f', marginBottom: 2, letterSpacing: '-0.01em' }}>{step.title}</div>
-                      <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.55)', lineHeight: 1.55 }}>{step.desc}</div>
+
+                    {/* Platform badge */}
+                    <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.32)', marginBottom: 8, letterSpacing: '0.01em' }}>
+                      📍 {tpl.platform}
+                    </div>
+
+                    {/* Content preview — fade bottom */}
+                    <div style={{
+                      fontSize: 11.5, color: 'rgba(29,29,31,0.62)',
+                      lineHeight: 1.65, whiteSpace: 'pre-line',
+                      maxHeight: 82, overflow: 'hidden',
+                      maskImage: 'linear-gradient(to bottom, black 55%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 55%, transparent 100%)',
+                      fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+                    }}>
+                      {tpl.content}
                     </div>
                   </div>
                 ))}
