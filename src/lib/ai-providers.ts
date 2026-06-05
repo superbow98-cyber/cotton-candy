@@ -379,9 +379,9 @@ export async function callAI(
 
   // Build all providers
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash-preview-05-20', systemPrompt) },
+   { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-1.5-flash', systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
-    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite-preview-06-17', systemPrompt) },
+    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-1.5-flash-8b', systemPrompt) },
     { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
     { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
