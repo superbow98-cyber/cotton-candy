@@ -18,6 +18,7 @@ function AILogo({ provider, size = 14 }: { provider: AIProvider; size?: number }
     'gemini-lite': 'linear-gradient(135deg, #4796E3, #34A853)',
     'gpt': '#000',
     'claude': '#DA7756',
+    'deepseek': '#ECEEF8',
   }
   const wrapSize = size + 14
   const wrap: React.CSSProperties = {
@@ -27,6 +28,17 @@ function AILogo({ provider, size = 14 }: { provider: AIProvider; size?: number }
     background: bg[meta.logoKey] || bg['auto'],
     boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.08)',
   }
+  if (meta.logoKey === 'deepseek') return (
+    <div style={wrap}>
+      <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 15C31 15 18 27 18 43C18 53 24 61 35 66C22 71 18 84 28 90C37 96 51 92 57 84C63 90 75 94 83 88C95 80 91 67 78 61C89 55 93 46 90 37C86 24 71 15 50 15Z" fill="#2840D5"/>
+        <path d="M50 30C38 30 30 36 30 44C30 50 34 55 42 58C30 62 28 72 36 77C42 81 52 78 57 72C62 77 71 80 77 75C86 68 83 58 72 54C81 50 84 44 81 37C77 30 65 30 50 30Z" fill="#E8EAF6"/>
+        <ellipse cx="42" cy="46" rx="11" ry="8" fill="white" transform="rotate(-15 42 46)"/>
+        <circle cx="39" cy="43" r="4.5" fill="#2840D5"/>
+        <circle cx="40" cy="42" r="2" fill="white"/>
+      </svg>
+    </div>
+  )
   if (meta.logoKey === 'auto') return (
     <div style={wrap}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#4B1528" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -572,7 +584,6 @@ function RecordingExperienceSettings({ lang }: { lang: 'en' | 'bm' }) {
   useEffect(() => {
     try {
       setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
-      // Facts/knowledge default ON (only OFF if explicitly disabled)
       setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') !== 'off')
       setShowKnowledge(localStorage.getItem('cc-show-knowledge') !== 'off')
     } catch {}
