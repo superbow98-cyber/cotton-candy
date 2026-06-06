@@ -269,10 +269,10 @@ export default function Home() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 14, maxWidth: 960, margin: '0 auto',
         }}>
-          {/* Gemini Flash — DEFAULT */}
+          {/* DeepSeek V3 — DEFAULT */}
           <AICard
             eyebrow={L('Deep thinker', 'Pemikir mendalam', '深度思考者', 'ஆழமான சிந்தனையாளர்')}
-            name="Gemini 2.5 Flash"
+            name="DeepSeek V3"
             desc={L(
               'Handles the longest lectures, the deepest topics, the messiest code-switched rojak. The smart default.',
               'Kendalikan kuliah panjang, topik dalam, rojak bercampur. Pilihan bijak sebagai default.',
@@ -280,11 +280,15 @@ export default function Home() {
               'நீண்ட விரிவுரைகள், ஆழமான தலைப்புகள் கையாளும். இயல்புநிலை தேர்வு.'
             )}
             isDefault
-            logoBg="linear-gradient(135deg, #4285F4 0%, #9168C0 50%, #EA4335 100%)"
+            logoBg="#ECEEF8"
             logoSvg={
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
-                <path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2z" />
-              </svg>
+              <img
+                src="/deepseek-logo.svg"
+                width={34}
+                height={34}
+                alt="DeepSeek"
+                style={{ objectFit: 'contain' }}
+              />
             }
           />
           <AICard
