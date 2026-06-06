@@ -1341,7 +1341,7 @@ function Step2({ lang }: { lang: string }) {
           <div style={{ width: 38, height: 38, background: '#FFFBFC', borderRadius: '50%' }} />
         </div>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', marginBottom: 3 }}>
-          {L('Gemini 2.5 Flash is thinking', 'Gemini 2.5 Flash sedang berfikir', 'Gemini 2.5 Flash 正在思考', 'Gemini 2.5 Flash சிந்திக்கிறது')}
+          {L('DeepSeek V3 is thinking', 'DeepSeek V3 sedang berfikir', 'DeepSeek V3 正在思考', 'DeepSeek V3 சிந்திக்கிறது')}
         </div>
         <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.5)' }}>
           {L(
