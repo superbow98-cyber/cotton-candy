@@ -12,7 +12,7 @@ import { BuyCreditsModal } from '@/components/lecture/BuyCreditsModal'
 // AI logo resolver — small brand chip
 function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
   const bg: Record<string, string> = {
-    'gemini-flash': 'linear-gradient(135deg, #4285F4, #9168C0 50%, #EA4335)',
+    'deepseek': '#ECEEF8',
     'groq': 'linear-gradient(180deg, #FF5D3A, #E23A20)',
     'auto': 'linear-gradient(135deg, #FFB7C5, #D4537E)',
     'gemini-flash-lite': 'linear-gradient(135deg, #4796E3, #34A853)',
@@ -20,12 +20,31 @@ function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
     'claude-haiku': '#DA7756',
   }
   const icSize = Math.round(size * 0.65)
+  const wrapSize = size + 6
+  const radius = Math.round(size / 3.5)
 
-  // GPT-4o mini — OpenAI logo (same as front page)
+  if (provider === 'deepseek') return (
+    <span style={{
+      width: wrapSize, height: wrapSize, borderRadius: radius,
+      background: bg['deepseek'],
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+    }}>
+      <svg width={icSize} height={icSize} viewBox="0 0 100 100" fill="none">
+        <path d="M50 15C31 15 18 27 18 43C18 53 24 61 35 66C22 71 18 84 28 90C37 96 51 92 57 84C63 90 75 94 83 88C95 80 91 67 78 61C89 55 93 46 90 37C86 24 71 15 50 15Z" fill="#2840D5"/>
+        <path d="M50 30C38 30 30 36 30 44C30 50 34 55 42 58C30 62 28 72 36 77C42 81 52 78 57 72C62 77 71 80 77 75C86 68 83 58 72 54C81 50 84 44 81 37C77 30 65 30 50 30Z" fill="#E8EAF6"/>
+        <ellipse cx="42" cy="46" rx="11" ry="8" fill="white" transform="rotate(-15 42 46)"/>
+        <circle cx="39" cy="43" r="4.5" fill="#2840D5"/>
+        <circle cx="40" cy="42" r="2" fill="white"/>
+      </svg>
+    </span>
+  )
+
+  // GPT-4o mini
   if (provider === 'gpt-4o-mini') {
     return (
       <span style={{
-        width: size + 6, height: size + 6, borderRadius: Math.round(size / 3.5),
+        width: wrapSize, height: wrapSize, borderRadius: radius,
         background: bg['gpt-4o-mini'],
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
@@ -37,11 +56,11 @@ function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
     )
   }
 
-  // Claude Haiku 3.5 — 4-line starburst (same as front page)
+  // Claude Haiku
   if (provider === 'claude-haiku') {
     return (
       <span style={{
-        width: size + 6, height: size + 6, borderRadius: Math.round(size / 3.5),
+        width: wrapSize, height: wrapSize, borderRadius: radius,
         background: bg['claude-haiku'],
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
@@ -57,20 +76,19 @@ function AILogo({ provider, size = 14 }: { provider: string; size?: number }) {
   }
 
   const icons: Record<string, JSX.Element> = {
-    'gemini-flash': <path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2z" fill="#fff"/>,
     'groq': <><circle cx="12" cy="12" r="9" fill="#fff"/><circle cx="12" cy="12" r="2.8" fill="#E23A20"/></>,
     'auto': <path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" stroke="#4B1528" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
     'gemini-flash-lite': <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="#fff"/>,
   }
-  const icSize2 = Math.round(size * 0.65)
+
   return (
     <span style={{
-      width: size + 6, height: size + 6, borderRadius: Math.round(size / 3.5),
+      width: wrapSize, height: wrapSize, borderRadius: radius,
       background: bg[provider] || bg['auto'],
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       flexShrink: 0,
     }}>
-      <svg width={icSize2} height={icSize2} viewBox="0 0 24 24">{icons[provider] || icons['auto']}</svg>
+      <svg width={icSize} height={icSize} viewBox="0 0 24 24">{icons[provider] || icons['auto']}</svg>
     </span>
   )
 }
@@ -84,7 +102,7 @@ export default function DashboardHome() {
   const [audioUsage, setAudioUsage] = useState<{
     usedSeconds: number; capSeconds: number; percentUsed: number
   } | null>(null)
-  const [buyModalOpen, setBuyModalOpen] = useState(false)  // v61
+  const [buyModalOpen, setBuyModalOpen] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -103,7 +121,6 @@ export default function DashboardHome() {
       const mins = Math.round((weekLect || []).reduce((a: number, l: any) => a + (l.duration_seconds || 0), 0) / 60)
       setStats({ count: weekLect?.length || 0, mins, notebooks: nbooks?.length || 0 })
 
-      // Fetch audio usage
       try {
         const res = await fetch('/api/usage')
         if (res.ok) {
@@ -112,13 +129,10 @@ export default function DashboardHome() {
         }
       } catch {}
 
-      // v61: Check for credit purchase success
       const params = new URLSearchParams(window.location.search)
       if (params.get('upload_credits_purchased')) {
         const qty = params.get('upload_credits_purchased')
-        // Clean URL
         window.history.replaceState({}, '', '/dashboard')
-        // Show toast/alert
         alert(`✓ ${qty} ${(prof?.lang === 'bm' || lang === 'bm') ? 'kredit muat naik berjaya dibeli!' : 'upload credits purchased successfully!'}`)
       }
     })()
@@ -164,7 +178,6 @@ export default function DashboardHome() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* v61: Spot 1 — credits pill */}
           {profile && (
             <button
               onClick={() => setBuyModalOpen(true)}
@@ -221,7 +234,6 @@ export default function DashboardHome() {
           value={`${stats.notebooks} / ${plan.notebookLimit}`}
           sub={plan.name}
         />
-        {/* v61: Spot 2 — Upload credits stat card (paid users only) */}
         {profile && (
           <button
             onClick={() => setBuyModalOpen(true)}
@@ -257,7 +269,7 @@ export default function DashboardHome() {
         )}
       </div>
 
-      {/* v61: Spot 3 — Soft entry card for upload (paid users only) */}
+      {/* Upload entry card */}
       {profile && (
         <Link
           href="/dashboard/upload"
@@ -377,7 +389,7 @@ export default function DashboardHome() {
                 }}>
                   <AILogo provider={l.ai_provider} size={12} />
                   {({
-                    'gemini-flash': 'Gemini',
+                    'deepseek': 'DeepSeek',
                     'gemini-flash-lite': 'Flash-Lite',
                     'groq': 'Groq',
                     'auto': 'Auto',
@@ -417,7 +429,6 @@ export default function DashboardHome() {
           href="/dashboard/notebooks"
           accent="#f5f5f7"
         />
-        {/* AMBASSADOR BUTTON */}
         <QuickAction
           icon={<span style={{ fontSize: 14 }}>🍬</span>}
           title={lang === 'bm' ? 'Program Ambassador' : 'Ambassador Program'}
@@ -429,7 +440,6 @@ export default function DashboardHome() {
         />
       </div>
 
-      {/* v61: Buy credits modal */}
       <BuyCreditsModal open={buyModalOpen} onClose={() => setBuyModalOpen(false)} />
     </div>
   )
@@ -479,7 +489,7 @@ function QuickAction({ icon, title, desc, href, accent }: {
           width: 28, height: 28, borderRadius: 7,
           background: accent,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'rgba(29,29,31,0.75)',
+          color: 'rgba(29,29,75)',
         }}>
           {icon}
         </div>
