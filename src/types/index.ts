@@ -18,7 +18,7 @@ export interface Profile {
   plan_expires_at: string | null
   lang: Lang
   theme: Theme | null
-  ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
+  ai_provider: 'auto' | 'groq' | 'deepseek' | 'gemini-flash-lite' | null
   is_admin?: boolean
   upload_credits?: number          // v61: current upload credit balance
   upload_credits_lifetime?: number // v61: total ever purchased
@@ -81,7 +81,7 @@ export interface Lecture {
   word_count: number
   status: 'draft' | 'recording' | 'finished' | 'archived'
   lang: Lang
-  ai_provider: 'auto' | 'groq' | 'gemini-flash' | 'gemini-flash-lite' | null
+  ai_provider: 'auto' | 'groq' | 'deepseek' | 'gemini-flash-lite' | null
   recording_type: 'lecture' | 'meeting' | 'sv' | 'postmortem' | 'interview' | 'custom' | null
   created_at: string
   updated_at: string
