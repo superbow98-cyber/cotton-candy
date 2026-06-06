@@ -52,15 +52,15 @@ export const PROVIDER_META: Record<AIProvider, {
   shortLabel: string
   descEn: string
   descBm: string
-  logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite' | 'gpt' | 'claude'
+  logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite' | 'gpt' | 'claude' | 'deepseek'
   proOnly?: boolean
 }> = {
   'gemini-flash': {
-    label: 'Gemini 2.5 Flash',
-    shortLabel: 'Gemini Flash',
+    label: 'DeepSeek V3',
+    shortLabel: 'DeepSeek',
     descEn: 'Handles very long lectures and nuanced topics.',
     descBm: 'Kendalikan kuliah panjang dan topik kompleks.',
-    logoKey: 'gemini',
+    logoKey: 'deepseek',
   },
   'auto': {
     label: 'Auto',
