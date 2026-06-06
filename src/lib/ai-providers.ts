@@ -3,12 +3,12 @@
 // Order: Auto/Groq → GPT → Claude → DeepSeek → Gemini Flash-Lite
 // ============================================================
 
-export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
+export type AIProvider = 'deepseek' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
 
 export type AISummary = {
   // Common
   summary: string
-  inferredTitle?: string  // v58.1: AI-generated title from transcript
+  inferredTitle?: string
   // Lecture
   topics?: string[]
   keyPoints?: string[]
@@ -35,9 +35,8 @@ export type AISummary = {
   themes?: string[]
 }
 
-// Order matters — this is the dropdown display order
 export const PROVIDER_ORDER: AIProvider[] = [
-  'gemini-flash',
+  'deepseek',
   'auto',
   'groq',
   'gemini-flash-lite',
@@ -55,7 +54,7 @@ export const PROVIDER_META: Record<AIProvider, {
   logoKey: 'auto' | 'groq' | 'gemini' | 'gemini-lite' | 'gpt' | 'claude' | 'deepseek'
   proOnly?: boolean
 }> = {
-  'gemini-flash': {
+  'deepseek': {
     label: 'DeepSeek V3',
     shortLabel: 'DeepSeek',
     descEn: 'Handles very long lectures and nuanced topics.',
@@ -101,7 +100,6 @@ export const PROVIDER_META: Record<AIProvider, {
   },
 }
 
-// Field schema map per section
 const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: string }> = {
   inferredTitle:     { type: 'string', description: 'A concise 3-7 word title inferred from the discussion content (in the SAME language as transcript). Do NOT use any user-provided title.' },
   summary:           { type: 'string', description: '2-3 sentence TL;DR in the primary language used' },
@@ -126,9 +124,6 @@ const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: st
   themes:            { type: 'array',  description: 'Recurring themes across responses' },
 }
 
-// Build a system prompt tailored to the recording type.
-// `sections` is the list of fields the AI should emit, in order.
-// `typeHint` is the type-specific guidance from RECORDING_TYPES.
 export function buildSystemPrompt(sections: string[], typeHint: string): string {
   const schemaLines = sections.map((s) => {
     const meta = SECTION_SCHEMA[s] || { type: 'array', description: 'list of items' }
@@ -172,7 +167,6 @@ Universal rules:
 - Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
 }
 
-// Default backwards-compat (for callers that don't pass type)
 export const SYSTEM_PROMPT = buildSystemPrompt(
   ['inferredTitle', 'summary', 'topics', 'keyPoints', 'formulas', 'questions'],
   'This is a generic recording.',
@@ -308,7 +302,6 @@ async function callGemini(userMessage: string, model: string, systemPrompt: stri
   catch { throw new Error('Gemini: malformed JSON') }
 }
 
-// Retry helper — waits and retries once on transient errors (503, 429, network)
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
     return await fn()
@@ -385,43 +378,33 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
   const content = json?.content?.[0]?.text
   if (!content) throw new Error('Claude: empty response')
 
-  // Claude may wrap in markdown — strip fences
   const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
   try { return validateResult(JSON.parse(clean)) }
   catch { throw new Error('Claude: malformed JSON') }
 }
 
-// Every single-provider call now has retry + auto-fallback.
-// User's chosen provider is attempted first, then fallback chain.
-// `systemPrompt` is type-aware (built via buildSystemPrompt).
-// `plan` gates GPT-4o mini + Claude Haiku (month/year/student_pro only)
-// v20.2: gemini-flash slot → DeepSeek V3, claude model fixed, isProPlan fixed
 export async function callAI(
   provider: AIProvider,
   userMessage: string,
   systemPrompt: string = SYSTEM_PROMPT,
   plan?: string,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
-  // Plans allowed to use GPT + Claude
   const isProPlan = plan === 'month' || plan === 'year' || plan === 'student_pro'
 
-  // If user picks pro-only provider but not on pro plan — fallback to auto
   const effectiveProvider = (provider === 'gpt-4o-mini' || provider === 'claude-haiku') && !isProPlan
     ? 'auto'
     : provider
 
-  // Build all providers
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'gemini-flash',      fn: () => callDeepSeek(userMessage, systemPrompt) },
+    { name: 'deepseek',          fn: () => callDeepSeek(userMessage, systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
     { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
     { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
 
-  // Build chain: chosen provider first, Groq as stable fallback
   let chain: typeof allProviders
-  if (effectiveProvider === 'gemini-flash') {
+  if (effectiveProvider === 'deepseek') {
     chain = [allProviders[0], allProviders[1], allProviders[2]]
   } else if (effectiveProvider === 'groq') {
     chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
@@ -432,7 +415,7 @@ export async function callAI(
   } else if (effectiveProvider === 'claude-haiku') {
     chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
-    // 'auto' — Groq first (stable), GPT/Claude if available, DeepSeek last resort
+    // 'auto'
     chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   }
 
