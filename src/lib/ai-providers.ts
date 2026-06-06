@@ -335,7 +335,7 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -361,8 +361,8 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
 // Every single-provider call now has retry + auto-fallback.
 // User's chosen provider is attempted first, then fallback chain.
 // `systemPrompt` is type-aware (built via buildSystemPrompt).
-// `plan` gates GPT-4o mini + Claude Haiku (monthly/yearly/student_pro only)
-// v20 fix: Gemini Flash uses preview model string, isProPlan includes student_pro
+// `plan` gates GPT-4o mini + Claude Haiku (monthly/yearly only)
+// NOTE: Gemini currently 403 PERMISSION_DENIED — kept last in all chains
 export async function callAI(
   provider: AIProvider,
   userMessage: string,
@@ -370,7 +370,7 @@ export async function callAI(
   plan?: string,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
   // Plans allowed to use GPT + Claude
-  const isProPlan = plan === 'month' || plan === 'year' || plan === 'student_pro'
+  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'month'
 
   // If user picks pro-only provider but not on pro plan — fallback to auto
   const effectiveProvider = (provider === 'gpt-4o-mini' || provider === 'claude-haiku') && !isProPlan
@@ -379,9 +379,9 @@ export async function callAI(
 
   // Build all providers
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-   { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-1.5-flash', systemPrompt) },
+    { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash', systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
-    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-1.5-flash-8b', systemPrompt) },
+    { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
     { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
     { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
@@ -389,14 +389,19 @@ export async function callAI(
   // Build chain: chosen provider first, Groq as stable fallback, Gemini last resort
   let chain: typeof allProviders
   if (effectiveProvider === 'gemini-flash') {
+    // User explicitly wants Gemini Flash — try it, fallback to Groq, then Flash-Lite
     chain = [allProviders[0], allProviders[1], allProviders[2]]
   } else if (effectiveProvider === 'groq') {
+    // Groq → GPT → Claude → Gemini (last)
     chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'gemini-flash-lite') {
+    // Flash-Lite → Groq → Flash
     chain = [allProviders[2], allProviders[1], allProviders[0]]
   } else if (effectiveProvider === 'gpt-4o-mini') {
+    // GPT → Groq → Gemini (last)
     chain = [allProviders[3], allProviders[1], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'claude-haiku') {
+    // Claude → Groq → Gemini (last)
     chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
     // 'auto' — Groq first (stable), GPT/Claude if available, Gemini last resort
