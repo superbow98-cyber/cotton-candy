@@ -273,13 +273,15 @@ ${truncated}`
           const inputTokens = Math.ceil(inputChars / 4)
           const outputTokens = Math.ceil(outputChars / 4)
 
-          const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
-            'gemini-flash': 'gemini_flash',
+          const serviceMap: Record<string, 'deepseek' | 'gemini_flash_lite' | 'groq' | 'gpt4o_mini' | 'claude_haiku' | 'xai_grok'> = {
+            'deepseek':          'deepseek',
             'gemini-flash-lite': 'gemini_flash_lite',
-            'groq': 'gemini_flash',
-            'xai': 'xai_grok',
+            'groq':              'groq',
+            'gpt-4o-mini':       'gpt4o_mini',
+            'claude-haiku':      'claude_haiku',
+            'xai':               'xai_grok',
           }
-          const serviceKey = serviceMap[usedProvider as string] || 'gemini_flash'
+          const serviceKey = serviceMap[usedProvider as string] || 'deepseek'
           const llmCost = calcLLMCost(serviceKey as any, inputTokens, outputTokens)
 
           await logUsage({
