@@ -80,7 +80,7 @@ ${truncated}`
       const outputTokens = Math.ceil(outputChars / 4)
 
       const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
-        'gemini-flash': 'gemini_flash',
+        'deepseek': 'gemini_flash',
         'gemini-flash-lite': 'gemini_flash_lite',
         'groq': 'gemini_flash',
         'gpt-4o-mini': 'gemini_flash',
