@@ -1,6 +1,6 @@
 // ============================================================
-// Cotton Candy — Multi-provider AI (Groq prioritized, Gemini last resort)
-// Order: Auto/Groq → GPT → Claude → Gemini Flash → Flash-Lite
+// Cotton Candy — Multi-provider AI (Groq prioritized, DeepSeek for Flash slot)
+// Order: Auto/Groq → GPT → Claude → DeepSeek → Gemini Flash-Lite
 // ============================================================
 
 export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
@@ -56,8 +56,8 @@ export const PROVIDER_META: Record<AIProvider, {
   proOnly?: boolean
 }> = {
   'gemini-flash': {
-    label: 'Gemini 2.5 Flash',
-    shortLabel: 'Gemini Flash',
+    label: 'DeepSeek V3',
+    shortLabel: 'DeepSeek',
     descEn: 'Handles very long lectures and nuanced topics.',
     descBm: 'Kendalikan kuliah panjang dan topik kompleks.',
     logoKey: 'gemini',
@@ -126,9 +126,6 @@ const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: st
   themes:            { type: 'array',  description: 'Recurring themes across responses' },
 }
 
-// Build a system prompt tailored to the recording type.
-// `sections` is the list of fields the AI should emit, in order.
-// `typeHint` is the type-specific guidance from RECORDING_TYPES.
 export function buildSystemPrompt(sections: string[], typeHint: string): string {
   const schemaLines = sections.map((s) => {
     const meta = SECTION_SCHEMA[s] || { type: 'array', description: 'list of items' }
@@ -172,7 +169,6 @@ Universal rules:
 - Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
 }
 
-// Default backwards-compat (for callers that don't pass type)
 export const SYSTEM_PROMPT = buildSystemPrompt(
   ['inferredTitle', 'summary', 'topics', 'keyPoints', 'formulas', 'questions'],
   'This is a generic recording.',
@@ -242,6 +238,39 @@ async function callGroq(userMessage: string, systemPrompt: string = SYSTEM_PROMP
   catch { throw new Error('Groq: malformed JSON') }
 }
 
+// ---------- DeepSeek V3 ----------
+async function callDeepSeek(userMessage: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY not configured')
+
+  const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0.2,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`DeepSeek ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const json = await res.json()
+  const content = json?.choices?.[0]?.message?.content
+  if (!content) throw new Error('DeepSeek: empty response')
+
+  try { return validateResult(JSON.parse(content)) }
+  catch { throw new Error('DeepSeek: malformed JSON') }
+}
+
 // ---------- Gemini ----------
 async function callGemini(userMessage: string, model: string, systemPrompt: string = SYSTEM_PROMPT): Promise<AISummary> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -275,7 +304,7 @@ async function callGemini(userMessage: string, model: string, systemPrompt: stri
   catch { throw new Error('Gemini: malformed JSON') }
 }
 
-// Retry helper — waits and retries once on transient errors (503, 429, network)
+// Retry helper
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   try {
     return await fn()
@@ -335,7 +364,7 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -352,59 +381,44 @@ async function callClaude(userMessage: string, systemPrompt: string = SYSTEM_PRO
   const content = json?.content?.[0]?.text
   if (!content) throw new Error('Claude: empty response')
 
-  // Claude may wrap in markdown — strip fences
   const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
   try { return validateResult(JSON.parse(clean)) }
   catch { throw new Error('Claude: malformed JSON') }
 }
 
-// Every single-provider call now has retry + auto-fallback.
-// User's chosen provider is attempted first, then fallback chain.
-// `systemPrompt` is type-aware (built via buildSystemPrompt).
-// `plan` gates GPT-4o mini + Claude Haiku (monthly/yearly only)
-// NOTE: Gemini currently 403 PERMISSION_DENIED — kept last in all chains
 export async function callAI(
   provider: AIProvider,
   userMessage: string,
   systemPrompt: string = SYSTEM_PROMPT,
   plan?: string,
 ): Promise<{ result: AISummary; usedProvider: string; fellBack: boolean }> {
-  // Plans allowed to use GPT + Claude
-  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'month'
+  const isProPlan = plan === 'month' || plan === 'year' || plan === 'student_pro'
 
-  // If user picks pro-only provider but not on pro plan — fallback to auto
   const effectiveProvider = (provider === 'gpt-4o-mini' || provider === 'claude-haiku') && !isProPlan
     ? 'auto'
     : provider
 
-  // Build all providers
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'gemini-flash',      fn: () => callGemini(userMessage, 'gemini-2.5-flash', systemPrompt) },
+    { name: 'gemini-flash',      fn: () => callDeepSeek(userMessage, systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
     { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
     { name: 'claude-haiku',      fn: () => callClaude(userMessage, systemPrompt) },
   ]
 
-  // Build chain: chosen provider first, Groq as stable fallback, Gemini last resort
   let chain: typeof allProviders
   if (effectiveProvider === 'gemini-flash') {
-    // User explicitly wants Gemini Flash — try it, fallback to Groq, then Flash-Lite
     chain = [allProviders[0], allProviders[1], allProviders[2]]
   } else if (effectiveProvider === 'groq') {
-    // Groq → GPT → Claude → Gemini (last)
     chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'gemini-flash-lite') {
-    // Flash-Lite → Groq → Flash
     chain = [allProviders[2], allProviders[1], allProviders[0]]
   } else if (effectiveProvider === 'gpt-4o-mini') {
-    // GPT → Groq → Gemini (last)
     chain = [allProviders[3], allProviders[1], allProviders[0], allProviders[2]]
   } else if (effectiveProvider === 'claude-haiku') {
-    // Claude → Groq → Gemini (last)
     chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
-    // 'auto' — Groq first (stable), GPT/Claude if available, Gemini last resort
+    // 'auto'
     chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
   }
 
