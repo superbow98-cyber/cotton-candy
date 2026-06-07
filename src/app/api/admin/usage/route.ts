@@ -1,6 +1,5 @@
 // src/app/api/admin/usage/route.ts
 // Admin-only — returns usage analytics
-
 import { NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/admin-server'
 import { createClient as createSupabase } from '@supabase/supabase-js'
@@ -23,20 +22,22 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const days = parseInt(url.searchParams.get('days') || '30', 10)
+  const filter = url.searchParams.get('filter') || 'all' // 'all' | 'stt' | 'summarize'
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
   const sb = admin()
 
-  // Total cost + breakdown by service
-  const { data: rows, error } = await sb
+  let query = sb
     .from('api_usage_log')
     .select('service, operation, units, cost_usd, created_at, user_id')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (filter === 'stt') query = query.eq('operation', 'transcribe')
+  else if (filter === 'summarize') query = query.eq('operation', 'summarize')
+
+  const { data: rows, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const all = rows || []
 
@@ -50,8 +51,8 @@ export async function GET(req: Request) {
 
   for (const r of all) {
     totalCost += Number(r.cost_usd) || 0
-    if ((r as any).operation === 'transcribe') totalAudioSec += Number(r.units) || 0
-    if ((r as any).operation === 'summarize') totalTokens += Number(r.units) || 0
+    if (r.operation === 'transcribe') totalAudioSec += Number(r.units) || 0
+    if (r.operation === 'summarize') totalTokens += Number(r.units) || 0
 
     if (!byService[r.service]) byService[r.service] = { cost: 0, calls: 0, units: 0 }
     byService[r.service].cost += Number(r.cost_usd) || 0
@@ -66,11 +67,12 @@ export async function GET(req: Request) {
     byDay[day] = (byDay[day] || 0) + (Number(r.cost_usd) || 0)
   }
 
-  // Top 10 spenders — fetch their email
+  // Top 10 spenders
   const topSpenders = Object.entries(byUser)
     .sort((a, b) => b[1].cost - a[1].cost)
     .slice(0, 10)
   const topUserIds = topSpenders.map(([id]) => id)
+
   let userEmails: Record<string, string> = {}
   if (topUserIds.length > 0) {
     const { data: profs } = await sb
@@ -80,13 +82,14 @@ export async function GET(req: Request) {
     userEmails = Object.fromEntries((profs || []).map((p: any) => [p.id, p.email]))
   }
 
-  // Build daily series sorted asc
+  // Daily series sorted asc
   const daily = Object.entries(byDay)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, cost]) => ({ date, cost: Number(cost.toFixed(4)) }))
 
   return NextResponse.json({
     days,
+    filter,
     since,
     totalCost: Number(totalCost.toFixed(4)),
     totalCalls: all.length,
