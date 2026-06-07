@@ -1476,16 +1476,16 @@ const finishLecture = async () => {
             <ProcessingLoader
               status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
               subStatus={lang === 'bm'
-                ? `Mengekstrak topik & ringkasan · ${PROVIDER_META[aiProvider].label}`
-                : `Extracting topics & summary · ${PROVIDER_META[aiProvider].label}`}
+                ? `Mengekstrak topik & ringkasan · ${(PROVIDER_META[aiProvider] ?? PROVIDER_META['auto']).label}`
+                : `Extracting topics & summary · ${(PROVIDER_META[aiProvider] ?? PROVIDER_META['auto']).label}`}
               lang={lang}
             />
           ) : (
             <SimpleLoader
               status={lang === 'bm' ? 'AI sedang menyusun nota anda…' : 'AI is organizing your notes…'}
               subStatus={lang === 'bm'
-                ? `Mengekstrak topik · ${PROVIDER_META[aiProvider].label}`
-                : `Extracting topics · ${PROVIDER_META[aiProvider].label}`}
+                ? `Mengekstrak topik · ${(PROVIDER_META[aiProvider] ?? PROVIDER_META['auto']).label}`
+                : `Extracting topics · ${(PROVIDER_META[aiProvider] ?? PROVIDER_META['auto']).label}`}
             />
           )}
         </div>
