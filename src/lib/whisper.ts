@@ -113,8 +113,13 @@ export async function transcribeOne(
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
 ): Promise<TranscribeResponse> {
   const form = new FormData()
-  const wavBlob = await convertToWav(audioBlob)
-  form.append('audio', wavBlob, 'chunk.wav')
+  // Skip client-side WAV conversion — server handles ffmpeg conversion.
+  // convertToWav() causes failures on Android Chrome & Safari (Web Audio API restrictions).
+  const ext = audioBlob.type.includes('mp4') ? 'mp4'
+             : audioBlob.type.includes('ogg') ? 'ogg'
+             : audioBlob.type.includes('wav') ? 'wav'
+             : 'webm'
+  form.append('audio', audioBlob, `chunk.${ext}`)
   // Only pass language if explicitly set (not 'auto')
   if (language && language !== 'auto') {
     form.append('language', language)
