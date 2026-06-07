@@ -20,6 +20,7 @@ interface DailyPoint {
 }
 interface UsageResponse {
   days: number
+  filter: string
   totalCost: number
   totalCalls: number
   totalAudioHours: number
@@ -31,29 +32,36 @@ interface UsageResponse {
 }
 
 const SERVICE_LABELS: Record<string, { label: string; emoji: string }> = {
-  groq_whisper_v3: { label: 'Whisper Large v3 (BM/Rojak)', emoji: '🎙️' },
+  groq_whisper_v3:    { label: 'Whisper Large v3 (BM/Rojak)', emoji: '🎙️' },
   groq_whisper_turbo: { label: 'Whisper Turbo (EN/zh/ta)', emoji: '⚡' },
-  gemini_flash: { label: 'Gemini Flash', emoji: '✨' },
-  gemini_flash_lite: { label: 'Gemini Flash Lite', emoji: '✨' },
-  xai_grok: { label: 'xAI Grok', emoji: '🧠' },
-  soniox_async: { label: 'Soniox Async (BM/Rojak file)', emoji: '🎯' },
-  soniox_streaming: { label: 'Soniox Live Stream (BM/Rojak)', emoji: '🌊' },
+  gemini_flash:       { label: 'Gemini Flash (legacy)', emoji: '✨' },
+  gemini_flash_lite:  { label: 'Gemini Flash Lite', emoji: '✨' },
+  deepseek:           { label: 'DeepSeek V3', emoji: '🐋' },
+  groq:               { label: 'Groq · Llama 3.3 70B', emoji: '⚡' },
+  gpt4o_mini:         { label: 'GPT-4o Mini', emoji: '🤖' },
+  claude_haiku:       { label: 'Claude Haiku', emoji: '🟠' },
+  xai_grok:           { label: 'xAI Grok', emoji: '🧠' },
+  soniox_async:       { label: 'Soniox Async (BM/Rojak)', emoji: '🎯' },
+  soniox_streaming:   { label: 'Soniox Live Stream', emoji: '🌊' },
 }
 
 function fmtUSD(n: number): string {
   return `$${n.toFixed(4)}`
 }
 
+type FilterType = 'all' | 'stt' | 'summarize'
+
 export default function AdminUsagePage() {
   const [data, setData] = useState<UsageResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
+  const [filter, setFilter] = useState<FilterType>('all')
   const [error, setError] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch(`/api/admin/usage?days=${days}`)
+      const res = await fetch(`/api/admin/usage?days=${days}&filter=${filter}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
       setData(j)
@@ -63,7 +71,8 @@ export default function AdminUsagePage() {
       setLoading(false)
     }
   }
-  useEffect(() => { load() }, [days])
+
+  useEffect(() => { load() }, [days, filter])
 
   const maxDaily = data?.daily.length ? Math.max(...data.daily.map(d => d.cost)) : 1
 
@@ -75,26 +84,40 @@ export default function AdminUsagePage() {
         textDecoration: 'none', marginBottom: 12, display: 'inline-block',
       }}>← Dashboard</Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.025em', margin: 0 }}>
           📊 Usage & Cost
         </h1>
+        {/* Days picker */}
         <div style={{ display: 'flex', gap: 6 }}>
           {[7, 30, 90].map(d => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              style={{
-                padding: '6px 12px',
-                background: days === d ? '#1d1d1f' : '#fff',
-                color: days === d ? '#fff' : '#1d1d1f',
-                border: '0.5px solid rgba(0,0,0,0.14)',
-                borderRadius: 100, fontSize: 12,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >{d}d</button>
+            <button key={d} onClick={() => setDays(d)} style={{
+              padding: '6px 12px',
+              background: days === d ? '#1d1d1f' : '#fff',
+              color: days === d ? '#fff' : '#1d1d1f',
+              border: '0.5px solid rgba(0,0,0,0.14)',
+              borderRadius: 100, fontSize: 12,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>{d}d</button>
           ))}
         </div>
+      </div>
+
+      {/* Filter pills */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {(['all', 'stt', 'summarize'] as FilterType[]).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: '6px 14px',
+            background: filter === f ? '#1d1d1f' : '#fff',
+            color: filter === f ? '#fff' : '#1d1d1f',
+            border: '0.5px solid rgba(0,0,0,0.14)',
+            borderRadius: 100, fontSize: 12, fontWeight: filter === f ? 600 : 400,
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'all 0.15s',
+          }}>
+            {f === 'all' ? 'All' : f === 'stt' ? '🎙 STT only' : '🤖 AI Summary only'}
+          </button>
+        ))}
       </div>
 
       {loading && <div style={{ padding: 24, textAlign: 'center', color: 'rgba(29,29,31,0.5)' }}>Loading…</div>}
@@ -107,7 +130,7 @@ export default function AdminUsagePage() {
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12,
             marginBottom: 24,
           }}>
-            <SummaryCard label="Total cost" value={fmtUSD(data.totalCost)} sub={`${days} days`} />
+            <SummaryCard label="Total cost" value={fmtUSD(data.totalCost)} sub={`${days}d · ${filter === 'all' ? 'all ops' : filter === 'stt' ? 'STT only' : 'AI summary only'}`} />
             <SummaryCard label="API calls" value={data.totalCalls.toLocaleString()} sub="transactions" />
             <SummaryCard label="Audio hours" value={data.totalAudioHours.toFixed(1)} sub="transcribed" />
             <SummaryCard label="Active users" value={data.uniqueUsers.toString()} sub="unique" />
@@ -130,7 +153,11 @@ export default function AdminUsagePage() {
                       style={{
                         flex: 1,
                         height: `${maxDaily > 0 ? (d.cost / maxDaily) * 100 : 0}%`,
-                        background: 'linear-gradient(to top, #5A8FF5, #87B4FF)',
+                        background: filter === 'stt'
+                          ? 'linear-gradient(to top, #34A853, #6FCF97)'
+                          : filter === 'summarize'
+                            ? 'linear-gradient(to top, #D4537E, #FFB7C5)'
+                            : 'linear-gradient(to top, #5A8FF5, #87B4FF)',
                         borderRadius: '3px 3px 0 0',
                         minHeight: d.cost > 0 ? 2 : 0,
                         cursor: 'pointer',
@@ -154,6 +181,9 @@ export default function AdminUsagePage() {
                 </tr>
               </thead>
               <tbody>
+                {data.byService.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: 14, textAlign: 'center', color: 'rgba(29,29,31,0.5)' }}>No data</td></tr>
+                )}
                 {data.byService.map(s => {
                   const meta = SERVICE_LABELS[s.service] || { label: s.service, emoji: '•' }
                   const isAudio = s.service.startsWith('groq_whisper') || s.service.startsWith('soniox')
@@ -216,9 +246,8 @@ export default function AdminUsagePage() {
             fontSize: 12, color: 'rgba(29,29,31,0.6)',
             lineHeight: 1.5,
           }}>
-            💡 <strong>Note:</strong> Costs estimated using current Groq + Gemini pricing.
-            Real Groq invoice may differ slightly due to minimum charges.
-            Compare with <a href="https://console.groq.com/billing" target="_blank" rel="noreferrer" style={{ color: '#5A8FF5' }}>Groq billing dashboard</a> for actual.
+            💡 <strong>Note:</strong> Costs estimated using current provider pricing (Soniox, Groq, DeepSeek, Claude, GPT).
+            Compare with each provider's billing dashboard for actual charges.
           </div>
         </>
       )}
