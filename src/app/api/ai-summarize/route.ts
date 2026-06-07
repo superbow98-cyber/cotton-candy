@@ -79,17 +79,18 @@ ${truncated}`
       const inputTokens = Math.ceil(inputChars / 4)
       const outputTokens = Math.ceil(outputChars / 4)
 
-      const serviceMap: Record<string, 'gemini_flash' | 'gemini_flash_lite' | 'xai_grok'> = {
-        'deepseek': 'gemini_flash',
-        'gemini-flash-lite': 'gemini_flash_lite',
-        'groq': 'gemini_flash',
-        'gpt-4o-mini': 'gemini_flash',
-        'claude-haiku': 'gemini_flash',
-        'xai': 'xai_grok',
-      }
-      const serviceKey = serviceMap[usedProvider as string] || 'gemini_flash'
-      const cost = calcLLMCost(serviceKey as any, inputTokens, outputTokens)
-
+      // ✅ SELEPAS
+const serviceMap: Record<string, Parameters<typeof calcLLMCost>[0]> = {
+  'deepseek':          'deepseek',
+  'gemini-flash':      'deepseek',
+  'gemini-flash-lite': 'gemini_flash_lite',
+  'groq':              'groq',
+  'gpt-4o-mini':       'gpt4o_mini',
+  'claude-haiku':      'claude_haiku',
+  'xai':               'xai_grok',
+}
+const serviceKey = serviceMap[usedProvider as string] || 'deepseek'
+const cost = calcLLMCost(serviceKey, inputTokens, outputTokens)
       await logUsage({
         userId: user.id,
         service: serviceKey,
