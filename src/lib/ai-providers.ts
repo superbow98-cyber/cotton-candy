@@ -399,7 +399,7 @@ export async function callAI(
     : provider
 
   const allProviders: Array<{ name: string; fn: () => Promise<AISummary> }> = [
-    { name: 'gemini-flash',      fn: () => callDeepSeek(userMessage, systemPrompt) },
+    { name: 'DeepSeek V3',      fn: () => callDeepSeek(userMessage, systemPrompt) },
     { name: 'groq',              fn: () => callGroq(userMessage, systemPrompt) },
     { name: 'gemini-flash-lite', fn: () => callGemini(userMessage, 'gemini-2.5-flash-lite', systemPrompt) },
     { name: 'gpt-4o-mini',      fn: () => callGPT(userMessage, systemPrompt) },
