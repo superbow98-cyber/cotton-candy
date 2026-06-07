@@ -54,7 +54,7 @@ const STORAGE_KEY = 'cc:recLang'
 
 // ---------------- AI LOGO (reusable) ----------------
 function AILogo({ provider, size = 18 }: { provider: AIProvider; size?: number }) {
-  const meta = PROVIDER_META[provider]
+  const meta = PROVIDER_META[provider] ?? PROVIDER_META['auto']
   const logoKey = meta.logoKey
   const wrapStyle: React.CSSProperties = {
     width: size + 12, height: size + 12, borderRadius: 10,
