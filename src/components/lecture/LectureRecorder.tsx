@@ -146,7 +146,7 @@ function AIChipPicker({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
 
-  const meta = PROVIDER_META[value]
+  const meta = PROVIDER_META[value] ?? PROVIDER_META['auto']
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
