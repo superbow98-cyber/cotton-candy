@@ -144,8 +144,8 @@ function AIChipPicker({
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // free, day pass, student_pro cannot use GPT + Claude
-  const isProPlan = plan === 'pro' || plan === 'max' || plan === 'year' || plan === 'month'
+  // FIX v20.14: plan names lama ('pro','max') dah deprecated — guna 'month','year','student_pro'
+  const isProPlan = plan === 'month' || plan === 'year' || plan === 'student_pro'
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -275,16 +275,13 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [recording, setRecording] = useState(false)
 
   // v56: Opt-in preferences from settings
-  // Defaults: mic meter OFF, knowledge facts ON, study tips ON
   const [showMicMeter, setShowMicMeter] = useState(false)
   const [showFactsLoader, setShowFactsLoader] = useState(true)
   const [showKnowledgeFacts, setShowKnowledgeFacts] = useState(true)
   useEffect(() => {
     try {
       setShowMicMeter(localStorage.getItem('cc-show-mic-meter') === 'on')
-      // Facts loader default ON (only OFF if user explicitly disabled)
       setShowFactsLoader(localStorage.getItem('cc-show-facts-loader') !== 'off')
-      // Knowledge facts default ON (only OFF if user explicitly disabled)
       setShowKnowledgeFacts(localStorage.getItem('cc-show-knowledge') !== 'off')
     } catch {}
   }, [])
@@ -299,9 +296,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [recordingLang, setRecordingLang] = useState<'auto' | 'ms' | 'en' | 'zh' | 'ta'>('auto')
   const [aiUsedProvider, setAiUsedProvider] = useState<string | null>(null)
   const [aiProvider, setAiProvider] = useState<AIProvider>(DEFAULT_PROVIDER)
-  const [recLang, setRecLang] = useState<string>('ms-MY')  // FIX: default ms-MY for rojak
+  const [recLang, setRecLang] = useState<string>('ms-MY')
 
-  // FIX: detect Safari for live preview notice
   const isSafari = typeof navigator !== 'undefined'
     && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 
@@ -312,9 +308,14 @@ export default function LectureRecorder({ id }: { id: string }) {
   const startRef = useRef<number>(0)
   const accumRef = useRef<number>(0)
   const tickRef = useRef<any>(null)
-  const recLangRef = useRef<string>('ms-MY')  // FIX: default ms-MY
+  const recLangRef = useRef<string>('ms-MY')
   const lectureRef = useRef<Lecture | null>(null)
   const aiSectionRef = useRef<HTMLDivElement | null>(null)
+
+  // v20.14: Refs untuk pastikan autosave dan finishLecture dapat nilai terkini
+  // (fix stale closure bug — punca clean segments 3→2)
+  const linesRef = useRef<Line[]>([])
+  const cleanSegmentsRef = useRef<CleanSegment[]>([])
 
   // --- Whisper enhancement (MediaRecorder parallel, no storage) ---
   const mediaRecRef = useRef<MediaRecorder | null>(null)
@@ -328,7 +329,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [usage, setUsage] = useState<AudioUsageInfo | null>(null)
   const [capReachedDuringRec, setCapReachedDuringRec] = useState(false)
 
-  // Auto-scroll to AI section whenever loader or result appears
   useEffect(() => {
     if (aiProcessing || aiResult) {
       setTimeout(() => {
@@ -337,14 +337,12 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }, [aiProcessing, aiResult])
 
-  // Load preferred recording language
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved && RECOGNITION_LANGS.some(l => l.code === saved)) {
         setRecLang(saved); recLangRef.current = saved
       } else {
-        // FIX: default ms-MY for rojak BM+EN detection
         const initial = 'ms-MY'
         setRecLang(initial); recLangRef.current = initial
       }
@@ -354,10 +352,9 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }, [lang])
 
-  // FIX: Sync recLang (Web Speech) ikut recordingLang dropdown
   useEffect(() => {
     const map: Record<string, string> = {
-      'auto': 'ms-MY',  // rojak → ms-MY paling baik untuk BM+EN mix
+      'auto': 'ms-MY',
       'ms':   'ms-MY',
       'en':   'en-US',
       'zh':   'zh-CN',
@@ -369,7 +366,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     try { localStorage.setItem(STORAGE_KEY, mapped) } catch {}
   }, [recordingLang])
 
-  // Fetch current audio usage from server
   useEffect(() => {
     const fetchUsage = async () => {
       try {
@@ -383,7 +379,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     fetchUsage()
   }, [])
 
-  // Load lecture + AI provider preference
   useEffect(() => {
     (async () => {
       const sb = createClient()
@@ -393,11 +388,10 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (!data) { router.replace('/dashboard/lectures'); return }
       const lec = data as Lecture
       setLecture(lec); lectureRef.current = lec
-      // v59: Load existing clean segments
       if (Array.isArray(lec.clean_segments)) {
         setCleanSegments(lec.clean_segments)
+        cleanSegmentsRef.current = lec.clean_segments
       }
-      // v60: Load edited transcript + images
       if (lec.clean_transcript_edited) {
         setEditedText(lec.clean_transcript_edited)
       }
@@ -413,6 +407,7 @@ export default function LectureRecorder({ id }: { id: string }) {
           if (text) parsed.push({ id: `r${idx++}`, t: 0, text })
         }
         setLines(parsed)
+        linesRef.current = parsed
       }
       setElapsed(lec.duration_seconds || 0)
       accumRef.current = lec.duration_seconds || 0
@@ -423,7 +418,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         } catch {}
       }
 
-      // Priority: lecture.ai_provider > profile.ai_provider > DEFAULT
       const { data: prof } = await sb.from('profiles').select('plan, ai_provider').eq('id', user.id).maybeSingle()
       setPlan((prof?.plan || 'free') as keyof typeof PLANS)
       const effective: AIProvider =
@@ -434,7 +428,10 @@ export default function LectureRecorder({ id }: { id: string }) {
     })()
   }, [id, router])
 
-  // Save AI provider to lecture row whenever user changes it
+  // v20.14: Sync refs setiap kali state berubah
+  useEffect(() => { linesRef.current = lines }, [lines])
+  useEffect(() => { cleanSegmentsRef.current = cleanSegments }, [cleanSegments])
+
   const updateAIProvider = async (newProvider: AIProvider) => {
     setAiProvider(newProvider)
     if (!lecture) return
@@ -444,7 +441,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     } catch (e) { console.error(e) }
   }
 
-  // Keyboard shortcuts for language swap
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
@@ -512,9 +508,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
-  // Start MediaRecorder for Whisper enhancement. Sets audioCaptureOk for UI indicator.
-  // IMPORTANT: On Chrome Android, Web Speech API and MediaRecorder can compete for mic.
-  // We explicitly grab getUserMedia FIRST, hold the stream, then let Web Speech start.
   const startAudioCapture = async (): Promise<boolean> => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -528,12 +521,8 @@ export default function LectureRecorder({ id }: { id: string }) {
         return false
       }
 
-      // v56.4: Default enhancement OFF (was causing mobile audio bugs)
-      // User must explicitly opt-in via Settings → Mic Enhancement
       const enhancementOn = (() => {
-        try {
-          return localStorage.getItem('cc-mic-enhance') === 'on'
-        } catch { return false }
+        try { return localStorage.getItem('cc-mic-enhance') === 'on' } catch { return false }
       })()
       const gainBoost = (() => {
         try {
@@ -542,7 +531,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         } catch { return 1.0 }
       })()
 
-      // Request mic with browser-native enhancement (echo/noise/AGC)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: enhancementOn,
@@ -552,9 +540,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       })
       mediaStreamRef.current = stream
 
-      // Optional: Web Audio gain boost (extra amplification before MediaRecorder)
-      // Graceful fallback — if anything fails, use raw stream
-      // v56.1 hotfix: Only create AudioContext if we ACTUALLY need processing
       let processedStream = stream
       const needsEnhancement = enhancementOn && gainBoost !== 1.0
       const needsAnalyser = (() => {
@@ -569,7 +554,6 @@ export default function LectureRecorder({ id }: { id: string }) {
             audioCtxRef.current = audioCtx
             const source = audioCtx.createMediaStreamSource(stream)
 
-            // Analyser node — only if user opted in to mic meter
             if (needsAnalyser) {
               const analyserNode = audioCtx.createAnalyser()
               analyserNode.fftSize = 256
@@ -582,18 +566,15 @@ export default function LectureRecorder({ id }: { id: string }) {
             if (needsEnhancement) {
               const gain = audioCtx.createGain()
               gain.gain.value = gainBoost
-
               const compressor = audioCtx.createDynamicsCompressor()
               compressor.threshold.value = -24
               compressor.knee.value = 30
               compressor.ratio.value = 4
               compressor.attack.value = 0.003
               compressor.release.value = 0.25
-
               const hipass = audioCtx.createBiquadFilter()
               hipass.type = 'highpass'
               hipass.frequency.value = 80
-
               const dest = audioCtx.createMediaStreamDestination()
               source.connect(hipass)
               hipass.connect(gain)
@@ -615,7 +596,6 @@ export default function LectureRecorder({ id }: { id: string }) {
 
       audioChunksRef.current = []
 
-      // Pick best supported mime type — Chrome Android prefers webm/opus
       const mimeCandidates = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -623,7 +603,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         'audio/ogg;codecs=opus',
       ]
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
-
       const rec = new MediaRecorder(processedStream, mime ? { mimeType: mime } : undefined)
 
       rec.ondataavailable = (e) => {
@@ -641,7 +620,6 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAudioCaptureOk(true)
       }
 
-      // 9-second timeslice — smaller chunks avoid Soniox corruption
       rec.start(9000)
       mediaRecRef.current = rec
       return true
@@ -657,7 +635,6 @@ export default function LectureRecorder({ id }: { id: string }) {
     return new Promise((resolve) => {
       const rec = mediaRecRef.current
       if (!rec || rec.state === 'inactive') {
-        // Cleanup stream + audio context
         mediaStreamRef.current?.getTracks().forEach(t => t.stop())
         mediaStreamRef.current = null
         if (audioCtxRef.current) {
@@ -694,24 +671,19 @@ export default function LectureRecorder({ id }: { id: string }) {
       if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
       setRecording(false)
     } else {
-      // v57.3: Resume mode — DON'T clear AI summary, just append new audio
       const isResume = lines.length > 0 || aiResult !== null
       if (!isResume) {
-        // Fresh recording — clear AI state
         setAiResult(null); setAiError(null); setEnhanceError(null); setAiFellBack(false)
       } else {
         console.log('[toggle] RESUME mode — keeping existing transcript + AI summary')
       }
       setAudioCaptureOk(null)
 
-      // 1. Start audio capture FIRST — grabs mic exclusively for MediaRecorder
       const audioOk = await startAudioCapture()
       console.log('[toggle] audio capture ready:', audioOk)
 
-      // 2. Small delay to let mic settle
       await new Promise(r => setTimeout(r, 150))
 
-      // 3. Start Web Speech API for live preview (messy but instant)
       startRef.current = Date.now()
       recRef.current = startRecognition(recLangRef.current)
 
@@ -719,15 +691,13 @@ export default function LectureRecorder({ id }: { id: string }) {
         const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
         setElapsed(nowElapsed)
 
-        // Check per-lecture minute cap (plan limit)
         const perLectureMax = PLANS[plan].minutesPerLecture * 60
         if (nowElapsed >= perLectureMax) {
           console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-stopping')
-          toggle()  // stops recording
+          toggle()
           return
         }
 
-        // Check global audio cap (remaining audio budget)
         if (usage && usage.allowed) {
           const projected = (usage.usedSeconds || 0) + nowElapsed
           if (projected >= usage.capSeconds) {
@@ -741,42 +711,54 @@ export default function LectureRecorder({ id }: { id: string }) {
     }
   }
 
+  // v20.14: Autosave guna refs (bukan closure) — fix stale closure bug
   useEffect(() => {
     if (!recording) return
-    const h = setInterval(() => save(false), 15000)
+    const h = setInterval(
+      () => save(false, cleanSegmentsRef.current, linesRef.current),
+      15000,
+    )
     return () => clearInterval(h)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording, lines, elapsed, cleanSegments])
+  }, [recording])
 
   const linesToMd = (ll: Line[]) => ll.map((l) => `- ${l.text}`).join('\n')
 
-  // v59: Build clean transcript markdown from clean_segments (used by AI)
   const cleanSegmentsToMd = (segs: CleanSegment[]) =>
     segs.map(s => s.text.trim()).filter(Boolean).join('\n\n')
 
-  // v59: Format seconds → MM:SS
   const fmtTime = (sec: number) => {
     const m = Math.floor(sec / 60)
     const s = Math.floor(sec % 60)
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  const save = async (finish: boolean, segmentsOverride?: CleanSegment[]) => {
+  // v20.14: Tambah linesOverride param — fix stale closure dalam autosave dan finishLecture
+  const save = async (finish: boolean, segmentsOverride?: CleanSegment[], linesOverride?: Line[]) => {
     if (!lecture) return
     setSaving(true)
     try {
-      // v59: Two markdowns
-      const rawMd = linesToMd(lines)              // Web Speech messy
-      const cleanMd = cleanSegmentsToMd(cleanSegments)  // Soniox clean by timeline
-      // Use clean if available; fallback to raw
-      const md = cleanMd.length > 20 ? cleanMd : rawMd
+      const effectiveLines = linesOverride ?? lines
+      const effectiveSegments = segmentsOverride ?? cleanSegments
+
+      const rawMd = linesToMd(effectiveLines)
+      const cleanMd = cleanSegmentsToMd(effectiveSegments)
+
+      // AI summarize priority: clean (Soniox) → raw (live) → ''
+      // Kalau semua engine rosak, AI masih dapat live transcript
+      const md = cleanMd.trim().length > 20
+        ? cleanMd
+        : rawMd.trim().length > 0
+          ? rawMd
+          : ''
+
       const wordCount = md.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
       const keywords = extractKeywords(md, 12)
       const sb = createClient()
       await sb.from('lectures').update({
         transcript_md: md,
         raw_transcript_md: rawMd,
-        clean_segments: segmentsOverride ?? cleanSegments,
+        clean_segments: effectiveSegments,
         word_count: wordCount, duration_seconds: elapsed, keywords,
         status: finish ? 'finished' : 'recording',
         ended_at: finish ? new Date().toISOString() : null,
@@ -784,7 +766,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       }).eq('id', lecture.id)
       const updated = {
         ...lecture, transcript_md: md, raw_transcript_md: rawMd,
-        clean_segments: segmentsOverride ?? cleanSegments,
+        clean_segments: effectiveSegments,
         keywords, word_count: wordCount, duration_seconds: elapsed,
       }
       setLecture(updated); lectureRef.current = updated
@@ -808,13 +790,10 @@ export default function LectureRecorder({ id }: { id: string }) {
         setAiUsedProvider(json.usedProvider || null)
         setAiFellBack(!!json.fellBack)
 
-        // v58.1: ALWAYS generate mindmap (regenerate even if exists)
         if (json.data) {
           try {
             const summary = json.data as AISummary
             const branches: MindMapBranch[] = []
-
-            // Take up to 6 topics for branches
             const topicLimit = Math.min(6, summary.topics?.length || 0)
             for (let i = 0; i < topicLimit; i++) {
               const topic = summary.topics[i]
@@ -823,34 +802,23 @@ export default function LectureRecorder({ id }: { id: string }) {
                 : undefined
               branches.push({ title: topic, subtitle })
             }
-
-            // v58.1: Fallback — if no topics, derive from key points
             if (branches.length === 0 && summary.keyPoints && summary.keyPoints.length > 0) {
               const kpLimit = Math.min(6, summary.keyPoints.length)
               for (let i = 0; i < kpLimit; i++) {
-                branches.push({
-                  title: truncate(summary.keyPoints[i], 28),
-                  subtitle: undefined,
-                })
+                branches.push({ title: truncate(summary.keyPoints[i], 28), subtitle: undefined })
               }
             }
-
-            // v58.1: Use AI inferredTitle as center, fallback graceful
             const centerLabel = summary.inferredTitle
               || lecture.title
               || (lang === 'bm' ? 'Topik Utama' : 'Main Topic')
-
             const mindmap = {
               center: centerLabel,
               branches: branches.length > 0
                 ? branches
                 : [{ title: centerLabel, subtitle: truncate(summary.summary || '', 40) }],
             }
-
             const sb = createClient()
-            await sb.from('lectures').update({
-              mindmap_json: mindmap,
-            }).eq('id', lecture.id)
+            await sb.from('lectures').update({ mindmap_json: mindmap }).eq('id', lecture.id)
             const updated = { ...lecture, mindmap_json: mindmap }
             setLecture(updated); lectureRef.current = updated
           } catch (e) {
@@ -862,7 +830,7 @@ export default function LectureRecorder({ id }: { id: string }) {
     finally { setAiProcessing(false) }
   }
 
-const finishLecture = async () => {
+  const finishLecture = async () => {
     if (recording) {
       stopRecognition()
       accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
@@ -870,27 +838,21 @@ const finishLecture = async () => {
       setRecording(false)
     }
 
-    // Stop audio capture and collect chunks
     const chunks = await stopAudioCapture()
 
-    // v57.3: Determine if this is RESUME (existing transcript) or FRESH
     const isResume = lines.length > 0
     if (!isResume) {
-      // Fresh recording — clear AI state for regeneration
       setAiResult(null)
       setAiError(null)
       setAiUsedProvider(null)
     }
-    // Always clear enhance error
     setEnhanceError(null)
 
-    // --- Step 1: enhance transcript with Whisper/Soniox-async (server-side routing) ---
-    let finalSegments: CleanSegment[] = cleanSegments
+    let finalSegments: CleanSegment[] = cleanSegmentsRef.current
     if (chunks.length > 0) {
       setEnhancing(true)
       setEnhanceProgress({ done: 0, total: 1 })
       try {
-        // Gabung semua chunks jadi satu Blob yang valid (fix WebM corrupt)
         const mime = chunks[0]?.type || 'audio/webm'
         const combinedBlob = new Blob(chunks, { type: mime })
 
@@ -901,8 +863,9 @@ const finishLecture = async () => {
           const combined = result.text?.trim() || ''
 
           if (combined.length > 20) {
-            const segmentStart = isResume && cleanSegments.length > 0
-              ? Math.max(...cleanSegments.map(s => s.end))
+            const currentSegs = cleanSegmentsRef.current
+            const segmentStart = isResume && currentSegs.length > 0
+              ? Math.max(...currentSegs.map(s => s.end))
               : 0
             const segmentEnd = elapsed
             const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
@@ -914,7 +877,7 @@ const finishLecture = async () => {
               language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
               created_at: new Date().toISOString(),
             }
-            finalSegments = [...cleanSegments, newSegment]
+            finalSegments = [...currentSegs, newSegment]
             setCleanSegments(finalSegments)
 
             const whisperLines = whisperTextToLines(combined, elapsed)
@@ -951,10 +914,11 @@ const finishLecture = async () => {
       }
     }
 
-    // --- Step 2: save + run AI ---
+    // v20.14: Hantar linesRef.current supaya save() dapat live lines terkini
     setAiProcessing(true)
     try {
-      await save(true, finalSegments)
+      const currentLines = linesRef.current.length > 0 ? linesRef.current : lines
+      await save(true, finalSegments, currentLines)
       await runAI()
     } catch (e: any) {
       setAiError(e.message || 'Failed')
@@ -962,9 +926,7 @@ const finishLecture = async () => {
     }
   }
 
-  // v60: Edit transcript + image upload
   const startEdit = () => {
-    // Initialize editor with existing edited text OR segments joined
     const initial = editedText
       || cleanSegments.map(s => s.text).join('\n\n')
       || ''
@@ -986,7 +948,6 @@ const finishLecture = async () => {
         throw new Error(data.error || 'Save failed')
       }
       setIsEditing(false)
-      // Update local lecture
       const updated = { ...lecture, clean_transcript_edited: editedText }
       setLecture(updated); lectureRef.current = updated
     } catch (e: any) {
@@ -1054,7 +1015,6 @@ const finishLecture = async () => {
 
   const exportMd = () => {
     if (!lecture) return
-    // v60: Pass full lecture (with clean_transcript_edited, transcript_images) + AI summary
     const lec = { ...lecture, clean_transcript_edited: editedText || lecture.clean_transcript_edited, transcript_images: transcriptImages }
     const md = lectureToMarkdown(lec, aiResult || undefined)
     const title = aiResult?.inferredTitle || lecture.title || 'lecture'
@@ -1090,7 +1050,7 @@ const finishLecture = async () => {
         </div>
       </div>
 
-      {/* AUTO-DETECT LANGUAGE BANNER (replaces manual pills) */}
+      {/* AUTO-DETECT LANGUAGE BANNER */}
       <div style={{
         background: '#fff',
         border: '0.5px solid rgba(0,0,0,0.06)',
@@ -1138,7 +1098,7 @@ const finishLecture = async () => {
         )}
       </div>
 
-      {/* AUDIO USAGE BAR — shows remaining cap for current plan */}
+      {/* AUDIO USAGE BAR */}
       {usage && (
         <div style={{
           background: usage.percentUsed >= 90 ? 'rgba(229,57,53,0.04)'
@@ -1209,7 +1169,7 @@ const finishLecture = async () => {
         </div>
       )}
 
-      {/* CAP REACHED BANNER — shown when recording auto-stopped */}
+      {/* CAP REACHED BANNER */}
       {capReachedDuringRec && (
         <div style={{
           background: 'linear-gradient(135deg, #FDE8E8, #fff)',
@@ -1250,7 +1210,7 @@ const finishLecture = async () => {
         </div>
       )}
 
-      {/* RECORDER CARD — record | [timer + AI chip] | finish */}
+      {/* RECORDER CARD */}
       <div style={{
         background: '#fff', borderRadius: 24, padding: 22,
         border: `1px solid ${s.border}`, marginBottom: 18,
@@ -1266,7 +1226,6 @@ const finishLecture = async () => {
           </div>
         )}
 
-        {/* FREE TIER LIMIT BANNER (v31) */}
         {plan === 'free' && !recording && lines.length === 0 && (
           <div style={{
             background: 'rgba(90, 143, 245, 0.08)',
@@ -1284,7 +1243,6 @@ const finishLecture = async () => {
           </div>
         )}
 
-        {/* LANGUAGE PICKER (v29) — dropdown, default rojak */}
         {!recording && lines.length === 0 && (
           <div style={{ marginBottom: 16 }}>
             <label style={{
@@ -1339,7 +1297,6 @@ const finishLecture = async () => {
               {recording ? '■' : '●'}
             </button>
 
-            {/* Stacked: time + AI chip below */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
               <div>
                 <div style={{
@@ -1374,7 +1331,6 @@ const finishLecture = async () => {
                 </div>
               </div>
 
-              {/* AI chip — under timer, now with plan prop */}
               <AIChipPicker
                 value={aiProvider}
                 onChange={updateAIProvider}
@@ -1395,7 +1351,6 @@ const finishLecture = async () => {
           </Button>
         </div>
 
-        {/* FIX: Safari live preview notice */}
         {isSafari && recording && (
           <div style={{
             marginTop: 10,
@@ -1410,23 +1365,16 @@ const finishLecture = async () => {
         )}
       </div>
 
-      {/* v56: LIVE MIC LEVEL METER (opt-in via settings) */}
       {recording && analyser && showMicMeter && (
         <div className="fade-in" style={{ marginBottom: 12 }}>
-          <MicLevelMeter
-            analyser={analyser}
-            active={recording}
-            lang={lang}
-          />
+          <MicLevelMeter analyser={analyser} active={recording} lang={lang} />
         </div>
       )}
 
-      {/* v56b: UNIVERSAL KNOWLEDGE FACTS (opt-in, during recording) */}
       {recording && showKnowledgeFacts && (
         <KnowledgeFacts active={recording} lang={lang} />
       )}
 
-      {/* WHISPER ENHANCE LOADER */}
       {enhancing && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
           {showFactsLoader ? (
@@ -1434,9 +1382,7 @@ const finishLecture = async () => {
               status={lang === 'bm'
                 ? `Sedang menulis transkrip…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`
                 : `Transcribing your audio…${enhanceProgress && enhanceProgress.total > 1 ? ` (${enhanceProgress.done}/${enhanceProgress.total})` : ''}`}
-              subStatus={lang === 'bm'
-                ? 'AI sedang dengar dengan teliti'
-                : 'AI is listening carefully'}
+              subStatus={lang === 'bm' ? 'AI sedang dengar dengan teliti' : 'AI is listening carefully'}
               lang={lang}
             />
           ) : (
@@ -1450,7 +1396,6 @@ const finishLecture = async () => {
         </div>
       )}
 
-      {/* WHISPER ENHANCE ERROR (non-blocking — we fall back to Web Speech) */}
       {enhanceError && !enhancing && (
         <div style={{
           background: '#fff9e6',
@@ -1466,10 +1411,8 @@ const finishLecture = async () => {
         </div>
       )}
 
-      {/* AI SECTION (processing / error / result) — wrapped for scroll target */}
       <div ref={aiSectionRef} style={{ scrollMarginTop: 16 }}>
 
-      {/* AI PROCESSING */}
       {aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
           {showFactsLoader ? (
@@ -1492,107 +1435,49 @@ const finishLecture = async () => {
       )}
 
       <style jsx global>{`
-        @keyframes cc-spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes cc-slide {
-          0%   { left: -40%; }
-          100% { left: 100%; }
-        }
-        @keyframes cc-whisper-spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes cc-whisper-slide {
-          0%   { left: -40%; width: 40%; }
-          100% { left: 100%; width: 40%; }
-        }
-        @keyframes cc-pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%      { opacity: 0.5; transform: scale(0.85); }
-        }
-        /* v58.2: Cotton candy cloud cursor */
-        .cc-cloud-cursor {
-          display: inline-block;
-          position: relative;
-          width: 32px;
-          height: 16px;
-          vertical-align: middle;
-          margin-left: 4px;
-        }
-        .cc-cloud-puff {
-          position: absolute;
-          border-radius: 50%;
-          animation: cc-cloud-pulse 1.4s ease-in-out infinite;
-        }
-        .cc-puff-1 {
-          width: 12px; height: 12px;
-          background: #F4C0D1;
-          top: 2px; left: 0;
-          animation-delay: 0s;
-        }
-        .cc-puff-2 {
-          width: 14px; height: 14px;
-          background: #CECBF6;
-          top: 0; left: 9px;
-          animation-delay: 0.2s;
-        }
-        .cc-puff-3 {
-          width: 11px; height: 11px;
-          background: #B5D4F4;
-          top: 3px; left: 19px;
-          animation-delay: 0.4s;
-        }
-        @keyframes cc-cloud-pulse {
-          0%, 100% { transform: scale(0.85); opacity: 0.7; }
-          50%      { transform: scale(1.15); opacity: 1; }
-        }
+        @keyframes cc-spin { to { transform: rotate(360deg); } }
+        @keyframes cc-slide { 0% { left: -40%; } 100% { left: 100%; } }
+        @keyframes cc-whisper-spin { to { transform: rotate(360deg); } }
+        @keyframes cc-whisper-slide { 0% { left: -40%; width: 40%; } 100% { left: 100%; width: 40%; } }
+        @keyframes cc-pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } }
+        .cc-cloud-cursor { display: inline-block; position: relative; width: 32px; height: 16px; vertical-align: middle; margin-left: 4px; }
+        .cc-cloud-puff { position: absolute; border-radius: 50%; animation: cc-cloud-pulse 1.4s ease-in-out infinite; }
+        .cc-puff-1 { width: 12px; height: 12px; background: #F4C0D1; top: 2px; left: 0; animation-delay: 0s; }
+        .cc-puff-2 { width: 14px; height: 14px; background: #CECBF6; top: 0; left: 9px; animation-delay: 0.2s; }
+        .cc-puff-3 { width: 11px; height: 11px; background: #B5D4F4; top: 3px; left: 19px; animation-delay: 0.4s; }
+        @keyframes cc-cloud-pulse { 0%, 100% { transform: scale(0.85); opacity: 0.7; } 50% { transform: scale(1.15); opacity: 1; } }
       `}</style>
 
-      {/* AI ERROR */}
       {aiError && !aiProcessing && (
         <div style={{
           background: '#FDE8E8', padding: 14, borderRadius: 14,
           border: '1px solid #F4B4B4', marginBottom: 14, fontSize: 13, color: '#B94141',
         }}>
           ⚠ {aiError}
-          <button
-            onClick={runAI}
-            style={{
-              marginLeft: 10, padding: '4px 12px',
-              background: '#B94141', color: '#fff',
-              border: 'none', borderRadius: 999,
-              fontSize: 12, cursor: 'pointer', fontWeight: 600,
-            }}
-          >{lang === 'bm' ? 'Cuba lagi' : 'Retry'}</button>
+          <button onClick={runAI} style={{
+            marginLeft: 10, padding: '4px 12px',
+            background: '#B94141', color: '#fff',
+            border: 'none', borderRadius: 999,
+            fontSize: 12, cursor: 'pointer', fontWeight: 600,
+          }}>{lang === 'bm' ? 'Cuba lagi' : 'Retry'}</button>
         </div>
       )}
 
-      {/* AI RESULT */}
       {aiResult && !aiProcessing && (
         <div className="fade-in" style={{ marginBottom: 14 }}>
-          {/* Hero image (Unsplash) */}
           {lecture?.hero_image_url && (
             <div style={{
-              borderRadius: 14,
-              overflow: 'hidden',
-              marginBottom: 14,
-              position: 'relative',
-              height: 200,
+              borderRadius: 14, overflow: 'hidden', marginBottom: 14,
+              position: 'relative', height: 200,
               background: `url(${lecture.hero_image_url}) center / cover no-repeat`,
             }}>
               {lecture.hero_photographer_name && (
-                <a
-                  href={lecture.hero_photographer_link || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <a href={lecture.hero_photographer_link || '#'} target="_blank" rel="noopener noreferrer"
                   style={{
                     position: 'absolute', bottom: 8, right: 10,
-                    fontSize: 10, color: '#fff',
-                    background: 'rgba(0,0,0,0.4)',
-                    padding: '3px 8px', borderRadius: 4,
-                    textDecoration: 'none',
-                  }}
-                >
+                    fontSize: 10, color: '#fff', background: 'rgba(0,0,0,0.4)',
+                    padding: '3px 8px', borderRadius: 4, textDecoration: 'none',
+                  }}>
                   Photo by {lecture.hero_photographer_name} · Unsplash
                 </a>
               )}
@@ -1603,8 +1488,7 @@ const finishLecture = async () => {
               padding: '10px 14px', marginBottom: 10,
               background: 'rgba(184, 134, 11, 0.08)',
               border: '0.5px solid rgba(184, 134, 11, 0.2)',
-              borderRadius: 10,
-              fontSize: 12, color: '#8a6d0f',
+              borderRadius: 10, fontSize: 12, color: '#8a6d0f',
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span>ℹ</span>
@@ -1626,11 +1510,10 @@ const finishLecture = async () => {
               <p style={{ margin: 0, lineHeight: 1.7, fontSize: 15 }}>{aiResult.summary}</p>
             </Section>
           )}
-          {/* Dynamic sections from recording type config */}
           {(() => {
             const typeMeta = getRecordingTypeMeta(lecture?.recording_type)
             return typeMeta.sections
-              .filter(key => key !== 'summary')  // already rendered above
+              .filter(key => key !== 'summary')
               .map(key => {
                 const items = (aiResult as any)[key] as string[] | undefined
                 if (!items || items.length === 0) return null
@@ -1651,22 +1534,17 @@ const finishLecture = async () => {
                   </ul>
                 )
                 return (
-                  <Section key={key} icon="" title={label} s={s}>
-                    {Listing}
-                  </Section>
+                  <Section key={key} icon="" title={label} s={s}>{Listing}</Section>
                 )
               })
               .filter(Boolean)
           })()}
 
-          {/* MIND MAP (v41 — moved below keyPoints in v45) */}
           {lecture?.mindmap_json && (
             <div style={{ marginTop: 14 }}>
               <div style={{
-                fontSize: 11, fontWeight: 600,
-                textTransform: 'uppercase', letterSpacing: '0.05em',
-                color: '#5A8FF5', marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+                color: '#5A8FF5', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
               }}>
                 🧠 {lang === 'bm' ? 'Peta Minda' : 'Mind Map'}
               </div>
@@ -1676,9 +1554,9 @@ const finishLecture = async () => {
         </div>
       )}
 
-      </div>{/* end AI SECTION wrapper */}
+      </div>
 
-      {/* v59: CLEAN TRANSCRIPT (Soniox segments by timeline) */}
+      {/* CLEAN TRANSCRIPT */}
       {(cleanSegments.length > 0 || editedText || transcriptImages.length > 0) && (
         <div style={{
           background: '#FFFBFC', borderRadius: 14, padding: 18, marginTop: 18,
@@ -1755,8 +1633,7 @@ const finishLecture = async () => {
           {imageUploadError && (
             <div style={{
               background: '#fde8e8', color: '#b42929',
-              padding: '6px 10px', borderRadius: 6, fontSize: 11,
-              marginBottom: 10,
+              padding: '6px 10px', borderRadius: 6, fontSize: 11, marginBottom: 10,
             }}>⚠ {imageUploadError}</div>
           )}
 
@@ -1766,24 +1643,17 @@ const finishLecture = async () => {
               onChange={(e) => setEditedText(e.target.value)}
               autoFocus
               style={{
-                width: '100%',
-                minHeight: 180,
-                padding: 12,
+                width: '100%', minHeight: 180, padding: 12,
                 border: '0.5px solid rgba(212, 83, 126, 0.25)',
-                borderRadius: 8,
-                fontFamily: 'inherit',
-                fontSize: 13,
-                lineHeight: 1.65,
-                color: 'rgba(29,29,31,0.92)',
-                background: '#fff',
-                resize: 'vertical',
+                borderRadius: 8, fontFamily: 'inherit', fontSize: 13,
+                lineHeight: 1.65, color: 'rgba(29,29,31,0.92)',
+                background: '#fff', resize: 'vertical',
               }}
               placeholder={lang === 'bm' ? 'Edit transkrip di sini...' : 'Edit transcript here...'}
             />
           ) : (editedText && editedText.trim()) ? (
             <div className="transcript-md" style={{
-              fontSize: 13, lineHeight: 1.65, color: 'rgba(29,29,31,0.92)',
-              whiteSpace: 'pre-wrap',
+              fontSize: 13, lineHeight: 1.65, color: 'rgba(29,29,31,0.92)', whiteSpace: 'pre-wrap',
             }}>
               {editedText}
             </div>
@@ -1808,7 +1678,6 @@ const finishLecture = async () => {
             </div>
           )}
 
-          {/* v60: Images grid */}
           {transcriptImages.length > 0 && !isEditing && (
             <div style={{
               marginTop: 16,
@@ -1838,14 +1707,13 @@ const finishLecture = async () => {
         </div>
       )}
 
-      {/* v59: RAW TRANSCRIPT (Web Speech live preview, kekal messy) */}
+      {/* RAW TRANSCRIPT */}
       <div style={{
         background: 'rgba(0,0,0,0.02)', borderRadius: 14, padding: 18, marginTop: cleanSegments.length > 0 ? 12 : 18,
         border: '0.5px solid rgba(0,0,0,0.06)', minHeight: 200,
       }}>
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12,
         }}>
           <div style={{
             fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.5)',
@@ -1890,7 +1758,6 @@ const finishLecture = async () => {
               </span>
             </div>
           )}
-          {/* Trailing cursor when recording but no interim yet (between phrases) */}
           {recording && !interim && lines.length > 0 && (
             <div style={{ padding: '4px 0' }}>
               <span className="cc-cloud-cursor" aria-hidden="true">
@@ -1970,7 +1837,6 @@ function buildRichMarkdown(lecture: Lecture, transcript: string, ai: AISummary):
   return lines.join('\n')
 }
 
-// v56: Minimal loader fallback when ProcessingLoader (facts) opt-in disabled
 function SimpleLoader({ status, subStatus }: { status: string; subStatus?: string }) {
   return (
     <div style={{
@@ -1989,23 +1855,13 @@ function SimpleLoader({ status, subStatus }: { status: string; subStatus?: strin
         flexShrink: 0,
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 13, fontWeight: 500,
-          color: '#1d1d1f',
-          letterSpacing: '-0.01em',
-        }}>{status}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#1d1d1f', letterSpacing: '-0.01em' }}>{status}</div>
         {subStatus && (
-          <div style={{
-            fontSize: 11,
-            color: 'rgba(29,29,31,0.5)',
-            marginTop: 2,
-          }}>{subStatus}</div>
+          <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.5)', marginTop: 2 }}>{subStatus}</div>
         )}
       </div>
       <style jsx>{`
-        @keyframes cc-simple-spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes cc-simple-spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   )
