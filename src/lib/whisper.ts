@@ -1,19 +1,10 @@
 // src/lib/whisper.ts
 // Client helpers for Whisper enhancement
 
-// ~25MB hard limit per Groq Whisper call.
-// We aim for safe margin: chunk audio into ~9-minute pieces at typical webm/opus bitrate.
-// MediaRecorder with default opus = ~32-48 kbps. 9 min * 60 * 48kbps / 8 = ~3.2MB per chunk.
-// Well below limit, even on higher bitrates.
 const CHUNK_DURATION_SEC = 9 * 60
 
-/**
- * Split a long audio blob into ~9-minute chunks.
- * For webm/opus, we concatenate chunks via MediaRecorder timeslicing at recording time.
- * Here we accept a pre-chunked array of Blobs from the recorder.
- */
 export function shouldChunk(audioBlob: Blob): boolean {
-  return audioBlob.size > 20 * 1024 * 1024 // 20MB safety margin
+  return audioBlob.size > 20 * 1024 * 1024
 }
 
 export type AudioUsageInfo = {
@@ -35,11 +26,6 @@ export type TranscribeResponse = {
   audioSeconds?: number
 }
 
-/**
- * POST one audio blob to /api/transcribe.
- * Server forwards to Groq Whisper, returns JSON. No storage.
- * Throws CapReachedError if user's audio cap is reached.
- */
 export class CapReachedError extends Error {
   usage?: AudioUsageInfo
   constructor(msg: string, usage?: AudioUsageInfo) {
@@ -50,7 +36,7 @@ export class CapReachedError extends Error {
 }
 
 /**
- * Convert any audio Blob (WebM/Opus) → WAV 16kHz mono
+ * Convert any audio Blob (WebM/Opus/MP4) → WAV 16kHz mono
  * using Web Audio API — zero dependencies, runs in browser only.
  */
 export async function convertToWav(blob: Blob): Promise<Blob> {
@@ -107,23 +93,49 @@ function encodeWav(pcm: Float32Array, sampleRate: number): ArrayBuffer {
   return buffer
 }
 
+/**
+ * Detect if running on Chrome iOS (CriOS) — produce audio/mp4 yang server ffmpeg tak boleh handle
+ * sebab ffmpeg-static ENOENT dalam Vercel Lambda.
+ * Fix: convert client-side ke WAV sebelum hantar ke server.
+ */
+function isChromeIOS(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /CriOS/i.test(navigator.userAgent)
+}
+
 export async function transcribeOne(
   audioBlob: Blob,
   signal?: AbortSignal,
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
 ): Promise<TranscribeResponse> {
   const form = new FormData()
-  // Skip client-side WAV conversion — server handles ffmpeg conversion.
-  // convertToWav() causes failures on Android Chrome & Safari (Web Audio API restrictions).
-  const ext = audioBlob.type.includes('mp4') ? 'mp4'
-             : audioBlob.type.includes('ogg') ? 'ogg'
-             : audioBlob.type.includes('wav') ? 'wav'
-             : 'webm'
-  form.append('audio', audioBlob, `chunk.${ext}`)
-  // Only pass language if explicitly set (not 'auto')
+
+  // v62 FIX: Chrome iOS produce audio/mp4 yang server ffmpeg tak boleh convert
+  // (ffmpeg-static ENOENT dalam Vercel Lambda). Convert client-side ke WAV untuk Chrome iOS sahaja.
+  // Device lain (Android Chrome, Safari) hantar terus — Web Audio API ada restriction kat sana.
+  let finalBlob = audioBlob
+  let ext = audioBlob.type.includes('mp4') ? 'mp4'
+           : audioBlob.type.includes('ogg') ? 'ogg'
+           : audioBlob.type.includes('wav') ? 'wav'
+           : 'webm'
+
+  if (isChromeIOS() && (audioBlob.type.includes('mp4') || audioBlob.type.includes('webm'))) {
+    console.log('[transcribeOne] Chrome iOS detected — converting to WAV client-side')
+    try {
+      finalBlob = await convertToWav(audioBlob)
+      ext = 'wav'
+      console.log(`[transcribeOne] WAV conversion done | ${finalBlob.size}B`)
+    } catch (e) {
+      console.warn('[transcribeOne] WAV conversion failed, using original:', e)
+      finalBlob = audioBlob
+    }
+  }
+
+  form.append('audio', finalBlob, `chunk.${ext}`)
   if (language && language !== 'auto') {
     form.append('language', language)
   }
+
   const res = await fetch('/api/transcribe', {
     method: 'POST',
     body: form,
@@ -145,10 +157,6 @@ export async function transcribeOne(
   return data
 }
 
-/**
- * Transcribe multiple chunks in parallel and concatenate results in order.
- * Each chunk already represents ~9 minutes of audio.
- */
 export async function transcribeChunks(
   chunks: Blob[],
   onProgress?: (done: number, total: number) => void,
@@ -163,10 +171,6 @@ export async function transcribeChunks(
   return results.join('\n').trim()
 }
 
-/**
- * Format Whisper transcript into Cotton Candy's Line[] shape.
- * Whisper returns continuous text. We split by sentences and assign rough timestamps.
- */
 export function whisperTextToLines(text: string, totalDurationSec: number): Array<{
   id: string; t: number; text: string; lang?: string
 }> {
