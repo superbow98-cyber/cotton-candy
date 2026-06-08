@@ -1167,11 +1167,6 @@ function DemoSection({ lang }: { lang: string }) {
             boxShadow: '0 30px 80px rgba(29,29,31,0.12), 0 10px 30px rgba(29,29,31,0.08)',
             border: '0.5px solid rgba(0,0,0,0.06)',
           }}>
-            <div style={{ display: 'flex', gap: 6, padding: '0 8px 12px' }}>
-              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FF6B6B' }} />
-              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#FFD166' }} />
-              <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#06D6A0' }} />
-            </div>
             <div style={{
               background: '#fff', borderRadius: 16, overflow: 'hidden',
               minHeight: 400, position: 'relative',
