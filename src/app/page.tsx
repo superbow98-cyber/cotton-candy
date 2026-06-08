@@ -630,14 +630,10 @@ export default function Home() {
 
           {/* One-time pill */}
           <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 44px' }}>
-            <span style={{
+           <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '7px 16px',
-              background: '#fff',
-              border: '0.5px solid rgba(90, 143, 245, 0.25)',
-              borderRadius: 100,
               fontSize: 12.5, fontWeight: 500, color: '#5A8FF5',
-            }}>
+           }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="10" /></svg>
               {L(
                 'One-time payment · No recurring charges',
