@@ -55,7 +55,7 @@ export default function Home() {
           <a href="#features" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Features', 'Ciri-ciri', '功能', 'அம்சங்கள்')}
           </a>
-          <a href="#ai" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <a href="#demo" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('AI models', 'Model AI', 'AI 模型', 'AI மாடல்கள்')}
           </a>
           <Link href="/ambassador" style={{ color: 'inherit', textDecoration: 'none' }}>
@@ -216,7 +216,7 @@ export default function Home() {
           }}>
             {L('Get Cotton Candy free', 'Dapatkan percuma', '免费获取', 'இலவசமாக பெறுங்கள்')}
           </Link>
-          <a href="#ai" style={{
+          <a href="#demo" style={{
             padding: '13px 24px', borderRadius: 100,
             background: 'rgba(255,255,255,0.9)',
             border: '0.5px solid rgba(0,0,0,0.14)',
@@ -1112,8 +1112,8 @@ function DemoSection({ lang }: { lang: string }) {
   })
 
   return (
-    <section style={{
-      background: 'linear-gradient(180deg, #fff 0%, #FAFAFB 100%)',
+    <section id="demo" style={{
+  background: 'linear-gradient(180deg, #fff 0%, #FAFAFB 100%)',
       padding: '80px 20px',
       textAlign: 'center',
     }}>
