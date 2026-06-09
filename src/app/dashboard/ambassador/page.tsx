@@ -1007,10 +1007,10 @@ export default function AmbassadorDashboard() {
                 <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'rgba(255,160,160,0.95)', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'Plan aktif diperlukan' : 'Active plan required'}</p>
                 <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
                    {bm
-                     ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses. Kau juga perlu sahkan identiti (pelajar IPT atau creator ≥10k).'
-                     : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access. You also need to verify your identity (IPT student or creator ≥10k).'}
+                     ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses.'
+                     : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access.'}
                 </p>
-              </div>
+                </div>
               {showPlansLink && (
                 <a href="/pricing" className="amb-plans-link">
                   {bm ? 'Lihat plan' : 'View plans'}
@@ -1041,8 +1041,8 @@ export default function AmbassadorDashboard() {
                       </div>
                       <div className="amb-verify-desc">
                         {bm
-                          ? 'Masukkan email universiti kau (.edu.my)'
-                          : 'Enter your university email (.edu.my)'}
+                           ? 'Masukkan email universiti kau'
+                           : 'Enter your university email'}
                       </div>
 
                       {/* Email input — shown when IPT selected */}
@@ -1051,7 +1051,7 @@ export default function AmbassadorDashboard() {
                           <input
                             className="amb-verify-email-input"
                             type="email"
-                            placeholder={bm ? 'cth: nama@student.um.edu.my' : 'e.g. name@student.um.edu.my'}
+                            placeholder={bm ? 'cth: nama@student.university.my' : 'e.g. name@student.university.my'}
                             value={iptEmail}
                             onChange={e => setIptEmail(e.target.value)}
                             autoFocus
@@ -1082,7 +1082,7 @@ export default function AmbassadorDashboard() {
                     </div>
                     <div className="amb-verify-text-wrap">
                       <div className="amb-verify-title">
-                        {bm ? 'Saya content creator (≥10k followers)' : 'I am a content creator (≥10k followers)'}
+                       {bm ? 'Saya content creator' : 'I am a content creator'}
                       </div>
                       <div className="amb-verify-desc">
                         {bm
@@ -1133,7 +1133,7 @@ export default function AmbassadorDashboard() {
                               }
                               {creatorVerified
                                 ? (bm ? `✓ Layak — ${creatorFollowerNum.toLocaleString()} followers` : `✓ Eligible — ${creatorFollowerNum.toLocaleString()} followers`)
-                                : (bm ? `Minimum 10,000 followers diperlukan (kau: ${creatorFollowerNum.toLocaleString()})` : `Minimum 10,000 followers required (yours: ${creatorFollowerNum.toLocaleString()})`)}
+                                : (bm ? 'Bilangan tidak mencukupi untuk layak' : 'Follower count not sufficient to qualify')}
                             </div>
                           )}
                           {creatorFollowers.trim().length > 0 && !creatorLinkFilled && (
