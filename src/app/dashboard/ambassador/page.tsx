@@ -929,12 +929,11 @@ export default function AmbassadorDashboard() {
   // ─── REGISTRATION CARD ────────────────────────────────────────────────────
   if (!data?.is_ambassador) {
     const hasPlan = !!data?.has_active_plan
-    const btnClass = [
-      'amb-cta-btn',
-      btnError ? 'amb-btn-error' : '',
-      registering ? 'amb-btn-loading' : '',
-      (hasPlan && !isVerified) ? 'amb-btn-disabled' : '',
-    ].filter(Boolean).join(' ')
+   const btnClass = [
+  'amb-cta-btn',
+  btnError ? 'amb-btn-error' : '',
+  registering ? 'amb-btn-loading' : '',
+].filter(Boolean).join(' ')
 
     const btnLabel = registering
       ? (bm ? 'Mendaftar…' : 'Registering…')
@@ -1007,7 +1006,9 @@ export default function AmbassadorDashboard() {
               <div className={`amb-error-banner${showErrBanner ? ' amb-show' : ''}`}>
                 <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'rgba(255,160,160,0.95)', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>{bm ? 'Plan aktif diperlukan' : 'Active plan required'}</p>
                 <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
-                  {bm ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses.' : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access.'}
+                   {bm
+                     ? 'Program ambassador eksklusif untuk ahli berbayar. Upgrade plan kau untuk akses. Kau juga perlu sahkan identiti (pelajar IPT atau creator ≥10k).'
+                     : 'Ambassador program is exclusive to paid members. Upgrade your plan to unlock access. You also need to verify your identity (IPT student or creator ≥10k).'}
                 </p>
               </div>
               {showPlansLink && (
