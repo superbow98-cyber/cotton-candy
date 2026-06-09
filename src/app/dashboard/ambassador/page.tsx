@@ -71,6 +71,10 @@ const AMBASSADOR_STYLES = `
   0%   { transform:translateX(-100%); }
   100% { transform:translateX(200%); }
 }
+@keyframes amb-verifyIn {
+  from { opacity:0; transform:translateY(6px) scale(0.98); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
 
 .amb-card { animation: amb-fadeSlideUp 0.55s cubic-bezier(0.22,1,0.36,1) both; }
 
@@ -199,6 +203,137 @@ const AMBASSADOR_STYLES = `
 .amb-tpl-scroll::-webkit-scrollbar { width: 3px; }
 .amb-tpl-scroll::-webkit-scrollbar-track { background: transparent; }
 .amb-tpl-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
+
+/* ── Verify slot ── */
+.amb-verify-slot {
+  width:100%; margin-top:14px;
+  animation: amb-verifyIn 0.4s 0.55s cubic-bezier(0.22,1,0.36,1) both;
+}
+.amb-verify-inner {
+  background:rgba(255,255,255,0.07);
+  border:0.5px solid rgba(255,255,255,0.18);
+  border-radius:12px;
+  padding:14px 16px;
+  text-align:left;
+}
+.amb-verify-label {
+  font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+  color:rgba(255,255,255,0.38); margin-bottom:12px;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+}
+.amb-verify-option {
+  display:flex; align-items:flex-start; gap:10px;
+  padding:10px 12px; border-radius:9px;
+  border:0.5px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.04);
+  margin-bottom:8px; cursor:pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.amb-verify-option:last-child { margin-bottom:0; }
+.amb-verify-option:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.22); }
+.amb-verify-option.amb-verify-active {
+  background:rgba(255,255,255,0.12);
+  border-color:rgba(255,255,255,0.35);
+}
+.amb-verify-radio {
+  width:16px; height:16px; border-radius:50%; flex-shrink:0; margin-top:1px;
+  border:1.5px solid rgba(255,255,255,0.30);
+  display:flex; align-items:center; justify-content:center;
+  transition: border-color 0.18s, background 0.18s;
+}
+.amb-verify-active .amb-verify-radio {
+  border-color:#fff;
+  background:rgba(255,255,255,0.15);
+}
+.amb-verify-radio-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:#fff; opacity:0;
+  transition: opacity 0.15s;
+}
+.amb-verify-active .amb-verify-radio-dot { opacity:1; }
+.amb-verify-text-wrap { flex:1; min-width:0; }
+.amb-verify-title {
+  font-size:13px; font-weight:600; color:rgba(255,255,255,0.88);
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  margin-bottom:2px;
+}
+.amb-verify-desc {
+  font-size:11.5px; color:rgba(255,255,255,0.42); line-height:1.5;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+}
+
+/* Email input inside verify slot */
+.amb-verify-email-wrap {
+  margin-top:10px;
+  animation: amb-verifyIn 0.3s cubic-bezier(0.22,1,0.36,1) both;
+}
+.amb-verify-email-input {
+  width:100%; box-sizing:border-box;
+  padding:10px 12px; border-radius:8px;
+  background:rgba(255,255,255,0.08);
+  border:0.5px solid rgba(255,255,255,0.18);
+  color:#fff; font-size:13px;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  outline:none; transition: border-color 0.18s, background 0.18s;
+}
+.amb-verify-email-input::placeholder { color:rgba(255,255,255,0.28); }
+.amb-verify-email-input:focus { border-color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.12); }
+.amb-verify-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  margin-top:8px; padding:5px 10px; border-radius:6px;
+  font-size:11.5px; font-weight:600;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  animation: amb-verifyIn 0.3s cubic-bezier(0.22,1,0.36,1) both;
+}
+.amb-verify-badge.amb-badge-ipt {
+  background:rgba(80,220,130,0.15);
+  border:0.5px solid rgba(80,220,130,0.4);
+  color:rgba(100,230,150,0.95);
+}
+.amb-verify-badge.amb-badge-invalid {
+  background:rgba(220,80,80,0.12);
+  border:0.5px solid rgba(220,80,80,0.35);
+  color:rgba(255,140,140,0.9);
+}
+.amb-verify-badge.amb-badge-warn {
+  background:rgba(240,160,40,0.13);
+  border:0.5px solid rgba(240,160,40,0.38);
+  color:rgba(255,200,80,0.95);
+}
+
+/* Creator expand area */
+.amb-verify-creator-wrap {
+  margin-top:10px;
+  animation: amb-verifyIn 0.3s cubic-bezier(0.22,1,0.36,1) both;
+  display:flex; flex-direction:column; gap:8px;
+}
+.amb-verify-creator-row {
+  display:flex; gap:7px; align-items:center;
+}
+.amb-verify-creator-select {
+  flex-shrink:0; padding:9px 10px; border-radius:8px;
+  background:rgba(255,255,255,0.08);
+  border:0.5px solid rgba(255,255,255,0.18);
+  color:#fff; font-size:12px;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  outline:none; cursor:pointer;
+  transition: border-color 0.18s, background 0.18s;
+  appearance:none; -webkit-appearance:none;
+}
+.amb-verify-creator-select:focus { border-color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.12); }
+.amb-verify-creator-select option { background:#1a1a2e; color:#fff; }
+.amb-verify-email-input.amb-creator-link-input { margin-top:0; }
+.amb-verify-follower-input {
+  width:100%; box-sizing:border-box;
+  padding:10px 12px; border-radius:8px;
+  background:rgba(255,255,255,0.08);
+  border:0.5px solid rgba(255,255,255,0.18);
+  color:#fff; font-size:13px;
+  font-family:-apple-system,'Helvetica Neue',sans-serif;
+  outline:none; transition: border-color 0.18s, background 0.18s;
+}
+.amb-verify-follower-input::placeholder { color:rgba(255,255,255,0.28); }
+.amb-verify-follower-input:focus { border-color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.12); }
 `
 
 // ─── Content templates generator ─────────────────────────────────────────────
@@ -582,6 +717,17 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
+// ─── IPT email domain check ───────────────────────────────────────────────────
+// Catches *.edu.my and common Malaysian IPT domains
+const IPT_DOMAINS = ['.edu.my', '.uitm.edu.my', '.um.edu.my', '.utm.edu.my', '.upm.edu.my', '.usm.edu.my', '.ukm.edu.my', '.uiam.edu.my', '.unimas.edu.my', '.uum.edu.my', '.umt.edu.my', '.upsi.edu.my', '.uthm.edu.my', '.unimap.edu.my', '.uni.edu.my', '.unikl.edu.my', '.mmu.edu.my', '.taylor.edu.my', '.sunway.edu.my', '.help.edu.my', '.apu.edu.my']
+
+function isIptEmail(email: string): boolean {
+  const lower = email.toLowerCase().trim()
+  if (!lower.includes('@')) return false
+  const domain = lower.split('@')[1] || ''
+  return IPT_DOMAINS.some(d => domain === d.replace(/^\./, '') || domain.endsWith(d))
+}
+
 export default function AmbassadorDashboard() {
   const { lang } = useLang()
   const { tokens: s } = useTheme()
@@ -599,8 +745,23 @@ export default function AmbassadorDashboard() {
   const [shareKitOpen, setShareKitOpen] = useState(false)
   const [copiedTemplate, setCopiedTemplate] = useState<number | null>(null)
 
+  // ── Verify slot state ──
+  const [verifyMode, setVerifyMode] = useState<'ipt' | 'creator' | null>(null)
+  const [iptEmail, setIptEmail] = useState('')
+  const [iptVerified, setIptVerified] = useState(false)
+  const [creatorPlatform, setCreatorPlatform] = useState('instagram')
+  const [creatorLink, setCreatorLink] = useState('')
+  const [creatorFollowers, setCreatorFollowers] = useState('')
+
   const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bm = lang === 'bm'
+
+  const MIN_FOLLOWERS = 10000
+  const creatorFollowerNum = parseInt(creatorFollowers.replace(/[^0-9]/g, ''), 10) || 0
+  const creatorLinkFilled = creatorLink.trim().length > 5
+  const creatorVerified = creatorLinkFilled && creatorFollowerNum >= MIN_FOLLOWERS
+
+  const isVerified = (verifyMode === 'ipt' && iptVerified) || (verifyMode === 'creator' && creatorVerified)
 
   useEffect(() => {
     const id = 'amb-reg-styles'
@@ -616,6 +777,11 @@ export default function AmbassadorDashboard() {
   }, [])
 
   useEffect(() => { load() }, [])
+
+  // Live-check IPT email as user types
+  useEffect(() => {
+    setIptVerified(isIptEmail(iptEmail))
+  }, [iptEmail])
 
   async function load() {
     setLoading(true)
@@ -679,9 +845,37 @@ export default function AmbassadorDashboard() {
       })
       return
     }
+
+    // Guard: must have completed verification
+    if (!isVerified) {
+      // Shake the verify slot to prompt user
+      const slot = document.getElementById('amb-verify-slot')
+      if (slot) {
+        slot.style.animation = 'none'
+        void slot.offsetWidth
+        slot.style.animation = 'amb-shake 0.45s cubic-bezier(0.22,1,0.36,1)'
+        setTimeout(() => { slot.style.animation = '' }, 500)
+      }
+      return
+    }
+
     setRegistering(true)
     try {
-      const res = await fetch('/api/ambassador/register', { method: 'POST' })
+      const body: Record<string, unknown> = {}
+      if (verifyMode === 'creator') {
+        body.verify_type = 'creator'
+        body.creator_platform = creatorPlatform
+        body.creator_link = creatorLink.trim()
+        body.creator_followers = creatorFollowerNum
+      } else {
+        body.verify_type = 'ipt'
+        body.ipt_email = iptEmail.trim()
+      }
+      const res = await fetch('/api/ambassador/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       if (res.ok) await load()
     } finally {
       setRegistering(false)
@@ -739,6 +933,7 @@ export default function AmbassadorDashboard() {
       'amb-cta-btn',
       btnError ? 'amb-btn-error' : '',
       registering ? 'amb-btn-loading' : '',
+      (hasPlan && !isVerified) ? 'amb-btn-disabled' : '',
     ].filter(Boolean).join(' ')
 
     const btnLabel = registering
@@ -746,6 +941,14 @@ export default function AmbassadorDashboard() {
       : btnError
         ? (bm ? 'Plan aktif diperlukan' : 'Active plan required')
         : (bm ? 'Daftar sebagai ambassador' : 'Register as ambassador')
+
+    // Email input badge
+    const emailTouched = iptEmail.trim().length > 0
+    const showIptBadge = verifyMode === 'ipt' && emailTouched
+    const iptBadgeClass = iptVerified ? 'amb-verify-badge amb-badge-ipt' : 'amb-verify-badge amb-badge-invalid'
+    const iptBadgeText = iptVerified
+      ? (bm ? '✓ Email IPT disahkan' : '✓ IPT student verified')
+      : (bm ? 'Email IPT tidak dikenali — cuba semak semula' : 'IPT email not recognised — please double-check')
 
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
@@ -797,6 +1000,8 @@ export default function AmbassadorDashboard() {
                   : (bm ? 'Perlu plan aktif (Student PRO / Monthly / Yearly) untuk jadi ambassador.' : 'Requires an active plan — Student PRO, Monthly, or Yearly — to register.')}
               </p>
             </div>
+
+            {/* ── CTA button ── */}
             <div className="amb-cta-wrap">
               <button className={btnClass} onClick={registerAsAmbassador} disabled={registering}>{btnLabel}</button>
               <div className={`amb-error-banner${showErrBanner ? ' amb-show' : ''}`}>
@@ -811,6 +1016,139 @@ export default function AmbassadorDashboard() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                 </a>
               )}
+
+              {/* ── VERIFY SLOT — appears below the register button ── */}
+              <div className="amb-verify-slot" id="amb-verify-slot">
+                <div className="amb-verify-inner">
+                  <div className="amb-verify-label">
+                    {bm ? 'Sahkan identiti kau' : 'Verify your identity'}
+                  </div>
+
+                  {/* Option 1: IPT student */}
+                  <div
+                    className={`amb-verify-option${verifyMode === 'ipt' ? ' amb-verify-active' : ''}`}
+                    onClick={() => setVerifyMode(verifyMode === 'ipt' ? null : 'ipt')}
+                    role="radio"
+                    aria-checked={verifyMode === 'ipt'}
+                  >
+                    <div className="amb-verify-radio">
+                      <div className="amb-verify-radio-dot" />
+                    </div>
+                    <div className="amb-verify-text-wrap">
+                      <div className="amb-verify-title">
+                        {bm ? 'Saya pelajar IPT/IPTS' : 'I am an IPT/IPTS student'}
+                      </div>
+                      <div className="amb-verify-desc">
+                        {bm
+                          ? 'Masukkan email universiti kau (.edu.my)'
+                          : 'Enter your university email (.edu.my)'}
+                      </div>
+
+                      {/* Email input — shown when IPT selected */}
+                      {verifyMode === 'ipt' && (
+                        <div className="amb-verify-email-wrap" onClick={e => e.stopPropagation()}>
+                          <input
+                            className="amb-verify-email-input"
+                            type="email"
+                            placeholder={bm ? 'cth: nama@student.um.edu.my' : 'e.g. name@student.um.edu.my'}
+                            value={iptEmail}
+                            onChange={e => setIptEmail(e.target.value)}
+                            autoFocus
+                          />
+                          {showIptBadge && (
+                            <div className={iptBadgeClass}>
+                              {iptVerified
+                                ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                              }
+                              {iptBadgeText}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Option 2: Content Creator */}
+                  <div
+                    className={`amb-verify-option${verifyMode === 'creator' ? ' amb-verify-active' : ''}`}
+                    onClick={() => setVerifyMode(verifyMode === 'creator' ? null : 'creator')}
+                    role="radio"
+                    aria-checked={verifyMode === 'creator'}
+                  >
+                    <div className="amb-verify-radio">
+                      <div className="amb-verify-radio-dot" />
+                    </div>
+                    <div className="amb-verify-text-wrap">
+                      <div className="amb-verify-title">
+                        {bm ? 'Saya content creator (≥10k followers)' : 'I am a content creator (≥10k followers)'}
+                      </div>
+                      <div className="amb-verify-desc">
+                        {bm
+                          ? 'Instagram, TikTok, YouTube, Facebook, atau Threads'
+                          : 'Instagram, TikTok, YouTube, Facebook, or Threads'}
+                      </div>
+
+                      {verifyMode === 'creator' && (
+                        <div className="amb-verify-creator-wrap" onClick={e => e.stopPropagation()}>
+                          {/* Platform + profile link row */}
+                          <div className="amb-verify-creator-row">
+                            <select
+                              className="amb-verify-creator-select"
+                              value={creatorPlatform}
+                              onChange={e => setCreatorPlatform(e.target.value)}
+                            >
+                              <option value="instagram">Instagram</option>
+                              <option value="tiktok">TikTok</option>
+                              <option value="youtube">YouTube</option>
+                              <option value="facebook">Facebook</option>
+                              <option value="threads">Threads</option>
+                            </select>
+                            <input
+                              className="amb-verify-email-input amb-creator-link-input"
+                              style={{ flex: 1 }}
+                              type="url"
+                              placeholder={bm ? 'Link profil kau' : 'Your profile link'}
+                              value={creatorLink}
+                              onChange={e => setCreatorLink(e.target.value)}
+                              autoFocus
+                            />
+                          </div>
+                          {/* Follower count */}
+                          <input
+                            className="amb-verify-follower-input"
+                            type="number"
+                            min="0"
+                            placeholder={bm ? 'Bilangan followers / subscribers' : 'Number of followers / subscribers'}
+                            value={creatorFollowers}
+                            onChange={e => setCreatorFollowers(e.target.value)}
+                          />
+                          {/* Status badge */}
+                          {creatorFollowers.trim().length > 0 && creatorLinkFilled && (
+                            <div className={`amb-verify-badge ${creatorVerified ? 'amb-badge-ipt' : 'amb-badge-warn'}`}>
+                              {creatorVerified
+                                ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                              }
+                              {creatorVerified
+                                ? (bm ? `✓ Layak — ${creatorFollowerNum.toLocaleString()} followers` : `✓ Eligible — ${creatorFollowerNum.toLocaleString()} followers`)
+                                : (bm ? `Minimum 10,000 followers diperlukan (kau: ${creatorFollowerNum.toLocaleString()})` : `Minimum 10,000 followers required (yours: ${creatorFollowerNum.toLocaleString()})`)}
+                            </div>
+                          )}
+                          {creatorFollowers.trim().length > 0 && !creatorLinkFilled && (
+                            <div className="amb-verify-badge amb-badge-warn">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                              {bm ? 'Link profil diperlukan' : 'Profile link is required'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* ── END VERIFY SLOT ── */}
+
             </div>
           </div>
         </div>
