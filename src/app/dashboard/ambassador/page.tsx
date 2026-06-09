@@ -1156,6 +1156,43 @@ export default function AmbassadorDashboard() {
       </div>
     )
   }
+// ─── PLAN EXPIRED — show warning instead of dashboard ────────────────────
+if (data.is_ambassador && !data.has_active_plan) {
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 0' }}>
+      <div className="amb-card" style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', textAlign: 'center' }}>
+        <div style={{ position: 'absolute', inset: 0, background: "#111 url('/ambassador-reg-bg.jpg') center top / cover no-repeat", zIndex: 0 }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1 }} />
+        <div style={{ position: 'relative', zIndex: 2, padding: '44px 36px 36px' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(220,80,80,0.18)', border: '0.5px solid rgba(220,80,80,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,120,120,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#E8873A', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+            {bm ? 'Status Ambassador' : 'Ambassador Status'}
+          </p>
+          <h2 style={{ margin: '0 0 12px', fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1.2, color: '#fff', fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+            {bm ? 'Plan kau dah tamat' : 'Your plan has expired'}
+          </h2>
+          <p style={{ margin: '0 auto 32px', maxWidth: 360, fontSize: 14, fontWeight: 300, color: 'rgba(255,255,255,0.6)', lineHeight: 1.65, fontFamily: "-apple-system,'Helvetica Neue',sans-serif" }}>
+            {bm
+              ? <>Kod promo kau <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'monospace' }}>{data.promo_code}</span> masih wujud. Renew plan kau untuk kekalkan status ambassador dan terus dapat komisen.</>
+              : <>Your promo code <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'monospace' }}>{data.promo_code}</span> still exists. Renew your plan to keep your ambassador status and continue earning commissions.</>}
+          </p>
+          <a href="/pricing" style={{
+            display: 'inline-block', padding: '13px 32px', borderRadius: 12,
+            background: '#fff', color: '#1d1d1f',
+            fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em',
+            textDecoration: 'none', fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+          }}>
+            {bm ? 'Renew plan' : 'Renew plan'}
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
 
   // ─── AMBASSADOR DASHBOARD ─────────────────────────────────────────────────
   const templates = getTemplates(data.promo_code!)
