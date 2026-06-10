@@ -11,6 +11,7 @@ import { correctScientificTerms, detectSubject } from '@/lib/scientific-terms'
 import { PROVIDER_ORDER, PROVIDER_META, DEFAULT_PROVIDER, type AIProvider } from '@/lib/ai-providers'
 import { transcribeOne, whisperTextToLines, CapReachedError, type AudioUsageInfo } from '@/lib/whisper'
 import { getRecordingTypeMeta, SECTION_LABELS } from '@/lib/recording-types'
+import { LiveTranscriptEngine } from '@/lib/live-transcript'
 
 type Line = { id: string; t: number; text: string; lang?: string }
 
@@ -264,8 +265,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
   const [lines, setLines] = useState<Line[]>([])
-  const [cleanSegments, setCleanSegments] = useState<CleanSegment[]>([])  // v59
-  // v60: Editable transcript + images
+  const [cleanSegments, setCleanSegments] = useState<CleanSegment[]>([])
   const [isEditing, setIsEditing] = useState(false)
   const [editedText, setEditedText] = useState<string>('')
   const [savingEdit, setSavingEdit] = useState(false)
@@ -274,7 +274,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [imageUploadError, setImageUploadError] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
 
-  // v56: Opt-in preferences from settings
   const [showMicMeter, setShowMicMeter] = useState(false)
   const [showFactsLoader, setShowFactsLoader] = useState(true)
   const [showKnowledgeFacts, setShowKnowledgeFacts] = useState(true)
@@ -302,6 +301,8 @@ export default function LectureRecorder({ id }: { id: string }) {
     && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 
   const recRef = useRef<any>(null)
+  // v20.17: LiveTranscriptEngine ref
+  const liveEngineRef = useRef<LiveTranscriptEngine | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
@@ -313,7 +314,6 @@ export default function LectureRecorder({ id }: { id: string }) {
   const aiSectionRef = useRef<HTMLDivElement | null>(null)
 
   // v20.14: Refs untuk pastikan autosave dan finishLecture dapat nilai terkini
-  // (fix stale closure bug — punca clean segments 3→2)
   const linesRef = useRef<Line[]>([])
   const cleanSegmentsRef = useRef<CleanSegment[]>([])
 
@@ -453,45 +453,38 @@ export default function LectureRecorder({ id }: { id: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording])
 
+  // v20.17: startRecognition — guna LiveTranscriptEngine (Groq primary, webkit fallback)
   const startRecognition = useCallback((langCode: string) => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) { setSupported(false); return null }
-    try {
-      const r = new SR()
-      r.continuous = true
-      r.interimResults = true
-      r.lang = langCode
-      r.onresult = (e: any) => {
-        let finalText = '', interimText = ''
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const chunk = e.results[i][0].transcript
-          if (e.results[i].isFinal) finalText += chunk
-          else interimText += chunk
-        }
-        if (finalText.trim()) {
-          const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-          const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
-          const corrected = correctScientificTerms(finalText.trim(), subjectHint)
-          setLines((prev) => [...prev, {
-            id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: recLangRef.current,
-          }])
-          setInterim('')
-        } else {
-          setInterim(interimText)
-        }
-      }
-      r.onerror = (e: any) => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setPermission(false)
-      }
-      r.onend = () => { if (recRef.current && recording) { try { r.start() } catch {} } }
-      r.start()
-      return r
-    } catch {
-      setSupported(false); return null
+    const onLine = (text: string) => {
+      const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
+      const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
+      const corrected = correctScientificTerms(text, subjectHint)
+      setLines((prev) => [...prev, {
+        id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: langCode,
+      }])
+      setInterim('')
     }
-  }, [recording])
 
+    const engine = new LiveTranscriptEngine()
+    liveEngineRef.current = engine
+    engine.start(langCode, onLine).catch((err) => {
+      console.warn('[live-transcript] engine start failed:', err)
+      setSupported(false)
+    })
+
+    // webkit interim handler (engine exposes this if using webkit fallback)
+    engine.onInterim = (text: string) => setInterim(text)
+    engine.onPermissionDenied = () => setPermission(false)
+    engine.onUnsupported = () => setSupported(false)
+  }, [])
+
+  // v20.17: stopRecognition — stop LiveTranscriptEngine
   const stopRecognition = () => {
+    if (liveEngineRef.current) {
+      liveEngineRef.current.stop()
+      liveEngineRef.current = null
+    }
+    // legacy cleanup kalau recRef masih ada (shouldn't happen, tapi safe)
     if (recRef.current) {
       try { recRef.current.onend = null; recRef.current.stop() } catch {}
       recRef.current = null
@@ -502,9 +495,9 @@ export default function LectureRecorder({ id }: { id: string }) {
     if (!RECOGNITION_LANGS.some(l => l.code === newCode)) return
     setRecLang(newCode); recLangRef.current = newCode
     try { localStorage.setItem(STORAGE_KEY, newCode) } catch {}
-    if (recording && recRef.current) {
+    if (recording) {
       stopRecognition()
-      setTimeout(() => { recRef.current = startRecognition(newCode) }, 120)
+      setTimeout(() => startRecognition(newCode), 120)
     }
   }
 
@@ -685,7 +678,7 @@ export default function LectureRecorder({ id }: { id: string }) {
       await new Promise(r => setTimeout(r, 150))
 
       startRef.current = Date.now()
-      recRef.current = startRecognition(recLangRef.current)
+      startRecognition(recLangRef.current)
 
       tickRef.current = setInterval(() => {
         const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
@@ -744,8 +737,6 @@ export default function LectureRecorder({ id }: { id: string }) {
       const rawMd = linesToMd(effectiveLines)
       const cleanMd = cleanSegmentsToMd(effectiveSegments)
 
-      // AI summarize priority: clean (Soniox) → raw (live) → ''
-      // Kalau semua engine rosak, AI masih dapat live transcript
       const md = cleanMd.trim().length > 20
         ? cleanMd
         : rawMd.trim().length > 0
