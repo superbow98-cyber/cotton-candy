@@ -494,6 +494,36 @@ export default function Home() {
               descZh: '从讲座自动生成可视化思维导图。一目了然，无需手绘。',
               descTa: 'உங்கள் விரிவுரையிலிருந்து மனத் திட்டம் தானாக உருவாகும். வரைய வேண்டாம்.',
             },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                  <path d="M4 4.5A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5z" />
+                  <path d="M8 7h8" />
+                  <path d="M8 11h6" />
+                </svg>
+              ),
+              titleEn: 'NotebookLM-ready', titleBm: 'Sedia untuk NotebookLM', titleZh: '支持 NotebookLM', titleTa: 'NotebookLM தயார்',
+              descEn: 'Copy your cleaned lecture as a structured source, then open NotebookLM to build study guides, FAQs, and audio overviews.',
+              descBm: 'Salin kuliah bersih sebagai sumber tersusun, kemudian buka NotebookLM untuk bina study guide, FAQ dan audio overview.',
+              descZh: '将整理好的讲座复制为结构化资料，再打开 NotebookLM 生成学习指南、FAQ 和音频概览。',
+              descTa: 'சுத்தமான விரிவுரையை கட்டமைக்கப்பட்ட மூலமாக நகலெடுத்து, NotebookLM-ல் study guide, FAQ, audio overview உருவாக்குங்கள்.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15a2 2 0 01-2 2H8l-5 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  <path d="M8 9h8" />
+                  <path d="M8 13h5" />
+                  <path d="M17 21l2-2 2 2" />
+                </svg>
+              ),
+              titleEn: 'Ask Lecture', titleBm: 'Tanya Kuliah', titleZh: '提问讲座', titleTa: 'விரிவுரையைக் கேள்',
+              descEn: 'Ask follow-up questions from your own transcript and summary. Get focused answers without rereading the whole lecture.',
+              descBm: 'Tanya soalan susulan berdasarkan transkrip dan ringkasan anda. Dapat jawapan fokus tanpa baca semula seluruh kuliah.',
+              descZh: '基于你的转录和摘要继续提问，无需重读整堂课即可获得重点答案。',
+              descTa: 'உங்கள் transcript மற்றும் summary அடிப்படையில் கேள்விகள் கேளுங்கள். முழு விரிவுரையையும் மீண்டும் படிக்காமல் பதில் பெறுங்கள்.',
+            },
           ].map((f, i) => (
             <div key={i} style={{
               background: '#fff',
