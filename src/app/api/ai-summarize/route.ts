@@ -31,25 +31,28 @@ export async function POST(req: Request) {
     }
 
     const typeMeta = getRecordingTypeMeta(lecture.recording_type || 'lecture')
-    const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint)
+    const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint, language)
 
     const truncated = transcript.slice(0, 32000)
     const langInstruction = language === 'bm'
-  ? 'PENTING: Tulis SEMUA output dalam Bahasa Melayu (BM) sahaja. Tajuk, ringkasan, topik, semua dalam BM.'
+  ? 'WAJIB: Tulis SEMUA output dalam Bahasa Melayu sahaja. Setiap field JSON (summary, topics, keyPoints, formulas, questions) MESTI dalam BM. DILARANG guna English langsung.'
   : language === 'zh'
-  ? '重要：请用中文（简体）写所有内容。标题、摘要、要点，全部用中文。'
+  ? '强制要求：所有JSON字段（summary, topics, keyPoints, formulas, questions）必须用简体中文。禁止使用英文或其他语言。'
   : language === 'ta'
-  ? 'முக்கியம்: அனைத்து வெளியீட்டையும் தமிழில் எழுதவும். தலைப்பு, சுருக்கம், முக்கிய புள்ளிகள் அனைத்தும் தமிழில்.'
-  : 'Write all output in English.'
+  ? 'கட்டாயம்: summary, topics, keyPoints, formulas, questions உள்ளிட்ட அனைத்து JSON புலங்களும் தமிழில் மட்டுமே இருக்க வேண்டும். ஆங்கிலம் பயன்படுத்த தடை.'
+  : 'REQUIRED: Write ALL JSON fields (summary, topics, keyPoints, formulas, questions) in English only.'
 
-const userMessage = `Recording type: ${typeMeta.label.en}
+const userMessage = `${langInstruction}
+
+Recording type: ${typeMeta.label.en}
 Duration: ${Math.round((lecture.duration_seconds || 0) / 60)} min
 
-${langInstruction}
 NOTE: Generate inferredTitle from transcript content. Ignore any user metadata.
 
 RAW TRANSCRIPT:
-${truncated}`
+${truncated}
+
+REMINDER: ${langInstruction}`
 
     const provider: AIProvider = requestedProvider
       || (lecture.ai_provider as AIProvider)
