@@ -60,7 +60,7 @@ export const PROVIDER_META: Record<AIProvider, {
   shortLabel: 'DeepSeek',
   descEn: 'Handles very long lectures and nuanced topics.',
   descBm: 'Kendalikan kuliah panjang dan topik kompleks.',
-  logoKey: 'deepseek', // ← BETUL
+  logoKey: 'deepseek',
 },
   'auto': {
     label: 'Auto',
@@ -126,7 +126,15 @@ const SECTION_SCHEMA: Record<string, { type: 'array' | 'string'; description: st
   themes:            { type: 'array',  description: 'Recurring themes across responses' },
 }
 
-export function buildSystemPrompt(sections: string[], typeHint: string): string {
+export function buildSystemPrompt(sections: string[], typeHint: string, language?: string): string {
+  const langNote = language === 'bm'
+    ? '\n\nCRITICAL OVERRIDE: You MUST write ALL JSON values in Bahasa Melayu ONLY. This overrides all other language instructions. Every single field — summary, topics, keyPoints, formulas, questions, inferredTitle — MUST be in BM. Writing in English = WRONG.'
+    : language === 'zh'
+    ? '\n\nCRITICAL OVERRIDE: You MUST write ALL JSON values in Simplified Chinese (简体中文) ONLY. Every field must be in Chinese. Writing in English = WRONG.'
+    : language === 'ta'
+    ? '\n\nCRITICAL OVERRIDE: You MUST write ALL JSON values in Tamil (தமிழ்) ONLY. Every field must be in Tamil. Writing in English or Malay = WRONG.'
+    : ''
+
   const schemaLines = sections.map((s) => {
     const meta = SECTION_SCHEMA[s] || { type: 'array', description: 'list of items' }
     if (meta.type === 'string') {
@@ -166,7 +174,7 @@ Universal rules:
 - Fix obvious speech-recognition errors (e.g. "my toe corner dia" → "Mitochondria", "metafis" → "metaphase").
 - Keep each list item concise: short complete sentences or phrases.
 - Empty arrays are valid — better than fabricating content.
-- Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.`
+- Respond ONLY with the JSON object. No prose. No markdown fences. No explanations.${langNote}`
 }
 
 export const SYSTEM_PROMPT = buildSystemPrompt(
