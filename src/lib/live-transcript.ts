@@ -54,6 +54,7 @@ export class LiveTranscriptEngine {
   private mediaRecorder: MediaRecorder | null = null
   private chunkInterval: ReturnType<typeof setInterval> | null = null
   private isSending = false
+  private pendingBlob: { blob: Blob; mime: string } | null = null
   private groqAvailable = false
 
   // WebKit refs
@@ -200,7 +201,8 @@ export class LiveTranscriptEngine {
 
   private async sendBlob(blob: Blob, mime: string): Promise<void> {
     if (this.isSending) {
-      console.log('[live-transcript] Still sending — skip chunk')
+      console.log('[live-transcript] Still sending — save as pending')
+      this.pendingBlob = { blob, mime }
       return
     }
     if (blob.size < MIN_CHUNK_BYTES) {
@@ -255,6 +257,11 @@ export class LiveTranscriptEngine {
       this.promoteInterimIfAny('network-error')
     } finally {
       this.isSending = false
+      if (this.pendingBlob && this.running) {
+        const { blob: pb, mime: pm } = this.pendingBlob
+        this.pendingBlob = null
+        this.sendBlob(pb, pm)
+      }
     }
   }
 
