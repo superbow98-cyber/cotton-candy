@@ -1519,12 +1519,13 @@ const startRecognition = useCallback((langCode: string) => {
             </div>
           )}
           {/* SUMMARY LANGUAGE PILLS */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', fontWeight: 500 }}>
-              {lang === 'bm' ? 'Bahasa ringkasan:' : 'Summary language:'}
-            </span>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center',
+            background: 'rgba(0,0,0,0.04)', borderRadius: 12,
+            padding: 3, gap: 2, marginBottom: 14,
+          }}>
             {(['en', 'bm', 'zh', 'ta'] as const).map((l) => {
-              const labels = { en: '🇬🇧 EN', bm: '🇲🇾 BM', zh: '🇨🇳 中文', ta: '🇮🇳 TA' }
+              const labels = { en: 'English', bm: 'Melayu', zh: '中文', ta: 'தமிழ்' }
               const isActive = summaryLang === l
               const isCached = !!(lecture as any)[`summary_${l}`]
               return (
@@ -1533,18 +1534,30 @@ const startRecognition = useCallback((langCode: string) => {
                   onClick={() => translateSummary(l)}
                   disabled={summaryTranslating}
                   style={{
-                    padding: '4px 12px', borderRadius: 100,
-                    border: isActive ? '1.5px solid #D4537E' : '0.5px solid rgba(0,0,0,0.12)',
-                    background: isActive ? 'linear-gradient(135deg, #FFB7C5, #D4537E)' : isCached ? 'rgba(212,83,126,0.06)' : '#fff',
-                    color: isActive ? '#fff' : 'rgba(29,29,31,0.75)',
-                    fontSize: 12, fontWeight: isActive ? 600 : 400,
+                    padding: '5px 14px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: isActive ? '#fff' : 'transparent',
+                    color: isActive ? '#1d1d1f' : 'rgba(29,29,31,0.45)',
+                    fontSize: 12,
+                    fontWeight: isActive ? 600 : 400,
                     cursor: summaryTranslating ? 'wait' : 'pointer',
                     transition: 'all 0.15s',
-                    opacity: summaryTranslating && !isActive ? 0.5 : 1,
+                    letterSpacing: isActive ? '-0.01em' : 0,
+                    boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06)' : 'none',
+                    opacity: summaryTranslating && !isActive ? 0.4 : 1,
+                    whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 4,
                   }}
                 >
                   {summaryTranslating && isActive ? '⏳' : labels[l]}
-                  {isCached && !isActive && <span style={{ marginLeft: 3, opacity: 0.5, fontSize: 9 }}>●</span>}
+                  {isCached && !isActive && (
+                    <span style={{
+                      width: 4, height: 4, borderRadius: '50%',
+                      background: '#D4537E', opacity: 0.5,
+                      display: 'inline-block', flexShrink: 0,
+                    }} />
+                  )}
                 </button>
               )
             })}
