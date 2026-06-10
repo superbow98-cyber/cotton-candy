@@ -128,9 +128,9 @@ export async function POST(req: NextRequest) {
           const { tmpdir } = await import('os')
           const { join } = await import('path')
           const ffmpegModule = await import('ffmpeg-static')
-          const ffmpegPath = ffmpegModule.default
+          const ffmpegPath = ffmpegModule.default || '/usr/bin/ffmpeg'
           console.log(`[transcribe] Soniox: ffmpeg path = ${ffmpegPath}`)
-          if (!ffmpegPath) throw new Error('ffmpeg-static returned null')
+          if (!ffmpegPath) throw new Error('ffmpeg binary not found')
           const inputPath = join(tmpdir(), `soniox_in_${Date.now()}.${audioExt}`)
           const outputPath = join(tmpdir(), `soniox_out_${Date.now()}.wav`)
           writeFileSync(inputPath, Buffer.from(await audio.arrayBuffer()))
