@@ -453,30 +453,38 @@ export default function LectureRecorder({ id }: { id: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording])
 
-  // v20.17 FIX: startRecognition — pass opts dalam constructor, matching live-transcript.ts signature
-  const startRecognition = useCallback((langCode: string) => {
-    const engine = new LiveTranscriptEngine({
-      getElapsed: () => Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current,
-      lang: langCode,
-      onLine: (text: string) => {
-        const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-        const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
-        const corrected = correctScientificTerms(text, subjectHint)
-        setLines((prev) => [...prev, {
-          id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: langCode,
-        }])
-        setInterim('')
-      },
-      onInterim: (text: string) => setInterim(text),
-      onPermissionDenied: () => setPermission(false),
-      onUnsupported: () => setSupported(false),
-    })
-    liveEngineRef.current = engine
-    engine.start().catch((err) => {
-      console.warn('[live-transcript] engine start failed:', err)
-      setSupported(false)
-    })
-  }, [])
+  // SEBAB UBAH:
+// 1. 'lang' → 'language' — ikut LiveTranscriptOptions interface
+// 2. onLine terima LiveLine object (bukan string) — ambil line.text untuk correctScientificTerms
+// 3. onPermissionDenied + onUnsupported tidak wujud dalam LiveTranscriptOptions — ganti ke onError
+//    yang parse error string untuk tentukan jenis error
+const startRecognition = useCallback((langCode: string) => {
+  const engine = new LiveTranscriptEngine({
+    getElapsed: () => Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current,
+    language: langCode,
+    onLine: (line) => {
+      const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
+      const corrected = correctScientificTerms(line.text, subjectHint)
+      setLines((prev) => [...prev, {
+        id: line.id, t: line.t, text: corrected, lang: line.lang,
+      }])
+      setInterim('')
+    },
+    onInterim: (text: string) => setInterim(text),
+    onError: (err: string) => {
+      if (err.includes('permission') || err.includes('not-allowed')) {
+        setPermission(false)
+      } else {
+        setSupported(false)
+      }
+    },
+  })
+  liveEngineRef.current = engine
+  engine.start().catch((err) => {
+    console.warn('[live-transcript] engine start failed:', err)
+    setSupported(false)
+  })
+}, [])
 
   // v20.17: stopRecognition — stop LiveTranscriptEngine
   const stopRecognition = () => {
