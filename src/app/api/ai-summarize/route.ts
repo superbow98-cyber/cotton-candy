@@ -34,14 +34,14 @@ export async function POST(req: Request) {
     const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint, language)
 
     const truncated = transcript.slice(0, 32000)
+    const fieldList = typeMeta.sections.join(', ')
     const langInstruction = language === 'bm'
-  ? 'WAJIB: Tulis SEMUA output dalam Bahasa Melayu sahaja. Setiap field JSON (summary, topics, keyPoints, formulas, questions) MESTI dalam BM. DILARANG guna English langsung.'
+  ? `WAJIB: Tulis SEMUA output dalam Bahasa Melayu sahaja. Setiap field JSON (summary, topics, keyPoints, formulas, questions, ${fieldList}) MESTI dalam BM. DILARANG guna English langsung.`
   : language === 'zh'
-  ? '强制要求：所有JSON字段（summary, topics, keyPoints, formulas, questions）必须用简体中文。禁止使用英文或其他语言。'
+  ? `强制要求：所有JSON字段（summary, topics, keyPoints, formulas, questions, ${fieldList}）必须用简体中文。禁止使用英文或其他语言。`
   : language === 'ta'
-  ? 'கட்டாயம்: summary, topics, keyPoints, formulas, questions உள்ளிட்ட அனைத்து JSON புலங்களும் தமிழில் மட்டுமே இருக்க வேண்டும். ஆங்கிலம் பயன்படுத்த தடை.'
-  : 'REQUIRED: Write ALL JSON fields (summary, topics, keyPoints, formulas, questions) in English only.'
-
+  ? `கட்டாயம்: (summary, topics, keyPoints, formulas, questions, ${fieldList}) உள்ளிட்ட அனைத்து JSON புலங்களும் தமிழில் மட்டுமே இருக்க வேண்டும். ஆங்கிலம் பயன்படுத்த தடை.`
+  : `REQUIRED: Write ALL JSON fields (summary, topics, keyPoints, formulas, questions, ${fieldList}) in English only.`
 const userMessage = `${langInstruction}
 
 Recording type: ${typeMeta.label.en}
