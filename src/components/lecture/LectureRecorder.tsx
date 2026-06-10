@@ -394,7 +394,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [notebookContent, setNotebookContent] = useState('')
   const [notebookToast, setNotebookToast] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const isProPlan = ['month', 'year', 'student_pro'].includes(String(plan))
+  const isProPlan = ['month', 'monthly', 'year', 'yearly', 'student_pro', 'pro', 'student'].includes(String(plan).toLowerCase())
 
   const isSafari = typeof navigator !== 'undefined'
     && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
@@ -1911,9 +1911,12 @@ const startRecognition = useCallback((langCode: string) => {
               </button>
               <button
                 onClick={() => {
-                  if (!isProPlan) return  // show upgrade nudge atau redirect pricing
-                  setChatOpen((o) => !o)
-                }}
+  if (!isProPlan) {
+    alert(lang === 'bm' ? 'Upgrade ke plan Pro untuk guna Ask Lecture.' : 'Upgrade to a Pro plan to use Ask Lecture.')
+    return
+  }
+  setChatOpen((o) => !o)
+}}
                 style={{
                   height: 30,
                   padding: '0 12px',
