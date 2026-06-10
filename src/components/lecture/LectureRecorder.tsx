@@ -390,6 +390,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [notebookFlowOpen, setNotebookFlowOpen] = useState(false)
+  const [notebookContent, setNotebookContent] = useState('')
   const [notebookToast, setNotebookToast] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const isProPlan = ['month', 'year', 'student_pro'].includes(String(plan))
@@ -839,8 +841,7 @@ const startRecognition = useCallback((langCode: string) => {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  // NotebookLM button handler
-  const handleNotebookLM = async () => {
+  const getNotebookLMContent = () => {
     if (!lecture) return
     const cleanMd = editedText?.trim() || cleanSegmentsToMd(cleanSegments)
     const lectureMeta = lecture as Lecture & {
@@ -860,12 +861,23 @@ const startRecognition = useCallback((langCode: string) => {
       transcript_md: lectureMeta.transcript_md || cleanMd,
       clean_segments: cleanSegments,
     })
+    return content
+  }
+
+  // NotebookLM button handler
+  const handleNotebookLM = () => {
+    const content = getNotebookLMContent()
+    if (!content) return
+    setNotebookContent(content)
+    setNotebookFlowOpen(true)
+  }
+
+  const handleNotebookCopy = async () => {
     try {
-      await navigator.clipboard.writeText(content)
+      await navigator.clipboard.writeText(notebookContent)
     } catch {
       // clipboard access failed (non-https or permission denied)
     }
-    window.open('https://notebooklm.google.com', '_blank')
     setNotebookToast(true)
     setTimeout(() => setNotebookToast(false), 4000)
   }
@@ -2037,6 +2049,126 @@ const startRecognition = useCallback((langCode: string) => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {notebookFlowOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9998,
+          background: 'rgba(0,0,0,0.28)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 18,
+        }}>
+          <div style={{
+            width: 'min(680px, 100%)',
+            maxHeight: 'min(720px, calc(100vh - 36px))',
+            background: '#fff',
+            borderRadius: 14,
+            border: '0.5px solid rgba(0,0,0,0.10)',
+            boxShadow: '0 18px 60px rgba(0,0,0,0.22)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '0.5px solid rgba(0,0,0,0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f' }}>NotebookLM</div>
+                <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.48)', marginTop: 2 }}>
+                  Copy text, then paste it as a source in NotebookLM.
+                </div>
+              </div>
+              <button
+                onClick={() => setNotebookFlowOpen(false)}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  border: '0.5px solid rgba(0,0,0,0.08)',
+                  background: '#fff',
+                  color: 'rgba(29,29,31,0.45)',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <textarea
+              readOnly
+              value={notebookContent}
+              style={{
+                margin: 14,
+                minHeight: 280,
+                maxHeight: '45vh',
+                resize: 'vertical',
+                borderRadius: 10,
+                border: '0.5px solid rgba(0,0,0,0.12)',
+                background: '#fafafa',
+                padding: 12,
+                fontSize: 12,
+                lineHeight: 1.55,
+                color: 'rgba(29,29,31,0.82)',
+                fontFamily: 'SF Mono, Monaco, ui-monospace, monospace',
+                outline: 'none',
+              }}
+            />
+
+            <div style={{
+              padding: '0 14px 14px',
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+            }}>
+              <button
+                onClick={handleNotebookCopy}
+                style={{
+                  height: 34,
+                  padding: '0 14px',
+                  borderRadius: 8,
+                  border: '0.5px solid rgba(0,0,0,0.10)',
+                  background: '#fff',
+                  color: 'rgba(29,29,31,0.78)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Copy Text
+              </button>
+              <button
+                onClick={() => window.open('https://notebooklm.google.com', '_blank')}
+                style={{
+                  height: 34,
+                  padding: '0 14px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#1d1d1f',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Open NotebookLM ↗
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
