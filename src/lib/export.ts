@@ -371,28 +371,25 @@ async function lectureToPdfHtml(
 </body>
 </html>`
 
+  // WAJIB: window.open() sebelum sebarang await — iOS Safari block popup kalau selepas await
   const win = window.open('', '_blank')
   if (!win) {
-    // Popup blocked — fallback: download as HTML and let user print manually
     downloadText(`${title}.html`, html, 'text/html')
     return
   }
   win.document.write(html)
   win.document.close()
 
-  // Wait for Google Fonts to load before triggering print
-  // fonts.googleapis.com can take 300–1200ms on first load
-  const waitForFonts = () =>
-    new Promise<void>((resolve) => {
-      if (win.document.fonts && typeof win.document.fonts.ready === 'object') {
-        win.document.fonts.ready.then(() => resolve())
-      } else {
-        setTimeout(resolve, 1200) // fallback for older browsers
-      }
-    })
+  await new Promise<void>((resolve) => {
+    if (win.document.fonts && typeof win.document.fonts.ready === 'object') {
+      win.document.fonts.ready.then(() => resolve())
+    } else {
+      setTimeout(resolve, 1200)
+    }
+  })
 
-  await waitForFonts()
   win.print()
+
   // Note: don't call win.close() — user needs the window open to complete Save As PDF
 }
 
