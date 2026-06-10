@@ -10,8 +10,8 @@ export const maxDuration = 60
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({})) as { lectureId?: string; provider?: AIProvider }
-    const { lectureId, provider: requestedProvider } = body
+    const body = await req.json().catch(() => ({})) as { lectureId?: string; provider?: AIProvider; language?: string }
+    const { lectureId, provider: requestedProvider, language } = body
     if (!lectureId) return NextResponse.json({ error: 'lectureId required' }, { status: 400 })
 
     const supabase = createClient()
@@ -34,9 +34,18 @@ export async function POST(req: Request) {
     const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint)
 
     const truncated = transcript.slice(0, 32000)
-    const userMessage = `Recording type: ${typeMeta.label.en}
+    const langInstruction = language === 'bm'
+  ? 'PENTING: Tulis SEMUA output dalam Bahasa Melayu (BM) sahaja. Tajuk, ringkasan, topik, semua dalam BM.'
+  : language === 'zh'
+  ? '重要：请用中文（简体）写所有内容。标题、摘要、要点，全部用中文。'
+  : language === 'ta'
+  ? 'முக்கியம்: அனைத்து வெளியீட்டையும் தமிழில் எழுதவும். தலைப்பு, சுருக்கம், முக்கிய புள்ளிகள் அனைத்தும் தமிழில்.'
+  : 'Write all output in English.'
+
+const userMessage = `Recording type: ${typeMeta.label.en}
 Duration: ${Math.round((lecture.duration_seconds || 0) / 60)} min
 
+${langInstruction}
 NOTE: Generate inferredTitle from transcript content. Ignore any user metadata.
 
 RAW TRANSCRIPT:
@@ -65,6 +74,13 @@ ${truncated}`
       keywords: result.topics || [],
       updated_at: new Date().toISOString(),
     }
+
+    // Cache translation in language-specific column
+    if (language === 'en') updatePayload.summary_en = JSON.stringify(result)
+    else if (language === 'bm') updatePayload.summary_bm = JSON.stringify(result)
+    else if (language === 'zh') updatePayload.summary_zh = JSON.stringify(result)
+    else if (language === 'ta') updatePayload.summary_ta = JSON.stringify(result)
+    else updatePayload.summary_en = JSON.stringify(result) // default = EN
 
     if (isDefaultTitle && result.inferredTitle && result.inferredTitle.length > 2) {
       updatePayload.title = result.inferredTitle
