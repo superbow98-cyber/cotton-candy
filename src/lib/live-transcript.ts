@@ -2,7 +2,7 @@
 // Live transcript engine — Groq Whisper (primary) + webkitSpeechRecognition (fallback)
 //
 // CARA KERJA:
-// 1. Cuba Groq Whisper — rakam mic, potong setiap CHUNK_INTERVAL_MS, hantar ke /api/live-transcribe
+// 1. Cuba Groq Whisper — rakam mic, requestData() setiap CHUNK_INTERVAL_MS, hantar ke /api/live-transcribe
 // 2. Kalau Groq fail (API error, GROQ_API_KEY tak set, dll) → auto fallback ke webkitSpeechRecognition
 // 3. Output: onLine callback → caller append ke setLines() seperti biasa
 //
@@ -11,10 +11,12 @@
 // - /api/transcribe (clean transcript) — tidak disentuh langsung
 // - finishLecture(), save() — tidak disentuh
 //
-// FIXES v20.17b:
-// - isSending flag kini reset betul — chunk kecil return SEBELUM set flag
-// - Groq 400 skip chunk sahaja, TIDAK trigger fallback/stopGroq mid-recording
-// - Buang recursive stopGroq() call dari dalam sendCurrentChunk
+// FIXES v20.17c:
+// - rec.start(1000) → rec.start() tanpa timeslice
+//   SEBAB: start(1000) produce fragmented WebM — chunk 2+ tiada header → Groq reject 400
+//   FIX: requestData() setiap 10s → setiap ondataavailable produce complete self-contained blob
+// - sendCurrentChunk() + currentChunkData[] diganti sendBlob() — accumulation logic tak perlu lagi
+// - stopGroq() guna requestData() + delay untuk flush final chunk, bukan sendCurrentChunk(true)
 
 export type LiveLine = {
   id: string
@@ -63,8 +65,8 @@ export class LiveTranscriptEngine {
   private mediaStream: MediaStream | null = null
   private mediaRecorder: MediaRecorder | null = null
   private chunkInterval: ReturnType<typeof setInterval> | null = null
-  private currentChunkData: Blob[] = []
   private isSending = false
+  // currentChunkData DIBUANG — requestData() produce complete blob terus
 
   // WebKit engine refs
   private recognition: any = null
@@ -144,25 +146,29 @@ export class LiveTranscriptEngine {
       const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
 
-      this.currentChunkData = []
-
+      // SEBAB UBAH: ondataavailable kini dipanggil oleh requestData() sahaja (bukan timeslice)
+      // Setiap event = satu complete, self-contained blob — terus hantar ke Groq
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
-          this.currentChunkData.push(e.data)
+          this.sendBlob(e.data, rec.mimeType || mime || 'audio/webm')
         }
       }
 
       rec.onerror = () => {
         console.error('[live-transcript] MediaRecorder error')
-        // Cleanup sahaja — jangan trigger fallback dari dalam event handler
         this.stopGroq()
       }
 
-      rec.start(1000)
+      // SEBAB UBAH: start() TANPA timeslice — data hanya keluar bila requestData() dipanggil
+      // start(1000) produce fragmented WebM → chunk 2+ tiada WebM header → Groq reject 400
+      rec.start()
       this.mediaRecorder = rec
 
+      // SEBAB UBAH: requestData() setiap interval — trigger ondataavailable dengan complete blob
       this.chunkInterval = setInterval(() => {
-        this.sendCurrentChunk()
+        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+          this.mediaRecorder.requestData()
+        }
       }, CHUNK_INTERVAL_MS)
 
       console.log(`[live-transcript] Groq engine started | mime: ${mime || 'default'}`)
@@ -182,8 +188,13 @@ export class LiveTranscriptEngine {
       this.chunkInterval = null
     }
 
-    // Flush final chunk
-    await this.sendCurrentChunk(true)
+    // SEBAB UBAH: flush final data dengan requestData() + delay
+    // Dulu guna sendCurrentChunk(true) tapi currentChunkData[] dah dibuang
+    // requestData() trigger ondataavailable → sendBlob() handle final chunk
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.requestData()
+      await new Promise(r => setTimeout(r, 300)) // bagi masa ondataavailable fire
+    }
 
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       try { this.mediaRecorder.stop() } catch {}
@@ -193,16 +204,14 @@ export class LiveTranscriptEngine {
     this.mediaStream = null
   }
 
-  private async sendCurrentChunk(isFinal = false): Promise<void> {
-    // ── PENTING: semak isSending dan size SEBELUM set flag ──
-    if (this.isSending) return
-    if (this.currentChunkData.length === 0) return
-
-    const chunks = this.currentChunkData.splice(0)
-    const mime = this.mediaRecorder?.mimeType || 'audio/webm'
-    const blob = new Blob(chunks, { type: mime })
-
-    // Chunk terlalu kecil — skip tanpa sentuh isSending flag
+  // SEBAB UBAH: sendCurrentChunk() diganti sendBlob()
+  // sendCurrentChunk() kumpul fragments dalam array — tak perlu lagi sebab
+  // requestData() dah produce complete blob terus dalam satu ondataavailable event
+  private async sendBlob(blob: Blob, mime: string): Promise<void> {
+    if (this.isSending) {
+      console.log('[live-transcript] Still sending previous chunk — skip')
+      return
+    }
     if (blob.size < MIN_CHUNK_BYTES) {
       console.log(`[live-transcript] Chunk too small (${blob.size}B) — skip`)
       return
@@ -211,11 +220,11 @@ export class LiveTranscriptEngine {
     this.isSending = true
     try {
       const whisperLang = toWhisperLang(this.opts.language)
-      const form = new FormData()
       const ext = mime.includes('mp4') ? 'mp4'
                 : mime.includes('ogg') ? 'ogg'
                 : mime.includes('wav') ? 'wav'
                 : 'webm'
+      const form = new FormData()
       form.append('audio', blob, `chunk.${ext}`)
       if (whisperLang) form.append('language', whisperLang)
 
@@ -225,10 +234,7 @@ export class LiveTranscriptEngine {
       })
 
       if (!res.ok) {
-        // 400 = chunk invalid/corrupt, 5xx = server error
-        // Skip chunk ini sahaja — chunk seterusnya akan cuba semula
-        // JANGAN panggil stopGroq() atau fallback di sini
-        console.warn(`[live-transcript] Groq ${res.status} — skip chunk, will retry next interval`)
+        console.warn(`[live-transcript] Groq ${res.status} — skip chunk`)
         return
       }
 
@@ -244,8 +250,7 @@ export class LiveTranscriptEngine {
       }
 
     } catch (e: any) {
-      // Network hiccup — skip, chunk seterusnya akan cuba semula
-      console.warn('[live-transcript] sendChunk network error:', e.message)
+      console.warn('[live-transcript] sendBlob error:', e.message)
     } finally {
       this.isSending = false
     }
