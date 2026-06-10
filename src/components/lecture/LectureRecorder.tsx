@@ -1853,9 +1853,10 @@ const startRecognition = useCallback((langCode: string) => {
               <MindMapView mindmap={lecture.mindmap_json} />
             </div>
           )}
-        </div>
+       </div>
       )}
 
+      </div>
       {/* ── Ask Lecture chat box ── */}
       {chatOpen && isProPlan && (
         <div style={{
