@@ -34,6 +34,96 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
 
+function buildNotebookLMContent(lecture: {
+  title?: string
+  subject?: string
+  lecturer?: string
+  location?: string
+  created_at?: string
+  duration_seconds?: number
+  summary?: string | AISummary | null
+  transcript_md?: string | null
+  clean_segments?: Array<{ start: number; end: number; text: string }>
+}) {
+  const lines: string[] = []
+
+  // Header
+  if (lecture.title) lines.push(lecture.title)
+  const meta = [lecture.subject, lecture.lecturer, lecture.location].filter(Boolean).join(' · ')
+  if (meta) lines.push(meta)
+  if (lecture.created_at || lecture.duration_seconds) {
+    const date = lecture.created_at
+      ? new Date(lecture.created_at).toLocaleDateString('ms-MY', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        })
+      : ''
+    const dur = lecture.duration_seconds
+      ? `${Math.floor(lecture.duration_seconds / 60)} minit`
+      : ''
+    lines.push([date, dur].filter(Boolean).join(' · '))
+  }
+  lines.push('')
+
+  // Parse summary JSON (structure dari AI summarize)
+  if (lecture.summary) {
+    try {
+      const s = typeof lecture.summary === 'string' ? JSON.parse(lecture.summary) : lecture.summary
+
+      if (s.summary) {
+        lines.push('✨ SUMMARY')
+        lines.push(s.summary)
+        lines.push('')
+      }
+      if (s.topics?.length) {
+        lines.push('📌 TOPICS')
+        s.topics.forEach((t: string, i: number) => lines.push(`${i + 1}. ${t}`))
+        lines.push('')
+      }
+      if (s.keyPoints?.length) {
+        lines.push('🔑 KEY POINTS')
+        s.keyPoints.forEach((k: string) => lines.push(`- ${k}`))
+        lines.push('')
+      }
+      if (s.formulas?.length) {
+        lines.push('📐 FORMULAS')
+        s.formulas.forEach((f: string) => lines.push(`- ${f}`))
+        lines.push('')
+      }
+      if (s.questions?.length) {
+        lines.push('❓ QUESTIONS')
+        s.questions.forEach((q: string) => lines.push(`- ${q}`))
+        lines.push('')
+      }
+    } catch {
+      // Raw summary string
+      lines.push('✨ SUMMARY')
+      lines.push(String(lecture.summary))
+      lines.push('')
+    }
+  }
+
+  // Clean transcript
+  if (lecture.clean_segments?.length) {
+    lines.push('📝 CLEAN TRANSCRIPT')
+    lecture.clean_segments.forEach((seg) => {
+      const start = formatTimestamp(seg.start)
+      const end = formatTimestamp(seg.end)
+      lines.push(`[${start}–${end}] ${seg.text}`)
+    })
+  } else if (lecture.transcript_md) {
+    lines.push('📝 TRANSCRIPT')
+    lines.push(lecture.transcript_md)
+  }
+
+  return lines.join('\n')
+}
+
+function formatTimestamp(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = Math.floor(secs % 60)
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 type RecognitionLang = {
   code: string
   label: string
@@ -296,6 +386,13 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [aiUsedProvider, setAiUsedProvider] = useState<string | null>(null)
   const [aiProvider, setAiProvider] = useState<AIProvider>(DEFAULT_PROVIDER)
   const [recLang, setRecLang] = useState<string>('ms-MY')
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [notebookToast, setNotebookToast] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const isProPlan = ['month', 'year', 'student_pro'].includes(String(plan))
 
   const isSafari = typeof navigator !== 'undefined'
     && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
@@ -740,6 +837,115 @@ const startRecognition = useCallback((langCode: string) => {
     const m = Math.floor(sec / 60)
     const s = Math.floor(sec % 60)
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  // NotebookLM button handler
+  const handleNotebookLM = async () => {
+    if (!lecture) return
+    const cleanMd = editedText?.trim() || cleanSegmentsToMd(cleanSegments)
+    const lectureMeta = lecture as Lecture & {
+      subject?: string
+      lecturer?: string
+      location?: string
+      summary?: string
+    }
+    const content = buildNotebookLMContent({
+      title: lectureMeta.title,
+      subject: lectureMeta.subject,
+      lecturer: lectureMeta.lecturer,
+      location: lectureMeta.location,
+      created_at: lectureMeta.created_at,
+      duration_seconds: lectureMeta.duration_seconds,
+      summary: aiResult || lectureMeta.summary,
+      transcript_md: lectureMeta.transcript_md || cleanMd,
+      clean_segments: cleanSegments,
+    })
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch {
+      // clipboard access failed (non-https or permission denied)
+    }
+    window.open('https://notebooklm.google.com', '_blank')
+    setNotebookToast(true)
+    setTimeout(() => setNotebookToast(false), 4000)
+  }
+
+  // Ask Lecture send handler
+  const handleChatSend = async () => {
+    const q = chatInput.trim()
+    if (!q || chatLoading) return
+    setChatInput('')
+    setChatMessages((prev) => [...prev, { role: 'user', text: q }])
+    setChatLoading(true)
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+
+    const cleanMd = editedText?.trim() || cleanSegmentsToMd(cleanSegments)
+    const transcriptCtx = cleanMd || lecture?.transcript_md || ''
+    const lectureSummary = (lecture as (Lecture & { summary?: string }) | null)?.summary
+    const summaryCtx = aiResult
+      ? JSON.stringify(aiResult)
+      : typeof lectureSummary === 'string'
+        ? lectureSummary
+        : ''
+
+    try {
+      const res = await fetch('/api/lecture-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          transcript_md: transcriptCtx,
+          summary: summaryCtx,
+        }),
+      })
+
+      if (res.status === 403) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'ai', text: 'Upgrade ke plan PRO untuk guna Ask Lecture. 🔒' },
+        ])
+        setChatLoading(false)
+        return
+      }
+
+      if (!res.ok || !res.body) throw new Error('Stream failed')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let aiText = ''
+      setChatMessages((prev) => [...prev, { role: 'ai', text: '' }])
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        const streamLines = chunk.split('\n')
+        for (const line of streamLines) {
+          if (!line.startsWith('data:')) continue
+          const data = line.slice(5).trim()
+          if (data === '[DONE]') break
+          try {
+            const { delta } = JSON.parse(data)
+            if (delta) {
+              aiText += delta
+              setChatMessages((prev) => {
+                const updated = [...prev]
+                updated[updated.length - 1] = { role: 'ai', text: aiText }
+                return updated
+              })
+              chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }
+          } catch { }
+        }
+      }
+    } catch (err) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'ai', text: 'Ralat sambungan. Cuba lagi.' },
+      ])
+    } finally {
+      setChatLoading(false)
+    }
   }
 
   // v20.14: Tambah linesOverride param — fix stale closure dalam autosave dan finishLecture
@@ -1661,6 +1867,77 @@ const startRecognition = useCallback((langCode: string) => {
               <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
                 {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
               </span>
+              <button
+                onClick={handleNotebookLM}
+                style={{
+                  height: 30,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  border: '0.5px solid rgba(0,0,0,0.10)',
+                  background: '#fff',
+                  color: 'rgba(29,29,31,0.75)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  transition: 'border-color 0.15s, color 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(0,0,0,0.28)'
+                  e.currentTarget.style.color = '#1d1d1f'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(0,0,0,0.10)'
+                  e.currentTarget.style.color = 'rgba(29,29,31,0.75)'
+                }}
+              >
+                NotebookLM
+                <span style={{ fontSize: 10, opacity: 0.6 }}>↗</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (!isProPlan) return  // show upgrade nudge atau redirect pricing
+                  setChatOpen((o) => !o)
+                }}
+                style={{
+                  height: 30,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: isProPlan ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (isProPlan) e.currentTarget.style.background = 'rgba(29,29,31,0.88)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)'
+                }}
+              >
+                {!isProPlan && <span style={{ fontSize: 11 }}>🔒</span>}
+                Ask Lecture
+                <span style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                }}>
+                  PRO
+                </span>
+              </button>
              {!isEditing && null}
               {isEditing && (
                 <>
@@ -1760,6 +2037,132 @@ const startRecognition = useCallback((langCode: string) => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* NotebookLM toast */}
+      {notebookToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 28,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#1d1d1f',
+          color: '#fff',
+          padding: '10px 20px',
+          borderRadius: 12,
+          fontSize: 13,
+          fontWeight: 500,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+        }}>
+          Disalin! Paste sebagai sumber dalam NotebookLM
+        </div>
+      )}
+
+      {/* ── Ask Lecture chat box ── */}
+      {chatOpen && isProPlan && (
+        <div style={{
+          marginTop: 12,
+          borderRadius: 12,
+          border: '0.5px solid rgba(0,0,0,0.10)',
+          background: '#fafafa',
+          overflow: 'hidden',
+        }}>
+          {/* Chat header */}
+          <div style={{
+            padding: '10px 16px',
+            borderBottom: '0.5px solid rgba(0,0,0,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f' }}>
+              Ask Lecture
+            </span>
+            <button
+              onClick={() => setChatOpen(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(29,29,31,0.4)', fontSize: 16, lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Chat messages */}
+          <div style={{ maxHeight: 320, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {chatMessages.length === 0 && (
+              <p style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', textAlign: 'center', margin: '16px 0' }}>
+                Tanya apa-apa tentang kuliah ni
+              </p>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                  background: msg.role === 'user' ? '#1d1d1f' : '#fff',
+                  color: msg.role === 'user' ? '#fff' : '#1d1d1f',
+                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  boxShadow: msg.role === 'ai' ? '0 1px 4px rgba(0,0,0,0.07)' : 'none',
+                  border: msg.role === 'ai' ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {msg.text || (msg.role === 'ai' && chatLoading ? '...' : '')}
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input bar */}
+          <div style={{
+            padding: '10px 12px',
+            borderTop: '0.5px solid rgba(0,0,0,0.08)',
+            display: 'flex',
+            gap: 8,
+          }}>
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
+              placeholder="Tanya tentang kuliah ni..."
+              style={{
+                flex: 1,
+                height: 34,
+                borderRadius: 8,
+                border: '0.5px solid rgba(0,0,0,0.14)',
+                background: '#fff',
+                padding: '0 12px',
+                fontSize: 13,
+                outline: 'none',
+                color: '#1d1d1f',
+              }}
+            />
+            <button
+              onClick={handleChatSend}
+              disabled={chatLoading || !chatInput.trim()}
+              style={{
+                height: 34,
+                padding: '0 14px',
+                borderRadius: 8,
+                border: 'none',
+                background: chatLoading || !chatInput.trim() ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                transition: 'background 0.15s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {chatLoading ? '...' : 'Hantar'}
+            </button>
+          </div>
         </div>
       )}
 
