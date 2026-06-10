@@ -453,29 +453,29 @@ export default function LectureRecorder({ id }: { id: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording])
 
-  // v20.17: startRecognition — guna LiveTranscriptEngine (Groq primary, webkit fallback)
+  // v20.17 FIX: startRecognition — pass opts dalam constructor, matching live-transcript.ts signature
   const startRecognition = useCallback((langCode: string) => {
-    const onLine = (text: string) => {
-      const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
-      const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
-      const corrected = correctScientificTerms(text, subjectHint)
-      setLines((prev) => [...prev, {
-        id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: langCode,
-      }])
-      setInterim('')
-    }
-
-    const engine = new LiveTranscriptEngine()
+    const engine = new LiveTranscriptEngine({
+      getElapsed: () => Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current,
+      lang: langCode,
+      onLine: (text: string) => {
+        const now = Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current
+        const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
+        const corrected = correctScientificTerms(text, subjectHint)
+        setLines((prev) => [...prev, {
+          id: `l${Date.now()}${Math.random()}`, t: now, text: corrected, lang: langCode,
+        }])
+        setInterim('')
+      },
+      onInterim: (text: string) => setInterim(text),
+      onPermissionDenied: () => setPermission(false),
+      onUnsupported: () => setSupported(false),
+    })
     liveEngineRef.current = engine
-    engine.start(langCode, onLine).catch((err) => {
+    engine.start().catch((err) => {
       console.warn('[live-transcript] engine start failed:', err)
       setSupported(false)
     })
-
-    // webkit interim handler (engine exposes this if using webkit fallback)
-    engine.onInterim = (text: string) => setInterim(text)
-    engine.onPermissionDenied = () => setPermission(false)
-    engine.onUnsupported = () => setSupported(false)
   }, [])
 
   // v20.17: stopRecognition — stop LiveTranscriptEngine
