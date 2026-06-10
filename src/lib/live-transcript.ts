@@ -2,7 +2,7 @@
 // Live transcript engine — Groq Whisper (primary) + webkitSpeechRecognition (fallback)
 //
 // CARA KERJA:
-// 1. Cuba Groq Whisper — rakam mic, requestData() setiap CHUNK_INTERVAL_MS, hantar ke /api/live-transcribe
+// 1. Cuba Groq Whisper — rakam mic, cycle recorder setiap CHUNK_INTERVAL_MS, hantar ke /api/live-transcribe
 // 2. Kalau Groq fail (API error, GROQ_API_KEY tak set, dll) → auto fallback ke webkitSpeechRecognition
 // 3. Output: onLine callback → caller append ke setLines() seperti biasa
 //
@@ -11,12 +11,11 @@
 // - /api/transcribe (clean transcript) — tidak disentuh langsung
 // - finishLecture(), save() — tidak disentuh
 //
-// FIXES v20.17c:
-// - rec.start(1000) → rec.start() tanpa timeslice
-//   SEBAB: start(1000) produce fragmented WebM — chunk 2+ tiada header → Groq reject 400
-//   FIX: requestData() setiap 10s → setiap ondataavailable produce complete self-contained blob
-// - sendCurrentChunk() + currentChunkData[] diganti sendBlob() — accumulation logic tak perlu lagi
-// - stopGroq() guna requestData() + delay untuk flush final chunk, bukan sendCurrentChunk(true)
+// FIXES v20.17d:
+// - requestData() diganti cycleRecorder() — stop+restart recorder setiap chunk
+//   SEBAB: requestData() pada Chrome masih produce fragmented WebM walaupun tanpa timeslice
+//   FIX: stop recorder → ondataavailable fire complete blob → start recorder baru dari stream sama
+//   Setiap cycle = recorder baru = WebM header baru = Groq terima
 
 export type LiveLine = {
   id: string
@@ -66,7 +65,6 @@ export class LiveTranscriptEngine {
   private mediaRecorder: MediaRecorder | null = null
   private chunkInterval: ReturnType<typeof setInterval> | null = null
   private isSending = false
-  // currentChunkData DIBUANG — requestData() produce complete blob terus
 
   // WebKit engine refs
   private recognition: any = null
@@ -137,41 +135,16 @@ export class LiveTranscriptEngine {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       this.mediaStream = stream
 
-      const mimeCandidates = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4',
-        'audio/ogg;codecs=opus',
-      ]
-      const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+      // Start recorder pertama
+      this.startNewRecorder(stream)
 
-      // SEBAB UBAH: ondataavailable kini dipanggil oleh requestData() sahaja (bukan timeslice)
-      // Setiap event = satu complete, self-contained blob — terus hantar ke Groq
-      rec.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          this.sendBlob(e.data, rec.mimeType || mime || 'audio/webm')
-        }
-      }
-
-      rec.onerror = () => {
-        console.error('[live-transcript] MediaRecorder error')
-        this.stopGroq()
-      }
-
-      // SEBAB UBAH: start() TANPA timeslice — data hanya keluar bila requestData() dipanggil
-      // start(1000) produce fragmented WebM → chunk 2+ tiada WebM header → Groq reject 400
-      rec.start()
-      this.mediaRecorder = rec
-
-      // SEBAB UBAH: requestData() setiap interval — trigger ondataavailable dengan complete blob
+      // SEBAB UBAH: cycleRecorder() ganti requestData()
+      // requestData() pada Chrome masih fragmented — stop+restart = complete blob setiap kali
       this.chunkInterval = setInterval(() => {
-        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-          this.mediaRecorder.requestData()
-        }
+        this.cycleRecorder()
       }, CHUNK_INTERVAL_MS)
 
-      console.log(`[live-transcript] Groq engine started | mime: ${mime || 'default'}`)
+      console.log('[live-transcript] Groq engine started')
       return true
 
     } catch (e: any) {
@@ -182,31 +155,71 @@ export class LiveTranscriptEngine {
     }
   }
 
+  // Buat recorder baru dari stream yang sama
+  // Dipanggil pada start dan selepas setiap cycle
+  private startNewRecorder(stream: MediaStream): void {
+    const mimeCandidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+    ]
+    const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        this.sendBlob(e.data, rec.mimeType || mime || 'audio/webm')
+      }
+    }
+
+    rec.onerror = () => {
+      console.error('[live-transcript] MediaRecorder error')
+      this.stopGroq()
+    }
+
+    rec.start()
+    this.mediaRecorder = rec
+  }
+
+  // SEBAB UBAH: cycleRecorder() — stop recorder semasa, start yang baru
+  // Stop → ondataavailable fire dengan COMPLETE blob (ada header) → onstop → start baru
+  // Berbeza dengan requestData() yang masih produce fragmented blob pada Chrome
+  private cycleRecorder(): void {
+    const rec = this.mediaRecorder
+    const stream = this.mediaStream
+    if (!rec || !stream || rec.state !== 'recording') return
+
+    // Assign onstop — akan start recorder baru selepas stop
+    rec.onstop = () => {
+      if (!this.running) return
+      this.startNewRecorder(stream)
+    }
+
+    rec.stop() // trigger ondataavailable (complete blob) → onstop
+  }
+
   private async stopGroq(): Promise<void> {
     if (this.chunkInterval) {
       clearInterval(this.chunkInterval)
       this.chunkInterval = null
     }
 
-    // SEBAB UBAH: flush final data dengan requestData() + delay
-    // Dulu guna sendCurrentChunk(true) tapi currentChunkData[] dah dibuang
-    // requestData() trigger ondataavailable → sendBlob() handle final chunk
-    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-      this.mediaRecorder.requestData()
-      await new Promise(r => setTimeout(r, 300)) // bagi masa ondataavailable fire
+    // SEBAB UBAH: buang onstop dulu — supaya cycleRecorder() tak trigger start baru
+    // Stop recorder untuk flush final chunk via ondataavailable
+    if (this.mediaRecorder) {
+      this.mediaRecorder.onstop = null
+      if (this.mediaRecorder.state === 'recording') {
+        this.mediaRecorder.stop()
+        await new Promise(r => setTimeout(r, 300))
+      }
     }
 
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      try { this.mediaRecorder.stop() } catch {}
-    }
     this.mediaRecorder = null
     this.mediaStream?.getTracks().forEach(t => t.stop())
     this.mediaStream = null
   }
 
-  // SEBAB UBAH: sendCurrentChunk() diganti sendBlob()
-  // sendCurrentChunk() kumpul fragments dalam array — tak perlu lagi sebab
-  // requestData() dah produce complete blob terus dalam satu ondataavailable event
   private async sendBlob(blob: Blob, mime: string): Promise<void> {
     if (this.isSending) {
       console.log('[live-transcript] Still sending previous chunk — skip')
