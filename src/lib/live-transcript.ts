@@ -10,6 +10,11 @@
 // - setLines(), linesRef, raw_transcript_md flow — sama je
 // - /api/transcribe (clean transcript) — tidak disentuh langsung
 // - finishLecture(), save() — tidak disentuh
+//
+// FIXES v20.17b:
+// - isSending flag kini reset betul — chunk kecil return SEBELUM set flag
+// - Groq 400 skip chunk sahaja, TIDAK trigger fallback/stopGroq mid-recording
+// - Buang recursive stopGroq() call dari dalam sendCurrentChunk
 
 export type LiveLine = {
   id: string
@@ -58,7 +63,6 @@ export class LiveTranscriptEngine {
   private mediaStream: MediaStream | null = null
   private mediaRecorder: MediaRecorder | null = null
   private chunkInterval: ReturnType<typeof setInterval> | null = null
-  private pendingChunks: Blob[] = []
   private currentChunkData: Blob[] = []
   private isSending = false
 
@@ -74,7 +78,6 @@ export class LiveTranscriptEngine {
     if (this.running) return
     this.running = true
 
-    // Cuba Groq dulu
     const groqOk = await this.startGroq()
     if (!groqOk) {
       console.warn('[live-transcript] Groq unavailable — fallback to webkitSpeechRecognition')
@@ -102,14 +105,11 @@ export class LiveTranscriptEngine {
     if (!this.running) return
     this.opts = { ...this.opts, language: newLangCode }
 
-    if (this.engine === 'groq') {
-      // Groq — language hint diambil per-chunk, tak perlu restart
-      // Tapi perlu restart recognition untuk language baru
-    } else {
-      // WebKit — kena restart dengan lang baru
+    if (this.engine === 'webkit') {
       this.stopWebkit()
       setTimeout(() => this.startWebkit(), 120)
     }
+    // Groq — language diambil per-chunk, tak perlu restart
   }
 
   // ─────────────────────────────────────────
@@ -121,14 +121,12 @@ export class LiveTranscriptEngine {
       if (!navigator.mediaDevices?.getUserMedia) return false
       if (typeof MediaRecorder === 'undefined') return false
 
-      // Test GROQ endpoint dulu — kalau server return 503 (key tak set), terus fallback
+      // Test endpoint dulu — 503 bermakna GROQ_API_KEY tak set
       const testRes = await fetch('/api/live-transcribe', {
         method: 'POST',
         body: (() => { const f = new FormData(); f.append('_test', '1'); return f })(),
       }).catch(() => null)
 
-      // 503 = GROQ_API_KEY tak set, 401 = auth issue
-      // Anything else (400 = no audio = OK, means endpoint live)
       if (testRes && testRes.status === 503) {
         console.warn('[live-transcript] Groq not configured (503)')
         return false
@@ -155,21 +153,14 @@ export class LiveTranscriptEngine {
       }
 
       rec.onerror = () => {
-        console.error('[live-transcript] MediaRecorder error — fallback to webkit')
-        this.stopGroq().then(() => {
-          if (this.running) {
-            this.engine = 'webkit'
-            this.opts.onEngineChange?.('webkit')
-            this.startWebkit()
-          }
-        })
+        console.error('[live-transcript] MediaRecorder error')
+        // Cleanup sahaja — jangan trigger fallback dari dalam event handler
+        this.stopGroq()
       }
 
-      // Record continuously, collect data every 1s
       rec.start(1000)
       this.mediaRecorder = rec
 
-      // Send chunk every CHUNK_INTERVAL_MS
       this.chunkInterval = setInterval(() => {
         this.sendCurrentChunk()
       }, CHUNK_INTERVAL_MS)
@@ -179,7 +170,6 @@ export class LiveTranscriptEngine {
 
     } catch (e: any) {
       console.warn('[live-transcript] Groq start failed:', e.message)
-      // Cleanup kalau partial setup
       this.mediaStream?.getTracks().forEach(t => t.stop())
       this.mediaStream = null
       return false
@@ -191,7 +181,8 @@ export class LiveTranscriptEngine {
       clearInterval(this.chunkInterval)
       this.chunkInterval = null
     }
-    // Send final chunk kalau ada
+
+    // Flush final chunk
     await this.sendCurrentChunk(true)
 
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
@@ -203,14 +194,15 @@ export class LiveTranscriptEngine {
   }
 
   private async sendCurrentChunk(isFinal = false): Promise<void> {
+    // ── PENTING: semak isSending dan size SEBELUM set flag ──
     if (this.isSending) return
     if (this.currentChunkData.length === 0) return
 
-    // Ambil data semasa, reset untuk next interval
     const chunks = this.currentChunkData.splice(0)
     const mime = this.mediaRecorder?.mimeType || 'audio/webm'
     const blob = new Blob(chunks, { type: mime })
 
+    // Chunk terlalu kecil — skip tanpa sentuh isSending flag
     if (blob.size < MIN_CHUNK_BYTES) {
       console.log(`[live-transcript] Chunk too small (${blob.size}B) — skip`)
       return
@@ -233,19 +225,14 @@ export class LiveTranscriptEngine {
       })
 
       if (!res.ok) {
-        // Groq API error — fallback ke webkit kalau bukan final
-        if (!isFinal && this.running) {
-          console.warn(`[live-transcript] Groq API error ${res.status} — falling back to webkit`)
-          await this.stopGroq()
-          this.engine = 'webkit'
-          this.opts.onEngineChange?.('webkit')
-          this.startWebkit()
-        }
+        // 400 = chunk invalid/corrupt, 5xx = server error
+        // Skip chunk ini sahaja — chunk seterusnya akan cuba semula
+        // JANGAN panggil stopGroq() atau fallback di sini
+        console.warn(`[live-transcript] Groq ${res.status} — skip chunk, will retry next interval`)
         return
       }
 
       const data = await res.json()
-
       if (data.text && data.text.trim().length > 0) {
         const line: LiveLine = {
           id: `g${Date.now()}${Math.random()}`,
@@ -257,14 +244,8 @@ export class LiveTranscriptEngine {
       }
 
     } catch (e: any) {
-      console.warn('[live-transcript] sendChunk error:', e.message)
-      // Network error — fallback ke webkit
-      if (!isFinal && this.running) {
-        await this.stopGroq()
-        this.engine = 'webkit'
-        this.opts.onEngineChange?.('webkit')
-        this.startWebkit()
-      }
+      // Network hiccup — skip, chunk seterusnya akan cuba semula
+      console.warn('[live-transcript] sendChunk network error:', e.message)
     } finally {
       this.isSending = false
     }
@@ -315,7 +296,7 @@ export class LiveTranscriptEngine {
         }
       }
 
-      // Auto-restart webkit kalau stop (normal behaviour)
+      // Auto-restart webkit — normal behaviour
       r.onend = () => {
         if (this.running && this.engine === 'webkit') {
           try { r.start() } catch {}
@@ -335,7 +316,7 @@ export class LiveTranscriptEngine {
   private stopWebkit(): void {
     if (this.recognition) {
       try {
-        this.recognition.onend = null
+        this.recognition.onend = null  // prevent auto-restart
         this.recognition.stop()
       } catch {}
       this.recognition = null
