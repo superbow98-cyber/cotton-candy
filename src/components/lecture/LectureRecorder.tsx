@@ -1856,7 +1856,110 @@ const startRecognition = useCallback((langCode: string) => {
         </div>
       )}
 
-      </div>
+      {/* ── Ask Lecture chat box ── */}
+      {chatOpen && isProPlan && (
+        <div style={{
+          marginTop: 12,
+          borderRadius: 12,
+          border: '0.5px solid rgba(0,0,0,0.10)',
+          background: '#fafafa',
+          overflow: 'hidden',
+        }}>
+          {/* Chat header */}
+          <div style={{
+            padding: '10px 16px',
+            borderBottom: '0.5px solid rgba(0,0,0,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f' }}>
+              Ask Lecture
+            </span>
+            <button
+              onClick={() => setChatOpen(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(29,29,31,0.4)', fontSize: 16, lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Chat messages */}
+          <div style={{ maxHeight: 320, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {chatMessages.length === 0 && (
+              <p style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', textAlign: 'center', margin: '16px 0' }}>
+                Tanya apa-apa tentang kuliah ni
+              </p>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                  background: msg.role === 'user' ? '#1d1d1f' : '#fff',
+                  color: msg.role === 'user' ? '#fff' : '#1d1d1f',
+                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  boxShadow: msg.role === 'ai' ? '0 1px 4px rgba(0,0,0,0.07)' : 'none',
+                  border: msg.role === 'ai' ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {msg.text || (msg.role === 'ai' && chatLoading ? '...' : '')}
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input bar */}
+          <div style={{
+            padding: '10px 12px',
+            borderTop: '0.5px solid rgba(0,0,0,0.08)',
+            display: 'flex',
+            gap: 8,
+          }}>
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
+              placeholder="Tanya tentang kuliah ni..."
+              style={{
+                flex: 1,
+                height: 34,
+                borderRadius: 8,
+                border: '0.5px solid rgba(0,0,0,0.14)',
+                background: '#fff',
+                padding: '0 12px',
+                fontSize: 13,
+                outline: 'none',
+                color: '#1d1d1f',
+              }}
+            />
+            <button
+              onClick={handleChatSend}
+              disabled={chatLoading || !chatInput.trim()}
+              style={{
+                height: 34,
+                padding: '0 14px',
+                borderRadius: 8,
+                border: 'none',
+                background: chatLoading || !chatInput.trim() ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                transition: 'background 0.15s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {chatLoading ? '...' : 'Hantar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* CLEAN TRANSCRIPT */}
       {(cleanSegments.length > 0 || editedText || transcriptImages.length > 0) && (
@@ -2193,111 +2296,6 @@ const startRecognition = useCallback((langCode: string) => {
           boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
         }}>
           Disalin! Paste sebagai sumber dalam NotebookLM
-        </div>
-      )}
-
-      {/* ── Ask Lecture chat box ── */}
-      {chatOpen && isProPlan && (
-        <div style={{
-          marginTop: 12,
-          borderRadius: 12,
-          border: '0.5px solid rgba(0,0,0,0.10)',
-          background: '#fafafa',
-          overflow: 'hidden',
-        }}>
-          {/* Chat header */}
-          <div style={{
-            padding: '10px 16px',
-            borderBottom: '0.5px solid rgba(0,0,0,0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f' }}>
-              Ask Lecture
-            </span>
-            <button
-              onClick={() => setChatOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(29,29,31,0.4)', fontSize: 16, lineHeight: 1 }}
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Chat messages */}
-          <div style={{ maxHeight: 320, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {chatMessages.length === 0 && (
-              <p style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', textAlign: 'center', margin: '16px 0' }}>
-                Tanya apa-apa tentang kuliah ni
-              </p>
-            )}
-            {chatMessages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '85%',
-                  background: msg.role === 'user' ? '#1d1d1f' : '#fff',
-                  color: msg.role === 'user' ? '#fff' : '#1d1d1f',
-                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  boxShadow: msg.role === 'ai' ? '0 1px 4px rgba(0,0,0,0.07)' : 'none',
-                  border: msg.role === 'ai' ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
-                {msg.text || (msg.role === 'ai' && chatLoading ? '...' : '')}
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input bar */}
-          <div style={{
-            padding: '10px 12px',
-            borderTop: '0.5px solid rgba(0,0,0,0.08)',
-            display: 'flex',
-            gap: 8,
-          }}>
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
-              placeholder="Tanya tentang kuliah ni..."
-              style={{
-                flex: 1,
-                height: 34,
-                borderRadius: 8,
-                border: '0.5px solid rgba(0,0,0,0.14)',
-                background: '#fff',
-                padding: '0 12px',
-                fontSize: 13,
-                outline: 'none',
-                color: '#1d1d1f',
-              }}
-            />
-            <button
-              onClick={handleChatSend}
-              disabled={chatLoading || !chatInput.trim()}
-              style={{
-                height: 34,
-                padding: '0 14px',
-                borderRadius: 8,
-                border: 'none',
-                background: chatLoading || !chatInput.trim() ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
-                transition: 'background 0.15s',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {chatLoading ? '...' : 'Hantar'}
-            </button>
-          </div>
         </div>
       )}
 
