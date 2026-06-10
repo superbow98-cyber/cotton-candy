@@ -33,7 +33,9 @@ function authHeaders() {
  * Fix: wrap Blob as File with explicit mime type so Soniox can determine audio duration.
  */
 async function uploadFile(audio: Blob, filename = 'audio.webm'): Promise<string> {
-  const mimeType = audio.type || 'audio/webm'
+  // Strip codecs param — Soniox rejects 'audio/webm;codecs=opus', needs plain 'audio/webm'
+  const rawMime = audio.type || 'audio/webm'
+  const mimeType = rawMime.split(';')[0].trim()
   const file = new File([audio], filename, { type: mimeType })
   const form = new FormData()
   form.append('file', file, filename)
