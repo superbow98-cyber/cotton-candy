@@ -1,21 +1,18 @@
 // src/lib/live-transcript.ts
-// Live transcript engine — Groq Whisper (primary) + webkitSpeechRecognition (fallback)
+// Live transcript engine — Groq Whisper + WebKit DUAL ENGINE (Option C)
 //
 // CARA KERJA:
-// 1. Cuba Groq Whisper — rakam mic, cycle recorder setiap CHUNK_INTERVAL_MS, hantar ke /api/live-transcribe
-// 2. Kalau Groq fail (API error, GROQ_API_KEY tak set, dll) → auto fallback ke webkitSpeechRecognition
-// 3. Output: onLine callback → caller append ke setLines() seperti biasa
+// 1. Kedua-dua Groq + WebKit start serentak
+// 2. WebKit — HANYA set onInterim (preview kelabu), TIDAK append final lines
+// 3. Groq — cycle setiap 10s, produce final lines yang accurate
+// 4. Groq fail (400/network) → promote lastInterimText jadi final line (WebKit cover)
+// 5. Groq OK → clear interim, append final line dari Groq
 //
 // YANG TIDAK BERUBAH:
 // - setLines(), linesRef, raw_transcript_md flow — sama je
-// - /api/transcribe (clean transcript) — tidak disentuh langsung
+// - /api/transcribe (clean transcript) — tidak disentuh
 // - finishLecture(), save() — tidak disentuh
-//
-// FIXES v20.17d:
-// - requestData() diganti cycleRecorder() — stop+restart recorder setiap chunk
-//   SEBAB: requestData() pada Chrome masih produce fragmented WebM walaupun tanpa timeslice
-//   FIX: stop recorder → ondataavailable fire complete blob → start recorder baru dari stream sama
-//   Setiap cycle = recorder baru = WebM header baru = Groq terima
+// - LectureRecorder.tsx — tiada perubahan (onLine + onInterim signature sama)
 
 export type LiveLine = {
   id: string
@@ -25,21 +22,17 @@ export type LiveLine = {
 }
 
 export type LiveTranscriptOptions = {
-  language: string            // e.g. 'ms-MY', 'en-US', 'zh-CN', 'ta-MY'
+  language: string
   onLine: (line: LiveLine) => void
   onInterim?: (text: string) => void
   onError?: (err: string) => void
   onEngineChange?: (engine: 'groq' | 'webkit') => void
-  getElapsed: () => number    // fungsi untuk dapat elapsed seconds semasa
+  getElapsed: () => number
 }
 
-// Chunk interval — setiap 10s rakam, hantar ke Groq
 const CHUNK_INTERVAL_MS = 10_000
-
-// Min size untuk hantar ke Groq — skip kalau terlalu kecil (silence/noise)
 const MIN_CHUNK_BYTES = 2_000
 
-// Map dari SpeechRecognition lang code ke Groq/Whisper language code
 function toWhisperLang(langCode: string): string | null {
   const map: Record<string, string> = {
     'ms-MY': 'ms',
@@ -52,64 +45,60 @@ function toWhisperLang(langCode: string): string | null {
   return map[langCode] || null
 }
 
-// ─────────────────────────────────────────────
-// CLASS: LiveTranscriptEngine
-// ─────────────────────────────────────────────
 export class LiveTranscriptEngine {
   private opts: LiveTranscriptOptions
-  private engine: 'groq' | 'webkit' = 'groq'
   private running = false
 
-  // Groq engine refs
+  // Groq refs
   private mediaStream: MediaStream | null = null
   private mediaRecorder: MediaRecorder | null = null
   private chunkInterval: ReturnType<typeof setInterval> | null = null
   private isSending = false
+  private groqAvailable = false
 
-  // WebKit engine refs
+  // WebKit refs
   private recognition: any = null
+
+  // Track interim terkini dari WebKit — untuk promote kalau Groq fail
+  private lastInterimText = ''
 
   constructor(opts: LiveTranscriptOptions) {
     this.opts = opts
   }
 
-  // ── PUBLIC: start ──
   async start(): Promise<void> {
     if (this.running) return
     this.running = true
 
-    const groqOk = await this.startGroq()
-    if (!groqOk) {
-      console.warn('[live-transcript] Groq unavailable — fallback to webkitSpeechRecognition')
-      this.engine = 'webkit'
-      this.opts.onEngineChange?.('webkit')
-      this.startWebkit()
-    } else {
-      this.engine = 'groq'
+    // Cuba start Groq — kalau ok, jalan dual engine
+    // Kalau Groq unavailable, WebKit jadi sole engine (promote interim jadi final)
+    this.groqAvailable = await this.startGroq()
+
+    if (this.groqAvailable) {
+      console.log('[live-transcript] Dual engine: Groq primary + WebKit interim')
       this.opts.onEngineChange?.('groq')
+    } else {
+      console.warn('[live-transcript] Groq unavailable — WebKit sole engine')
+      this.opts.onEngineChange?.('webkit')
     }
+
+    // WebKit sentiasa start — dual engine atau sole engine
+    this.startWebkit()
   }
 
-  // ── PUBLIC: stop ──
   async stop(): Promise<void> {
     this.running = false
-    if (this.engine === 'groq') {
-      await this.stopGroq()
-    } else {
-      this.stopWebkit()
-    }
+    await this.stopGroq()
+    this.stopWebkit()
   }
 
-  // ── PUBLIC: swap language semasa running ──
   async swapLanguage(newLangCode: string): Promise<void> {
     if (!this.running) return
     this.opts = { ...this.opts, language: newLangCode }
-
-    if (this.engine === 'webkit') {
-      this.stopWebkit()
-      setTimeout(() => this.startWebkit(), 120)
-    }
-    // Groq — language diambil per-chunk, tak perlu restart
+    // Restart WebKit dengan lang baru
+    this.stopWebkit()
+    setTimeout(() => this.startWebkit(), 120)
+    // Groq ambil lang per-chunk — tak perlu restart
   }
 
   // ─────────────────────────────────────────
@@ -121,7 +110,6 @@ export class LiveTranscriptEngine {
       if (!navigator.mediaDevices?.getUserMedia) return false
       if (typeof MediaRecorder === 'undefined') return false
 
-      // Test endpoint dulu — 503 bermakna GROQ_API_KEY tak set
       const testRes = await fetch('/api/live-transcribe', {
         method: 'POST',
         body: (() => { const f = new FormData(); f.append('_test', '1'); return f })(),
@@ -135,11 +123,9 @@ export class LiveTranscriptEngine {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       this.mediaStream = stream
 
-      // Start recorder pertama
       this.startNewRecorder(stream)
 
-      // SEBAB UBAH: cycleRecorder() ganti requestData()
-      // requestData() pada Chrome masih fragmented — stop+restart = complete blob setiap kali
+      // cycleRecorder setiap 10s — stop+start = complete WebM blob setiap kali
       this.chunkInterval = setInterval(() => {
         this.cycleRecorder()
       }, CHUNK_INTERVAL_MS)
@@ -155,8 +141,6 @@ export class LiveTranscriptEngine {
     }
   }
 
-  // Buat recorder baru dari stream yang sama
-  // Dipanggil pada start dan selepas setiap cycle
   private startNewRecorder(stream: MediaStream): void {
     const mimeCandidates = [
       'audio/webm;codecs=opus',
@@ -182,21 +166,17 @@ export class LiveTranscriptEngine {
     this.mediaRecorder = rec
   }
 
-  // SEBAB UBAH: cycleRecorder() — stop recorder semasa, start yang baru
-  // Stop → ondataavailable fire dengan COMPLETE blob (ada header) → onstop → start baru
-  // Berbeza dengan requestData() yang masih produce fragmented blob pada Chrome
   private cycleRecorder(): void {
     const rec = this.mediaRecorder
     const stream = this.mediaStream
     if (!rec || !stream || rec.state !== 'recording') return
 
-    // Assign onstop — akan start recorder baru selepas stop
     rec.onstop = () => {
       if (!this.running) return
       this.startNewRecorder(stream)
     }
 
-    rec.stop() // trigger ondataavailable (complete blob) → onstop
+    rec.stop()
   }
 
   private async stopGroq(): Promise<void> {
@@ -205,8 +185,6 @@ export class LiveTranscriptEngine {
       this.chunkInterval = null
     }
 
-    // SEBAB UBAH: buang onstop dulu — supaya cycleRecorder() tak trigger start baru
-    // Stop recorder untuk flush final chunk via ondataavailable
     if (this.mediaRecorder) {
       this.mediaRecorder.onstop = null
       if (this.mediaRecorder.state === 'recording') {
@@ -222,11 +200,13 @@ export class LiveTranscriptEngine {
 
   private async sendBlob(blob: Blob, mime: string): Promise<void> {
     if (this.isSending) {
-      console.log('[live-transcript] Still sending previous chunk — skip')
+      console.log('[live-transcript] Still sending — skip chunk')
       return
     }
     if (blob.size < MIN_CHUNK_BYTES) {
       console.log(`[live-transcript] Chunk too small (${blob.size}B) — skip`)
+      // Groq skip chunk kecil (senyap) — promote WebKit interim kalau ada
+      this.promoteInterimIfAny('silence')
       return
     }
 
@@ -247,12 +227,17 @@ export class LiveTranscriptEngine {
       })
 
       if (!res.ok) {
-        console.warn(`[live-transcript] Groq ${res.status} — skip chunk`)
+        console.warn(`[live-transcript] Groq ${res.status} — promote WebKit interim`)
+        // Groq fail — WebKit cover: promote lastInterimText jadi final line
+        this.promoteInterimIfAny('groq-error')
         return
       }
 
       const data = await res.json()
       if (data.text && data.text.trim().length > 0) {
+        // Groq OK — clear interim, append Groq final line
+        this.opts.onInterim?.('')
+        this.lastInterimText = ''
         const line: LiveLine = {
           id: `g${Date.now()}${Math.random()}`,
           t: this.opts.getElapsed(),
@@ -260,23 +245,47 @@ export class LiveTranscriptEngine {
           lang: this.opts.language,
         }
         this.opts.onLine(line)
+      } else {
+        // Groq return empty (senyap/hallucination filtered) — promote interim kalau ada
+        this.promoteInterimIfAny('groq-empty')
       }
 
     } catch (e: any) {
       console.warn('[live-transcript] sendBlob error:', e.message)
+      this.promoteInterimIfAny('network-error')
     } finally {
       this.isSending = false
     }
   }
 
+  // Promote WebKit interim jadi final line kalau ada teks
+  // Dipanggil bila Groq fail, senyap, atau error
+  private promoteInterimIfAny(reason: string): void {
+    const text = this.lastInterimText.trim()
+    if (text.length < 3) return // terlalu pendek — skip
+    console.log(`[live-transcript] Promote interim → final (${reason}): "${text.slice(0, 40)}"`)
+    this.opts.onInterim?.('')
+    this.lastInterimText = ''
+    const line: LiveLine = {
+      id: `w${Date.now()}${Math.random()}`,
+      t: this.opts.getElapsed(),
+      text,
+      lang: this.opts.language,
+    }
+    this.opts.onLine(line)
+  }
+
   // ─────────────────────────────────────────
-  // WEBKIT ENGINE (fallback)
+  // WEBKIT ENGINE
   // ─────────────────────────────────────────
 
   private startWebkit(): void {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) {
-      this.opts.onError?.('Speech recognition not supported in this browser')
+      // Kalau WebKit pun tak support dan Groq unavailable — report error
+      if (!this.groqAvailable) {
+        this.opts.onError?.('Speech recognition not supported in this browser')
+      }
       return
     }
 
@@ -287,24 +296,45 @@ export class LiveTranscriptEngine {
       r.lang = this.opts.language
 
       r.onresult = (e: any) => {
-        let finalText = ''
         let interimText = ''
+        let finalText = ''
+
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const chunk = e.results[i][0].transcript
           if (e.results[i].isFinal) finalText += chunk
           else interimText += chunk
         }
-        if (finalText.trim()) {
-          const line: LiveLine = {
-            id: `w${Date.now()}${Math.random()}`,
-            t: this.opts.getElapsed(),
-            text: finalText.trim(),
-            lang: this.opts.language,
+
+        // Gabung final + interim untuk lastInterimText
+        const combined = (finalText + interimText).trim()
+        if (combined) {
+          this.lastInterimText = combined
+        }
+
+        if (this.groqAvailable) {
+          // DUAL ENGINE MODE:
+          // WebKit HANYA set interim (preview) — Groq yang produce final lines
+          // Final text dari WebKit pun jadi interim — Groq akan confirm/replace dalam 10s
+          const display = finalText || interimText
+          if (display.trim()) {
+            this.opts.onInterim?.(display.trim())
           }
-          this.opts.onLine(line)
-          this.opts.onInterim?.('')
         } else {
-          this.opts.onInterim?.(interimText)
+          // SOLE ENGINE MODE (Groq unavailable):
+          // WebKit jadi primary — final text terus jadi final line
+          if (finalText.trim()) {
+            this.opts.onInterim?.('')
+            this.lastInterimText = ''
+            const line: LiveLine = {
+              id: `w${Date.now()}${Math.random()}`,
+              t: this.opts.getElapsed(),
+              text: finalText.trim(),
+              lang: this.opts.language,
+            }
+            this.opts.onLine(line)
+          } else {
+            this.opts.onInterim?.(interimText)
+          }
         }
       }
 
@@ -312,33 +342,36 @@ export class LiveTranscriptEngine {
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
           this.opts.onError?.('Microphone permission denied')
         }
+        // Error lain (network, aborted) — biar onend handle restart
       }
 
-      // Auto-restart webkit — normal behaviour
       r.onend = () => {
-        if (this.running && this.engine === 'webkit') {
+        if (this.running) {
           try { r.start() } catch {}
         }
       }
 
       r.start()
       this.recognition = r
-      console.log(`[live-transcript] WebKit engine started | lang: ${this.opts.language}`)
+      console.log(`[live-transcript] WebKit engine started | lang: ${this.opts.language} | mode: ${this.groqAvailable ? 'interim-only' : 'sole'}`)
 
     } catch (e: any) {
       console.error('[live-transcript] WebKit start failed:', e)
-      this.opts.onError?.('Speech recognition failed to start')
+      if (!this.groqAvailable) {
+        this.opts.onError?.('Speech recognition failed to start')
+      }
     }
   }
 
   private stopWebkit(): void {
     if (this.recognition) {
       try {
-        this.recognition.onend = null  // prevent auto-restart
+        this.recognition.onend = null
         this.recognition.stop()
       } catch {}
       this.recognition = null
     }
     this.opts.onInterim?.('')
+    this.lastInterimText = ''
   }
 }
