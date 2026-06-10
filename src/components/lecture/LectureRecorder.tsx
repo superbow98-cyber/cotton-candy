@@ -326,6 +326,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
   const [audioCaptureOk, setAudioCaptureOk] = useState<boolean | null>(null)
   const [aiFellBack, setAiFellBack] = useState<boolean>(false)
+  const [summaryLang, setSummaryLang] = useState<'en' | 'bm' | 'zh' | 'ta'>('en')
+  const [summaryTranslating, setSummaryTranslating] = useState(false)
   const [usage, setUsage] = useState<AudioUsageInfo | null>(null)
   const [capReachedDuringRec, setCapReachedDuringRec] = useState(false)
 
@@ -772,7 +774,41 @@ const startRecognition = useCallback((langCode: string) => {
     } catch (e) { console.error(e) }
     finally { setSaving(false) }
   }
+  const translateSummary = async (targetLang: 'en' | 'bm' | 'zh' | 'ta') => {
+    if (!lecture) return
+    setSummaryLang(targetLang)
 
+    const cacheKey = `summary_${targetLang}` as keyof Lecture
+    const cached = (lecture as any)[cacheKey] as string | undefined
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (parsed && typeof parsed === 'object' && 'summary' in parsed) {
+          setAiResult(parsed as AISummary)
+          return
+        }
+      } catch {}
+    }
+
+    setSummaryTranslating(true)
+    try {
+      const res = await fetch('/api/ai-summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lectureId: lecture.id, provider: aiProvider, language: targetLang }),
+      })
+      const json = await res.json()
+      if (res.ok && json.ok) {
+        setAiResult(json.data as AISummary)
+        const updated = { ...lecture, [`summary_${targetLang}`]: JSON.stringify(json.data) }
+        setLecture(updated); lectureRef.current = updated
+      }
+    } catch (e) {
+      console.error('[translateSummary] failed:', e)
+    } finally {
+      setSummaryTranslating(false)
+    }
+  }
   const runAI = async () => {
     if (!lecture) return
     setAiProcessing(true); setAiError(null); setAiUsedProvider(null); setAiFellBack(false)
@@ -1028,7 +1064,7 @@ const startRecognition = useCallback((langCode: string) => {
   if (!lecture) return <div style={{ color: s.gray, padding: 20 }}>{t('loading')}</div>
 
   const wordCount = linesToMd(lines).replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
-  const currentLang = RECOGNITION_LANGS.find(l => l.code === recLang) || RECOGNITION_LANGS[0]
+  const _currentLang = RECOGNITION_LANGS.find(l => l.code === recLang) || RECOGNITION_LANGS[0]
   const detectedSubject = detectSubject(lecture?.title || '', lecture?.subject || '')
 
   return (
@@ -1482,6 +1518,37 @@ const startRecognition = useCallback((langCode: string) => {
               )}
             </div>
           )}
+          {/* SUMMARY LANGUAGE PILLS */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', fontWeight: 500 }}>
+              {lang === 'bm' ? 'Bahasa ringkasan:' : 'Summary language:'}
+            </span>
+            {(['en', 'bm', 'zh', 'ta'] as const).map((l) => {
+              const labels = { en: '🇬🇧 EN', bm: '🇲🇾 BM', zh: '🇨🇳 中文', ta: '🇮🇳 TA' }
+              const isActive = summaryLang === l
+              const isCached = !!(lecture as any)[`summary_${l}`]
+              return (
+                <button
+                  key={l}
+                  onClick={() => translateSummary(l)}
+                  disabled={summaryTranslating}
+                  style={{
+                    padding: '4px 12px', borderRadius: 100,
+                    border: isActive ? '1.5px solid #D4537E' : '0.5px solid rgba(0,0,0,0.12)',
+                    background: isActive ? 'linear-gradient(135deg, #FFB7C5, #D4537E)' : isCached ? 'rgba(212,83,126,0.06)' : '#fff',
+                    color: isActive ? '#fff' : 'rgba(29,29,31,0.75)',
+                    fontSize: 12, fontWeight: isActive ? 600 : 400,
+                    cursor: summaryTranslating ? 'wait' : 'pointer',
+                    transition: 'all 0.15s',
+                    opacity: summaryTranslating && !isActive ? 0.5 : 1,
+                  }}
+                >
+                  {summaryTranslating && isActive ? '⏳' : labels[l]}
+                  {isCached && !isActive && <span style={{ marginLeft: 3, opacity: 0.5, fontSize: 9 }}>●</span>}
+                </button>
+              )
+            })}
+          </div>
           {aiFellBack && aiUsedProvider && (
             <div style={{
               padding: '10px 14px', marginBottom: 10,
