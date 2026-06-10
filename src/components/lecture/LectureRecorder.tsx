@@ -366,6 +366,12 @@ export default function LectureRecorder({ id }: { id: string }) {
     setRecLang(mapped)
     recLangRef.current = mapped
     try { localStorage.setItem(STORAGE_KEY, mapped) } catch {}
+
+    // Auto-sync summaryLang ikut recording language
+    const summaryLangMap: Record<string, 'en' | 'bm' | 'zh' | 'ta'> = {
+      'auto': 'bm', 'ms': 'bm', 'en': 'en', 'zh': 'zh', 'ta': 'ta',
+    }
+    setSummaryLang(summaryLangMap[recordingLang] || 'en')
   }, [recordingLang])
 
   useEffect(() => {
@@ -1056,11 +1062,10 @@ const startRecognition = useCallback((langCode: string) => {
     downloadText(`${title.replace(/[^\w-]+/g, '_')}.md`, md, 'text/markdown')
   }
   const exportPdf = () => {
-    if (!lecture) return
-    const lec = { ...lecture, clean_transcript_edited: editedText || lecture.clean_transcript_edited, transcript_images: transcriptImages }
-    lectureToPdf(lec, { watermark: PLANS[plan].watermark, theme: s, ai: aiResult || undefined })
-  }
-
+  if (!lecture) return
+  const lec = { ...lecture, clean_transcript_edited: editedText || lecture.clean_transcript_edited, transcript_images: transcriptImages }
+  lectureToPdf(lec, { watermark: PLANS[plan].watermark, theme: s, ai: aiResult || undefined, summaryLang })
+}
   if (!lecture) return <div style={{ color: s.gray, padding: 20 }}>{t('loading')}</div>
 
   const wordCount = linesToMd(lines).replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean).length
