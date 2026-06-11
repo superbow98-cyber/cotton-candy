@@ -186,6 +186,20 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <span style={{ fontSize: 13 }}>📊</span>
               {lang === 'bm' ? 'Penggunaan & Kos' : 'Usage & Cost'}
             </Link>
+            <Link
+              href="/dashboard/admin/withdrawals"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '8px 10px', borderRadius: 8,
+                fontSize: 13, fontWeight: 500,
+                color: pathname?.startsWith('/dashboard/admin/withdrawals') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                background: pathname?.startsWith('/dashboard/admin/withdrawals') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>💸</span>
+              {lang === 'bm' ? 'Pengeluaran' : 'Withdrawals'}
+            </Link>
           </>
         )}
 
@@ -361,6 +375,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 >
                   <span style={{ fontSize: 13 }}>📊</span>
                   {lang === 'bm' ? 'Penggunaan & Kos' : 'Usage & Cost'}
+                </Link>
+                <Link
+                  href="/dashboard/admin/withdrawals"
+                  onClick={() => setDrawer(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '8px 10px', borderRadius: 8,
+                    fontSize: 13, fontWeight: 500,
+                    color: pathname?.startsWith('/dashboard/admin/withdrawals') ? '#1d1d1f' : 'rgba(29,29,31,0.7)',
+                    background: pathname?.startsWith('/dashboard/admin/withdrawals') ? 'rgba(0,0,0,0.05)' : 'transparent',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>💸</span>
+                  {lang === 'bm' ? 'Pengeluaran' : 'Withdrawals'}
                 </Link>
               </>
             )}
