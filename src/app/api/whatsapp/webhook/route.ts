@@ -5,9 +5,9 @@ import { adminClient } from '@/lib/supabase/server'
 async function sendMessage(to: string, body: string) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID!
   const authToken = process.env.TWILIO_AUTH_TOKEN!
-  const from = 'whatsapp:+14155238886' // Twilio sandbox number
+  const from = 'whatsapp:+14155238886'
 
-  await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
     method: 'POST',
     headers: {
       'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
@@ -15,8 +15,9 @@ async function sendMessage(to: string, body: string) {
     },
     body: new URLSearchParams({ To: to, From: from, Body: body }).toString()
   })
+  const result = await res.json()
+  console.log('sendMessage result:', JSON.stringify(result))
 }
-
 export async function POST(req: NextRequest) {
   const text = await req.text()
   console.log('RAW BODY:', text)
