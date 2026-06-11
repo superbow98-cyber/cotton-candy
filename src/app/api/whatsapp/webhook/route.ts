@@ -19,17 +19,19 @@ async function sendMessage(to: string, body: string) {
 
 export async function POST(req: NextRequest) {
   const text = await req.text()
+  console.log('RAW BODY:', text)
+
   const params = new URLSearchParams(text)
   const from = params.get('From') as string
   const type = params.get('MediaContentType0')
   const body = (params.get('Body') ?? '').toUpperCase().trim()
   const mediaUrl = params.get('MediaUrl0')
 
-  // Twilio expects 200 + TwiML response
+  console.log('PARSED:', { from, type, body, mediaUrl })
+
   const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
   if (mediaUrl && type?.startsWith('audio')) {
-    // Voice note received
     handleVoiceNote(from, mediaUrl).catch(console.error)
   } else if (body) {
     handleTextReply(from, body).catch(console.error)
@@ -40,7 +42,6 @@ export async function POST(req: NextRequest) {
     headers: { 'Content-Type': 'text/xml' }
   })
 }
-
 async function handleVoiceNote(from: string, mediaUrl: string) {
   await sendMessage(from, '🍬 *Cotton Candy*\n\n⏳ Processing voice note kamu...\nBiasanya ambil 30-60 saat.')
 
