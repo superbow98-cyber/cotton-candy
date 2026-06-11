@@ -29,7 +29,15 @@ interface AmbassadorData {
   is_ambassador: boolean
   has_active_plan: boolean
 }
-
+interface Withdrawal {
+  id: string
+  amount_myr: number
+  bank_name: string
+  account_number: string
+  account_name: string
+  status: 'pending' | 'approved' | 'transferred'
+  requested_at: string
+}
 const MACBOOK_TARGET = 200
 
 // ─── CSS keyframes injected once ─────────────────────────────────────────────
@@ -744,6 +752,12 @@ export default function AmbassadorDashboard() {
   const [generatingCard, setGeneratingCard] = useState(false)
   const [shareKitOpen, setShareKitOpen] = useState(false)
   const [copiedTemplate, setCopiedTemplate] = useState<number | null>(null)
+  // ── Withdrawal state ──
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false)
+  const [withdrawForm, setWithdrawForm] = useState({ bank_name: '', account_number: '', account_name: '' })
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
+  const [withdrawDone, setWithdrawDone] = useState(false)
 
   // ── Verify slot state ──
   const [verifyMode, setVerifyMode] = useState<'ipt' | 'creator' | null>(null)
@@ -825,6 +839,13 @@ export default function AmbassadorDashboard() {
           .select('*')
           .limit(10)
         setLeaderboard(lb || [])
+        const { data: wd } = await sb
+          .from('ambassador_withdrawals')
+          .select('id, amount_myr, bank_name, account_number, account_name, status, requested_at')
+          .eq('ambassador_user_id', user.id)
+          .order('requested_at', { ascending: false })
+          .limit(10)
+        setWithdrawals(wd || [])
       }
     } finally {
       setLoading(false)
@@ -893,6 +914,31 @@ export default function AmbassadorDashboard() {
     navigator.clipboard.writeText(text)
     setCopiedTemplate(idx)
     setTimeout(() => setCopiedTemplate(null), 2200)
+  }
+  async function submitWithdrawal() {
+    if (!withdrawForm.bank_name.trim() || !withdrawForm.account_number.trim() || !withdrawForm.account_name.trim()) return
+    if ((data?.commission_total || 0) < 10) return
+    setWithdrawSubmitting(true)
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      const { error } = await sb.from('ambassador_withdrawals').insert({
+        ambassador_user_id: user.id,
+        amount_myr: data!.commission_total,
+        bank_name: withdrawForm.bank_name.trim(),
+        account_number: withdrawForm.account_number.trim(),
+        account_name: withdrawForm.account_name.trim(),
+      })
+      if (!error) {
+        setWithdrawDone(true)
+        setWithdrawForm({ bank_name: '', account_number: '', account_name: '' })
+        await load()
+        setTimeout(() => { setShowWithdrawModal(false); setWithdrawDone(false) }, 2200)
+      }
+    } finally {
+      setWithdrawSubmitting(false)
+    }
   }
 
   async function handleGenerateCard() {
@@ -1445,6 +1491,148 @@ if (data.is_ambassador && !data.has_active_plan) {
           </div>
         </div>
       )}
+
+      {/* Withdrawal section */}
+      <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)', borderRadius: 14, padding: '18px 20px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+              💸 {bm ? 'Pengeluaran Komisen' : 'Commission Withdrawal'}
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1d1d1f', letterSpacing: '-0.025em', lineHeight: 1 }}>
+              RM {(data?.commission_total || 0).toFixed(2)}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.45)', marginTop: 4 }}>
+              {bm ? 'Minimum pengeluaran: RM10.00' : 'Minimum withdrawal: RM10.00'}
+            </div>
+          </div>
+          <button
+            onClick={() => setShowWithdrawModal(o => !o)}
+            disabled={(data?.commission_total || 0) < 10}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '9px 16px', borderRadius: 9,
+              fontSize: 13, fontWeight: 600, cursor: (data?.commission_total || 0) < 10 ? 'not-allowed' : 'pointer',
+              border: '0.5px solid rgba(0,0,0,0.12)',
+              background: (data?.commission_total || 0) < 10 ? 'rgba(0,0,0,0.04)' : '#1d1d1f',
+              color: (data?.commission_total || 0) < 10 ? 'rgba(29,29,31,0.3)' : '#fff',
+              transition: 'all 0.18s ease',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {bm ? 'Isi Akaun Bank' : 'Fill Bank Account'}
+          </button>
+        </div>
+
+        {/* Inline bank form */}
+        {showWithdrawModal && (data?.commission_total || 0) >= 10 && (
+          <div style={{
+            background: 'rgba(0,0,0,0.025)', border: '0.5px solid rgba(0,0,0,0.08)',
+            borderRadius: 12, padding: '18px 18px', marginBottom: 14,
+            animation: 'amb-fadeSlideUp 0.3s cubic-bezier(0.22,1,0.36,1) both',
+          }}>
+            {withdrawDone ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e6f4eb', border: '0.5px solid #7AB883', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6a40" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#2d6a40' }}>{bm ? 'Permohonan dihantar!' : 'Request submitted!'}</div>
+                  <div style={{ fontSize: 11.5, color: 'rgba(29,29,31,0.5)' }}>{bm ? 'Admin akan proses dalam 1–3 hari bekerja.' : 'Admin will process within 1–3 working days.'}</div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14 }}>
+                  {bm ? 'Maklumat Akaun Bank' : 'Bank Account Details'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[
+                    { key: 'bank_name', label: bm ? 'Nama Bank' : 'Bank Name', placeholder: bm ? 'cth: Maybank, CIMB, RHB…' : 'e.g. Maybank, CIMB, RHB…' },
+                    { key: 'account_number', label: bm ? 'No. Akaun' : 'Account Number', placeholder: '1234567890' },
+                    { key: 'account_name', label: bm ? 'Nama Akaun' : 'Account Name', placeholder: bm ? 'Nama penuh seperti dalam buku bank' : 'Full name as in bank book' },
+                  ].map(field => (
+                    <div key={field.key}>
+                      <div style={{ fontSize: 11.5, fontWeight: 500, color: 'rgba(29,29,31,0.55)', marginBottom: 5 }}>{field.label}</div>
+                      <input
+                        type="text"
+                        placeholder={field.placeholder}
+                        value={withdrawForm[field.key as keyof typeof withdrawForm]}
+                        onChange={e => setWithdrawForm(f => ({ ...f, [field.key]: e.target.value }))}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          padding: '9px 12px', borderRadius: 8,
+                          border: '0.5px solid rgba(0,0,0,0.14)',
+                          background: '#fff', fontSize: 13, color: '#1d1d1f',
+                          outline: 'none', fontFamily: "-apple-system,'Helvetica Neue',sans-serif",
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <button
+                    onClick={submitWithdrawal}
+                    disabled={withdrawSubmitting || !withdrawForm.bank_name.trim() || !withdrawForm.account_number.trim() || !withdrawForm.account_name.trim()}
+                    style={{
+                      flex: 1, padding: '10px 16px', borderRadius: 9,
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      border: 'none',
+                      background: withdrawSubmitting ? 'rgba(0,0,0,0.08)' : '#1d1d1f',
+                      color: withdrawSubmitting ? 'rgba(29,29,31,0.35)' : '#fff',
+                      transition: 'all 0.18s ease',
+                    }}
+                  >
+                    {withdrawSubmitting ? (bm ? 'Menghantar…' : 'Submitting…') : (bm ? 'Hantar Permohonan' : 'Submit Request')}
+                  </button>
+                  <button
+                    onClick={() => setShowWithdrawModal(false)}
+                    style={{
+                      padding: '10px 16px', borderRadius: 9,
+                      fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                      border: '0.5px solid rgba(0,0,0,0.12)',
+                      background: '#fff', color: 'rgba(29,29,31,0.6)',
+                    }}
+                  >
+                    {bm ? 'Batal' : 'Cancel'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Withdrawal history */}
+        {withdrawals.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(29,29,31,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+              {bm ? 'Sejarah Pengeluaran' : 'Withdrawal History'}
+            </div>
+            {withdrawals.map((w, i) => (
+              <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderTop: i === 0 ? 'none' : '0.5px solid rgba(0,0,0,0.05)' }}>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 500, color: '#1d1d1f' }}>
+                    RM {w.amount_myr.toFixed(2)} — {w.bank_name} {w.account_number}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)' }}>
+                    {new Date(w.requested_at).toLocaleDateString(bm ? 'ms-MY' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6,
+                  background: w.status === 'transferred' ? '#e6f4eb' : w.status === 'approved' ? '#e8f0fe' : 'rgba(240,160,40,0.12)',
+                  color: w.status === 'transferred' ? '#2d6a40' : w.status === 'approved' ? '#1a56db' : '#b45309',
+                  border: `0.5px solid ${w.status === 'transferred' ? '#7AB883' : w.status === 'approved' ? '#93b4f5' : 'rgba(240,160,40,0.4)'}`,
+                }}>
+                  {w.status === 'transferred' ? (bm ? '✓ Ditransfer' : '✓ Transferred') : w.status === 'approved' ? (bm ? '✓ Diluluskan' : '✓ Approved') : (bm ? '⏳ Pending' : '⏳ Pending')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* MacBook progress */}
       <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.07)', borderRadius: 14, padding: '18px 20px', marginBottom: 14 }}>
