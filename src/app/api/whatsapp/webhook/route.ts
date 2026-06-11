@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (mediaUrl && type?.startsWith('audio')) {
     handleVoiceNote(from, mediaUrl).catch(console.error)
   } else if (body) {
-    handleTextReply(from, body).catch(console.error)
+    await handleTextReply(from, body)
   }
 
   return new NextResponse(twiml, {
