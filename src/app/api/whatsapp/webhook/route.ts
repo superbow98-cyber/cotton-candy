@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { adminClient } from '@/lib/supabase/server'
 
 // Helper — send message via Twilio
 async function sendMessage(to: string, body: string) {
@@ -88,7 +88,8 @@ async function handleVoiceNote(from: string, mediaUrl: string) {
     const summary = await sumRes.json()
 
     // Save session
-    const sb = createClient()
+    const { adminClient } = await import('@/lib/supabase/server')
+const sb = adminClient()
     await sb.from('whatsapp_sessions').insert({
       phone: from,
       transcript_md: transcript,
@@ -111,7 +112,8 @@ async function handleVoiceNote(from: string, mediaUrl: string) {
 }
 
 async function handleTextReply(from: string, text: string) {
-  const sb = createClient()
+  const { adminClient } = await import('@/lib/supabase/server')
+  const sb = adminClient()
   const { data: session } = await sb
     .from('whatsapp_sessions')
     .select('*')
