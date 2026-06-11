@@ -395,7 +395,8 @@ export default function LectureRecorder({ id }: { id: string }) {
   const [notebookToast, setNotebookToast] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const isProPlan = ['month', 'monthly', 'year', 'yearly', 'student_pro', 'pro', 'student'].includes(String(plan).toLowerCase())
-
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const isSafari = typeof navigator !== 'undefined'
     && /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 
@@ -1812,7 +1813,7 @@ const startRecognition = useCallback((langCode: string) => {
               icon="✨"
               title={SECTION_LABELS.summary[lang as 'en' | 'bm']}
               s={s}
-              actions={<>
+              actions={!mounted ? undefined : <>
                 <button
                   onClick={handleNotebookLM}
                   style={{
