@@ -1785,45 +1785,7 @@ const startRecognition = useCallback((langCode: string) => {
               )
             })}
           </div>
-         {/* NotebookLM + Ask Lecture buttons — sebelah summary */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button
-              onClick={handleNotebookLM}
-              style={{
-                height: 30, padding: '0 12px', borderRadius: 8,
-                border: '0.5px solid rgba(0,0,0,0.10)', background: '#fff',
-                color: 'rgba(29,29,31,0.75)', fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                transition: 'border-color 0.15s, color 0.15s', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.28)'; e.currentTarget.style.color = '#1d1d1f' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.10)'; e.currentTarget.style.color = 'rgba(29,29,31,0.75)' }}
-            >
-              NotebookLM <span style={{ fontSize: 10, opacity: 0.6 }}>↗</span>
-            </button>
-            <button
-              onClick={() => {
-                if (!isProPlan) { alert(lang === 'bm' ? 'Upgrade ke plan Pro untuk guna Ask Lecture.' : 'Upgrade to a Pro plan to use Ask Lecture.'); return }
-                setChatOpen((o) => !o)
-              }}
-              style={{
-                height: 30, padding: '0 12px', borderRadius: 8, border: 'none',
-                background: isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)',
-                color: '#fff', fontSize: 12, fontWeight: 500,
-                cursor: isProPlan ? 'pointer' : 'not-allowed',
-                display: 'flex', alignItems: 'center', gap: 6,
-                transition: 'background 0.15s', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => { if (isProPlan) e.currentTarget.style.background = 'rgba(29,29,31,0.88)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)' }}
-            >
-              {!isProPlan && <span style={{ fontSize: 11 }}>🔒</span>}
-              Ask Lecture
-              <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4 }}>PRO</span>
-            </button>
-          </div>
-
-          {aiFellBack && aiUsedProvider && (
+         {aiFellBack && aiUsedProvider && (
             <div style={{
               padding: '10px 14px', marginBottom: 10,
               background: 'rgba(184, 134, 11, 0.08)',
@@ -1846,7 +1808,47 @@ const startRecognition = useCallback((langCode: string) => {
             </div>
           )}
           {aiResult.summary && (
-            <Section icon="✨" title={SECTION_LABELS.summary[lang as 'en' | 'bm']} s={s}>
+            <Section
+              icon="✨"
+              title={SECTION_LABELS.summary[lang as 'en' | 'bm']}
+              s={s}
+              actions={<>
+                <button
+                  onClick={handleNotebookLM}
+                  style={{
+                    height: 26, padding: '0 10px', borderRadius: 7,
+                    border: '0.5px solid rgba(0,0,0,0.10)', background: '#fff',
+                    color: 'rgba(29,29,31,0.75)', fontSize: 11, fontWeight: 500,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                    transition: 'border-color 0.15s, color 0.15s', whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.28)'; e.currentTarget.style.color = '#1d1d1f' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.10)'; e.currentTarget.style.color = 'rgba(29,29,31,0.75)' }}
+                >
+                  NotebookLM <span style={{ fontSize: 9, opacity: 0.6 }}>↗</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (!isProPlan) { alert(lang === 'bm' ? 'Upgrade ke plan Pro untuk guna Ask Lecture.' : 'Upgrade to a Pro plan to use Ask Lecture.'); return }
+                    setChatOpen((o) => !o)
+                  }}
+                  style={{
+                    height: 26, padding: '0 10px', borderRadius: 7, border: 'none',
+                    background: isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)',
+                    color: '#fff', fontSize: 11, fontWeight: 500,
+                    cursor: isProPlan ? 'pointer' : 'not-allowed',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'background 0.15s', whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => { if (isProPlan) e.currentTarget.style.background = 'rgba(29,29,31,0.88)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)' }}
+                >
+                  {!isProPlan && <span style={{ fontSize: 10 }}>🔒</span>}
+                  Ask Lecture
+                  <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3 }}>PRO</span>
+                </button>
+              </>}
+            >
               <p style={{ margin: 0, lineHeight: 1.7, fontSize: 15 }}>{aiResult.summary}</p>
             </Section>
           )}
@@ -2234,22 +2236,25 @@ const startRecognition = useCallback((langCode: string) => {
   )
 }
 
-function Section({ icon, title, children, s }: {
-  icon: string; title: string; children: React.ReactNode; s: any
+function Section({ icon, title, children, s, actions }: {
+  icon: string; title: string; children: React.ReactNode; s: any; actions?: React.ReactNode
 }) {
   return (
     <section style={{
       background: '#fff', padding: '16px 18px', borderRadius: 14,
       border: '0.5px solid rgba(0,0,0,0.06)', marginBottom: 10,
     }}>
-      <h3 style={{
-        fontSize: 12, fontWeight: 600,
-        color: 'rgba(29,29,31,0.55)',
-        textTransform: 'uppercase', letterSpacing: '0.5px',
-        margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6,
-      }}>
-        {icon} {title}
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+        <h3 style={{
+          fontSize: 12, fontWeight: 600,
+          color: 'rgba(29,29,31,0.55)',
+          textTransform: 'uppercase', letterSpacing: '0.5px',
+          margin: 0, display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          {icon} {title}
+        </h3>
+        {actions && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>{actions}</div>}
+      </div>
       {children}
     </section>
   )
