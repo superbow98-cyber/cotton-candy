@@ -1,6 +1,6 @@
 // src/app/api/ambassador/withdrawal/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { adminClient } from '@/lib/supabase/server'
 
 export async function PATCH(req: NextRequest) {
   const { id, action } = await req.json()
@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid' }, { status: 400 })
   }
 
-  const sb = createAdminClient()
+  const sb = adminClient()
   const update =
     action === 'approve'
       ? { status: 'approved', approved_at: new Date().toISOString() }
