@@ -1808,6 +1808,74 @@ const startRecognition = useCallback((langCode: string) => {
               {lang === 'bm' ? '✨ Disusun oleh' : '✨ Organized by'}: <strong>{aiUsedProvider}</strong>
             </div>
           )}
+          {chatOpen && isProPlan && (
+            <div style={{
+              background: '#fff',
+              border: '0.5px solid rgba(0,0,0,0.08)',
+              borderRadius: 14,
+              padding: '14px 16px',
+              marginBottom: 10,
+            }}>
+              <div style={{ maxHeight: 280, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {chatMessages.map((m, i) => (
+                  <div key={i} style={{
+                    display: 'flex',
+                    justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+                  }}>
+                    <div style={{
+                      maxWidth: '80%',
+                      padding: '8px 12px',
+                      borderRadius: m.role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                      background: m.role === 'user' ? '#1d1d1f' : 'rgba(0,0,0,0.04)',
+                      color: m.role === 'user' ? '#fff' : '#1d1d1f',
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                    }}>
+                      {m.text || <span style={{ opacity: 0.4 }}>…</span>}
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
+                  placeholder={lang === 'bm' ? 'Tanya tentang lecture ini…' : 'Ask about this lecture…'}
+                  disabled={chatLoading}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '0.5px solid rgba(0,0,0,0.12)',
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    background: chatLoading ? 'rgba(0,0,0,0.02)' : '#fff',
+                  }}
+                />
+                <button
+                  onClick={handleChatSend}
+                  disabled={chatLoading || !chatInput.trim()}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: '#1d1d1f',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                    opacity: chatLoading || !chatInput.trim() ? 0.5 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {chatLoading ? '…' : (lang === 'bm' ? 'Hantar' : 'Send')}
+                </button>
+              </div>
+            </div>
+          )}
           {aiResult.summary && (
             <Section
               icon="✨"
