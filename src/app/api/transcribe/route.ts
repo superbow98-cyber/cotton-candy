@@ -11,7 +11,7 @@ import { calcWhisperCost, calcSonioxCost } from '@/lib/usage-pricing'
 import { transcribeWithSoniox } from '@/lib/soniox'
 
 export const runtime = 'nodejs'
-export const maxDuration = 120  // v61: increased for AssemblyAI polling (up to 50s poll + upload overhead)
+export const maxDuration = 300  // v65: increased from 120 — Soniox + AssemblyAI polling boleh cecah 90s+
 export const dynamic = 'force-dynamic'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
@@ -81,6 +81,10 @@ export async function POST(req: NextRequest) {
                    : audioMime.includes('wav') ? 'wav'
                    : 'webm'
 
+    // v65: baca arrayBuffer sekali je — elak double-consume bila fallback engine 2/4
+    const audioBuffer = await audio.arrayBuffer()
+    console.log(`[transcribe] audio: ${audio.size}B | buffer: ${audioBuffer.byteLength}B | mime: ${audioMime}`)
+
     // Helper: update usage + log
     const updateUsage = async (audioSeconds: number, provider: string, detectedLang: string) => {
       if (audioSeconds <= 0) return
@@ -149,8 +153,7 @@ export async function POST(req: NextRequest) {
       try {
         console.log(`[transcribe] AssemblyAI (fallback) | lang: ${langParam || 'auto'} | ${audioMime} | ${audio.size}B`)
 
-        // Step 1: Upload audio
-        const audioBuffer = await audio.arrayBuffer()
+        // Step 1: Upload audio — guna audioBuffer yang dah dibaca atas
         const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
           method: 'POST',
           headers: {
@@ -289,7 +292,7 @@ export async function POST(req: NextRequest) {
         const dgLang = isMalay ? 'ms' : isEnglish ? 'en' : 'ms'
         console.log(`[transcribe] Deepgram (emergency) | lang: ${dgLang} | ${audioMime} | ${audio.size}B`)
         const dgUrl = `https://api.deepgram.com/v1/listen?model=nova-2&language=${dgLang}&punctuate=true&smart_format=true`
-        const audioBuffer = await audio.arrayBuffer()
+        // guna audioBuffer yang dah dibaca atas — jangan double-consume
         const dgRes = await fetch(dgUrl, {
           method: 'POST',
           headers: { 'Authorization': `Token ${deepgramKey}`, 'Content-Type': audioMime },
