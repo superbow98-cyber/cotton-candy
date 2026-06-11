@@ -36,9 +36,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { error: profileErr } = await sb
-      .from('profiles')
-      .update({ commission_total: 0 })
-      .eq('id', wd.ambassador_user_id)
+  .from('profiles')
+  .update({ ambassador_commission_total: 0 })
+  .eq('id', wd.ambassador_user_id)
 
     if (profileErr) {
       return NextResponse.json({ error: profileErr.message }, { status: 500 })
