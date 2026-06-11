@@ -88,8 +88,8 @@ async function handleVoiceNote(from: string, mediaUrl: string) {
     const summary = await sumRes.json()
 
     // Save session
-    const { adminClient } = await import('@/lib/supabase/server')
-const sb = adminClient()
+    // Save session
+    const sb = adminClient()
     await sb.from('whatsapp_sessions').insert({
       phone: from,
       transcript_md: transcript,
@@ -112,54 +112,58 @@ const sb = adminClient()
 }
 
 async function handleTextReply(from: string, text: string) {
-  const { adminClient } = await import('@/lib/supabase/server')
-  const sb = adminClient()
-  const { data: session } = await sb
-    .from('whatsapp_sessions')
-    .select('*')
-    .eq('phone', from)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  try {
+    console.log('handleTextReply START', { from, text })
+    const sb = adminClient()
+    console.log('supabase client created')
 
-  if (!session) {
-    await sendMessage(from, '🍬 Hantar voice note dulu untuk mulakan sesi baru!')
-    return
-  }
+    const { data: session, error } = await sb
+      .from('whatsapp_sessions')
+      .select('*')
+      .eq('phone', from)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
 
-  const summary = session.summary_json
+    console.log('session query result:', { session, error })
 
-  if (text === 'SUMMARY') {
-    await sendMessage(from, `📋 *Summary*\n\n${summary.summary ?? 'Tiada summary.'}`)
+    if (!session) {
+      console.log('no session, sending voice note prompt')
+      await sendMessage(from, '🍬 Hantar voice note dulu untuk mulakan sesi baru!')
+      return
+    }
 
-  } else if (text === 'QUIZ') {
-    const questions = summary.questions?.slice(0, 5) ?? []
-    const quizText = questions.map((q: any, i: number) =>
-      `*Q${i + 1}.* ${q.question}\n` +
-      q.options?.map((o: string, j: number) => `${['A', 'B', 'C', 'D'][j]}. ${o}`).join('\n')
-    ).join('\n\n')
-    await sendMessage(from, `✅ *Quiz*\n\n${quizText}`)
+    const summary = session.summary_json
 
-  } else if (text === 'FLASH') {
-    const cards = summary.flashcards?.slice(0, 8) ?? []
-    const flashText = cards.map((c: any, i: number) =>
-      `*${i + 1}. ${c.front}*\n→ ${c.back}`
-    ).join('\n\n')
-    await sendMessage(from, `🃏 *Flashcards*\n\n${flashText}`)
-
-  } else if (text.startsWith('ASK ')) {
-    const question = text.slice(4)
-    const askRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ai-summarize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript_md: session.transcript_md, question, type: 'ask' })
-    })
-    const { answer } = await askRes.json()
-    await sendMessage(from, `💬 *${question}*\n\n${answer}`)
-
-  } else {
-    await sendMessage(from,
-      `Reply dengan:\n• *SUMMARY*\n• *QUIZ*\n• *FLASH*\n• *ASK [soalan]*`
-    )
+    if (text === 'SUMMARY') {
+      await sendMessage(from, `📋 *Summary*\n\n${summary.summary ?? 'Tiada summary.'}`)
+    } else if (text === 'QUIZ') {
+      const questions = summary.questions?.slice(0, 5) ?? []
+      const quizText = questions.map((q: any, i: number) =>
+        `*Q${i + 1}.* ${q.question}\n` +
+        q.options?.map((o: string, j: number) => `${['A', 'B', 'C', 'D'][j]}. ${o}`).join('\n')
+      ).join('\n\n')
+      await sendMessage(from, `✅ *Quiz*\n\n${quizText}`)
+    } else if (text === 'FLASH') {
+      const cards = summary.flashcards?.slice(0, 8) ?? []
+      const flashText = cards.map((c: any, i: number) =>
+        `*${i + 1}. ${c.front}*\n→ ${c.back}`
+      ).join('\n\n')
+      await sendMessage(from, `🃏 *Flashcards*\n\n${flashText}`)
+    } else if (text.startsWith('ASK ')) {
+      const question = text.slice(4)
+      const askRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ai-summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript_md: session.transcript_md, question, type: 'ask' })
+      })
+      const { answer } = await askRes.json()
+      await sendMessage(from, `💬 *${question}*\n\n${answer}`)
+    } else {
+      await sendMessage(from, `Reply dengan:\n• *SUMMARY*\n• *QUIZ*\n• *FLASH*\n• *ASK [soalan]*`)
+    }
+  } catch (err) {
+    console.error('handleTextReply ERROR:', err)
+    await sendMessage(from, '❌ Error. Cuba lagi.')
   }
 }
