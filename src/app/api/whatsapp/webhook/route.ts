@@ -18,11 +18,12 @@ async function sendMessage(to: string, body: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData()
-  const from = formData.get('From') as string      // e.g. whatsapp:+601121775681
-  const type = formData.get('MediaContentType0')   // ada = media, null = text
-  const body = (formData.get('Body') as string ?? '').toUpperCase().trim()
-  const mediaUrl = formData.get('MediaUrl0') as string | null
+  const text = await req.text()
+  const params = new URLSearchParams(text)
+  const from = params.get('From') as string
+  const type = params.get('MediaContentType0')
+  const body = (params.get('Body') ?? '').toUpperCase().trim()
+  const mediaUrl = params.get('MediaUrl0')
 
   // Twilio expects 200 + TwiML response
   const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
