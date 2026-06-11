@@ -1785,6 +1785,44 @@ const startRecognition = useCallback((langCode: string) => {
               )
             })}
           </div>
+         {/* NotebookLM + Ask Lecture buttons — sebelah summary */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={handleNotebookLM}
+              style={{
+                height: 30, padding: '0 12px', borderRadius: 8,
+                border: '0.5px solid rgba(0,0,0,0.10)', background: '#fff',
+                color: 'rgba(29,29,31,0.75)', fontSize: 12, fontWeight: 500,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                transition: 'border-color 0.15s, color 0.15s', whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.28)'; e.currentTarget.style.color = '#1d1d1f' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.10)'; e.currentTarget.style.color = 'rgba(29,29,31,0.75)' }}
+            >
+              NotebookLM <span style={{ fontSize: 10, opacity: 0.6 }}>↗</span>
+            </button>
+            <button
+              onClick={() => {
+                if (!isProPlan) { alert(lang === 'bm' ? 'Upgrade ke plan Pro untuk guna Ask Lecture.' : 'Upgrade to a Pro plan to use Ask Lecture.'); return }
+                setChatOpen((o) => !o)
+              }}
+              style={{
+                height: 30, padding: '0 12px', borderRadius: 8, border: 'none',
+                background: isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)',
+                color: '#fff', fontSize: 12, fontWeight: 500,
+                cursor: isProPlan ? 'pointer' : 'not-allowed',
+                display: 'flex', alignItems: 'center', gap: 6,
+                transition: 'background 0.15s', whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => { if (isProPlan) e.currentTarget.style.background = 'rgba(29,29,31,0.88)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)' }}
+            >
+              {!isProPlan && <span style={{ fontSize: 11 }}>🔒</span>}
+              Ask Lecture
+              <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4 }}>PRO</span>
+            </button>
+          </div>
+
           {aiFellBack && aiUsedProvider && (
             <div style={{
               padding: '10px 14px', marginBottom: 10,
@@ -1857,110 +1895,6 @@ const startRecognition = useCallback((langCode: string) => {
       )}
 
       </div>
-      {/* ── Ask Lecture chat box ── */}
-      {chatOpen && isProPlan && (
-        <div style={{
-          marginTop: 12,
-          borderRadius: 12,
-          border: '0.5px solid rgba(0,0,0,0.10)',
-          background: '#fafafa',
-          overflow: 'hidden',
-        }}>
-          {/* Chat header */}
-          <div style={{
-            padding: '10px 16px',
-            borderBottom: '0.5px solid rgba(0,0,0,0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f' }}>
-              Ask Lecture
-            </span>
-            <button
-              onClick={() => setChatOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(29,29,31,0.4)', fontSize: 16, lineHeight: 1 }}
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Chat messages */}
-          <div style={{ maxHeight: 320, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {chatMessages.length === 0 && (
-              <p style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', textAlign: 'center', margin: '16px 0' }}>
-                Tanya apa-apa tentang kuliah ni
-              </p>
-            )}
-            {chatMessages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '85%',
-                  background: msg.role === 'user' ? '#1d1d1f' : '#fff',
-                  color: msg.role === 'user' ? '#fff' : '#1d1d1f',
-                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  boxShadow: msg.role === 'ai' ? '0 1px 4px rgba(0,0,0,0.07)' : 'none',
-                  border: msg.role === 'ai' ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
-                {msg.text || (msg.role === 'ai' && chatLoading ? '...' : '')}
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input bar */}
-          <div style={{
-            padding: '10px 12px',
-            borderTop: '0.5px solid rgba(0,0,0,0.08)',
-            display: 'flex',
-            gap: 8,
-          }}>
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
-              placeholder="Tanya tentang kuliah ni..."
-              style={{
-                flex: 1,
-                height: 34,
-                borderRadius: 8,
-                border: '0.5px solid rgba(0,0,0,0.14)',
-                background: '#fff',
-                padding: '0 12px',
-                fontSize: 13,
-                outline: 'none',
-                color: '#1d1d1f',
-              }}
-            />
-            <button
-              onClick={handleChatSend}
-              disabled={chatLoading || !chatInput.trim()}
-              style={{
-                height: 34,
-                padding: '0 14px',
-                borderRadius: 8,
-                border: 'none',
-                background: chatLoading || !chatInput.trim() ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
-                transition: 'background 0.15s',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {chatLoading ? '...' : 'Hantar'}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* CLEAN TRANSCRIPT */}
       {(cleanSegments.length > 0 || editedText || transcriptImages.length > 0) && (
@@ -1983,81 +1917,7 @@ const startRecognition = useCallback((langCode: string) => {
               <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.45)' }}>
                 {cleanSegments.length} {lang === 'bm' ? 'sesi' : 'sessions'} · Soniox
               </span>
-              <button
-                onClick={handleNotebookLM}
-                style={{
-                  height: 30,
-                  padding: '0 12px',
-                  borderRadius: 8,
-                  border: '0.5px solid rgba(0,0,0,0.10)',
-                  background: '#fff',
-                  color: 'rgba(29,29,31,0.75)',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  transition: 'border-color 0.15s, color 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(0,0,0,0.28)'
-                  e.currentTarget.style.color = '#1d1d1f'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(0,0,0,0.10)'
-                  e.currentTarget.style.color = 'rgba(29,29,31,0.75)'
-                }}
-              >
-                NotebookLM
-                <span style={{ fontSize: 10, opacity: 0.6 }}>↗</span>
-              </button>
-              <button
-                onClick={() => {
-  if (!isProPlan) {
-    alert(lang === 'bm' ? 'Upgrade ke plan Pro untuk guna Ask Lecture.' : 'Upgrade to a Pro plan to use Ask Lecture.')
-    return
-  }
-  setChatOpen((o) => !o)
-}}
-                style={{
-                  height: 30,
-                  padding: '0 12px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)',
-                  color: '#fff',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: isProPlan ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'background 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => {
-                  if (isProPlan) e.currentTarget.style.background = 'rgba(29,29,31,0.88)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isProPlan ? '#1d1d1f' : 'rgba(29,29,31,0.55)'
-                }}
-              >
-                {!isProPlan && <span style={{ fontSize: 11 }}>🔒</span>}
-                Ask Lecture
-                <span style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  color: 'rgba(255,255,255,0.6)',
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: '1px 6px',
-                  borderRadius: 4,
-                }}>
-                  PRO
-                </span>
-              </button>
-             {!isEditing && null}
+              {!isEditing && null}
               {isEditing && (
                 <>
                   <button onClick={saveEdit} disabled={savingEdit} style={{
