@@ -30,8 +30,8 @@ const PRIORITY_META: Record<ActionItem['priority'], { label: string; color: stri
 function ActionRow({ item, onToggle, primary }: {
   item: ActionItem; onToggle: () => void; primary: string
 }) {
-  const cat = CATEGORY_META[item.category]
-  const pri = PRIORITY_META[item.priority]
+  const cat = CATEGORY_META[item.category] ?? CATEGORY_META['reminder']
+  const pri = PRIORITY_META[item.priority] ?? PRIORITY_META['medium']
 
   return (
     <div
