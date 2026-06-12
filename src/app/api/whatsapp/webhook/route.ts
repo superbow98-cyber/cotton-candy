@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/server'
+export const maxDuration = 300 // 5 minit
 
 // Helper — send message via Twilio
 async function sendMessage(to: string, body: string) {
@@ -33,11 +34,10 @@ export async function POST(req: NextRequest) {
   const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
   if (mediaUrl && type?.startsWith('audio')) {
-    handleVoiceNote(from, mediaUrl).catch(console.error)
+    await handleVoiceNote(from, mediaUrl)
   } else if (body) {
     await handleTextReply(from, body)
   }
-
   return new NextResponse(twiml, {
     status: 200,
     headers: { 'Content-Type': 'text/xml' }
