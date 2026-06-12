@@ -236,7 +236,7 @@ function AIChipPicker({
   const ref = useRef<HTMLDivElement>(null)
 
   // FIX v20.14: plan names lama ('pro','max') dah deprecated — guna 'month','year','student_pro'
-  const isProPlan = plan === 'month' || plan === 'year' || plan === 'student_pro'
+  const isProPlan = ['month', 'monthly', 'year', 'yearly', 'student_pro', 'pro', 'student'].includes(String(plan).toLowerCase())
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
