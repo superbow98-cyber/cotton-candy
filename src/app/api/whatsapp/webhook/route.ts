@@ -66,13 +66,13 @@ async function handleVoiceNote(from: string, mediaUrl: string) {
 
     if (!transcript) throw new Error('Transcription returned empty')
 
-    // Summarize
-    const sumRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ai-summarize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript_md: transcript, type: 'lecture' })
-    })
-    const summary = await sumRes.json()
+    // Summarize terus — bypass /api/ai-summarize (require lectureId + auth)
+    const { callAI, buildSystemPrompt } = await import('@/lib/ai-providers')
+    const { getRecordingTypeMeta } = await import('@/lib/recording-types')
+    const typeMeta = getRecordingTypeMeta('lecture')
+    const systemPrompt = buildSystemPrompt(typeMeta.sections, typeMeta.systemPromptHint, 'en')
+    const userMessage = `Recording type: ${typeMeta.label.en}\n\nRAW TRANSCRIPT:\n${transcript.slice(0, 32000)}`
+    const { result: summary } = await callAI('auto', userMessage, systemPrompt, 'month')
 
     // Save session
     // Save session
