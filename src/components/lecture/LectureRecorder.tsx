@@ -1575,15 +1575,45 @@ const startRecognition = useCallback((langCode: string) => {
             </div>
           </div>
 
-          <Button
-            size="md" variant="dark" onClick={finishLecture}
-            disabled={saving || aiProcessing || (!recording && lines.length === 0)}
-          >
-            {aiProcessing
-              ? (lang === 'bm' ? '🤖 AI sedang susun…' : '🤖 AI organizing…')
-              : `✓ ${t('recStop')}`
-            }
-          </Button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {aiResult && !aiProcessing && (
+              <>
+                <a
+                  href={`/dashboard/lectures/${lecture.id}/flashcards`}
+                  style={{
+                    height: 38, padding: '0 14px', borderRadius: 10,
+                    border: '0.5px solid rgba(0,0,0,0.12)', background: '#fff',
+                    color: '#1d1d1f', fontSize: 13, fontWeight: 500,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                  }}
+                >
+                  🃏 {lang === 'bm' ? 'Kad Imbas' : 'Flashcards'}
+                </a>
+                <a
+                  href={`/dashboard/lectures/${lecture.id}/action-items`}
+                  style={{
+                    height: 38, padding: '0 14px', borderRadius: 10,
+                    border: '0.5px solid rgba(0,0,0,0.12)', background: '#fff',
+                    color: '#1d1d1f', fontSize: 13, fontWeight: 500,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                  }}
+                >
+                  ✅ {lang === 'bm' ? 'Senarai Tugas' : 'Action Items'}
+                </a>
+              </>
+            )}
+            <Button
+              size="md" variant="dark" onClick={finishLecture}
+              disabled={saving || aiProcessing || (!recording && lines.length === 0)}
+            >
+              {aiProcessing
+                ? (lang === 'bm' ? '🤖 AI sedang susun…' : '🤖 AI organizing…')
+                : `✓ ${t('recStop')}`
+              }
+            </Button>
+          </div>
         </div>
 
         {isSafari && recording && (
