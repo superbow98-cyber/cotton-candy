@@ -49,19 +49,6 @@ function buildNotebookLMContent(lecture: {
 
   // Header
   if (lecture.title) lines.push(lecture.title)
-  const meta = [lecture.subject, lecture.lecturer, lecture.location].filter(Boolean).join(' · ')
-  if (meta) lines.push(meta)
-  if (lecture.created_at || lecture.duration_seconds) {
-    const date = lecture.created_at
-      ? new Date(lecture.created_at).toLocaleDateString('ms-MY', {
-          day: 'numeric', month: 'long', year: 'numeric',
-        })
-      : ''
-    const dur = lecture.duration_seconds
-      ? `${Math.floor(lecture.duration_seconds / 60)} minit`
-      : ''
-    lines.push([date, dur].filter(Boolean).join(' · '))
-  }
   lines.push('')
 
   // Parse summary JSON (structure dari AI summarize)
@@ -102,18 +89,7 @@ function buildNotebookLMContent(lecture: {
     }
   }
 
-  // Clean transcript
-  if (lecture.clean_segments?.length) {
-    lines.push('📝 CLEAN TRANSCRIPT')
-    lecture.clean_segments.forEach((seg) => {
-      const start = formatTimestamp(seg.start)
-      const end = formatTimestamp(seg.end)
-      lines.push(`[${start}–${end}] ${seg.text}`)
-    })
-  } else if (lecture.transcript_md) {
-    lines.push('📝 TRANSCRIPT')
-    lines.push(lecture.transcript_md)
-  }
+// (transcript removed)
 
   return lines.join('\n')
 }
