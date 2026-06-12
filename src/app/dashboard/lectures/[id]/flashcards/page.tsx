@@ -153,8 +153,9 @@ export default function FlashcardsPage() {
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
-  const { primary } = useTheme()
-
+  const { tokens } = useTheme()
+  const primary = tokens.primary
+  
   const [cards, setCards] = useState<Flashcard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
