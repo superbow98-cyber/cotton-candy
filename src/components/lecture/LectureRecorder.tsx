@@ -354,6 +354,7 @@ export default function LectureRecorder({ id }: { id: string }) {
   const router = useRouter()
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [plan, setPlan] = useState<keyof typeof PLANS>('free')
+  const [userRole, setUserRole] = useState<'student' | 'lecturer'>('student')
   const [lines, setLines] = useState<Line[]>([])
   const [cleanSegments, setCleanSegments] = useState<CleanSegment[]>([])
   const [isEditing, setIsEditing] = useState(false)
@@ -526,8 +527,9 @@ export default function LectureRecorder({ id }: { id: string }) {
         } catch {}
       }
 
-      const { data: prof } = await sb.from('profiles').select('plan, ai_provider').eq('id', user.id).maybeSingle()
-      setPlan((prof?.plan || 'free') as keyof typeof PLANS)
+      const { data: prof } = await sb.from('profiles').select('plan, ai_provider, role').eq('id', user.id).maybeSingle()
+setPlan((prof?.plan || 'free') as keyof typeof PLANS)
+if (prof?.role) setUserRole(prof.role as 'student' | 'lecturer')
       const effective: AIProvider =
         (lec.ai_provider as AIProvider) ||
         (prof?.ai_provider as AIProvider) ||
@@ -1306,6 +1308,23 @@ const startRecognition = useCallback((langCode: string) => {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="outline" size="sm" onClick={exportMd}>⬇ .md</Button>
           <Button variant="outline" size="sm" onClick={exportPdf}>⬇ .pdf</Button>
+          {isProPlan && (
+            <a
+              href={`/dashboard/lectures/${id}/${userRole === 'lecturer' ? 'action-items' : 'flashcards'}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                height: 32, padding: '0 14px', borderRadius: 8,
+                background: userRole === 'lecturer' ? '#34c759' : s.primary,
+                color: '#fff', fontSize: 13, fontWeight: 600,
+                textDecoration: 'none', whiteSpace: 'nowrap',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              {userRole === 'lecturer' ? '✅ Action Items' : '🃏 Flashcards'}
+            </a>
+          )}
         </div>
       </div>
 
