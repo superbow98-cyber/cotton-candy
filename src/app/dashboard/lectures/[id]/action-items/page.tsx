@@ -95,7 +95,8 @@ export default function ActionItemsPage() {
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
-  const { primary } = useTheme()
+  const { tokens } = useTheme()
+  const primary = tokens.primary
 
   const [items, setItems] = useState<ActionItem[]>([])
   const [loading, setLoading] = useState(true)
