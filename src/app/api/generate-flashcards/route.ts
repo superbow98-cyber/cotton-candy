@@ -26,10 +26,9 @@ export async function POST(req: NextRequest) {
     // Get user role + learning style
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, learning_style, plan, plan_expires_at')
+      .select('plan, plan_expires_at')
       .eq('id', user.id)
       .maybeSingle()
-
     if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
     // Gate: require paid plan
@@ -73,7 +72,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No transcript available' }, { status: 422 })
     }
 
-    const isStudent = profile.role !== 'lecturer'
+    const isStudent = true  // default student until Learning Style migration is run
 
     // ── Build AI prompt ────────────────────────────────────────────────────────
     const systemPrompt = isStudent
