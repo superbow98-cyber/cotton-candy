@@ -107,29 +107,39 @@ export default function ActionItemsPage() {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const { data: lecture } = await supabase
-        .from('lectures')
-        .select('title')
-        .eq('id', params.id)
-        .maybeSingle()
-      if (lecture?.title) setLectureTitle(lecture.title)
+      try {
+        const { data: lecture } = await supabase
+          .from('lectures')
+          .select('title')
+          .eq('id', params.id)
+          .maybeSingle()
+        if (lecture?.title) setLectureTitle(lecture.title)
 
-      const res = await fetch('/api/generate-flashcards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lectureId: params.id }),
-      })
-      const json = await res.json()
+        const res = await fetch('/api/generate-flashcards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lectureId: params.id }),
+        })
 
-      if (!res.ok) {
-        setError(json.error || 'Failed to generate action items')
+        let json: any = {}
+        try {
+          json = await res.json()
+        } catch {
+          throw new Error('Server returned invalid response')
+        }
+
+        if (!res.ok) {
+          setError(json.error || 'Failed to generate action items')
+          return
+        }
+
+        const rawItems = json.data?.items ?? []
+        setItems(rawItems.map((i: ActionItem) => ({ ...i, done: false })))
+      } catch (err: any) {
+        setError(err?.message || 'Something went wrong. Please try again.')
+      } finally {
         setLoading(false)
-        return
       }
-
-      const rawItems = json.data?.items ?? []
-      setItems(rawItems.map((i: ActionItem) => ({ ...i, done: false })))
-      setLoading(false)
     }
     load()
   }, [params.id])
