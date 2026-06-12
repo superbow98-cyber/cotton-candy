@@ -1957,6 +1957,75 @@ const startRecognition = useCallback((langCode: string) => {
               .filter(Boolean)
           })()}
 
+          {lecture?.id && aiResult && !aiProcessing && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 4, flexWrap: 'wrap' }}>
+              <style>{`
+                @keyframes cc-shimmer {
+                  0% { transform: translateX(-100%) skewX(-15deg); }
+                  100% { transform: translateX(250%) skewX(-15deg); }
+                }
+              `}</style>
+                <a
+                href={`/dashboard/lectures/${lecture.id}/flashcards`}
+                style={{
+                  position: 'relative', overflow: 'hidden',
+                  height: 36, padding: '0 18px', borderRadius: 10,
+                  background: '#1d1d1f',
+                  color: '#fff', fontSize: 12, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                  letterSpacing: '-0.01em',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                }}
+                onMouseEnter={e => {
+                  const shine = e.currentTarget.querySelector('.cc-shine') as HTMLElement
+                  if (shine) shine.style.animation = 'cc-shimmer 0.6s ease forwards'
+                }}
+                onMouseLeave={e => {
+                  const shine = e.currentTarget.querySelector('.cc-shine') as HTMLElement
+                  if (shine) { shine.style.animation = 'none' }
+                }}
+              >
+                <span className="cc-shine" style={{
+                  position: 'absolute', top: 0, left: 0,
+                  width: '40%', height: '100%',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
+                  animation: 'none', pointerEvents: 'none',
+                }} />
+                🃏 Flashcards
+              </a>
+                <a
+                href={`/dashboard/lectures/${lecture.id}/action-items`}
+                style={{
+                  position: 'relative', overflow: 'hidden',
+                  height: 36, padding: '0 18px', borderRadius: 10,
+                  background: 'linear-gradient(135deg, #B8860B, #DAA520, #B8860B)',
+                  color: '#fff', fontSize: 12, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  textDecoration: 'none', whiteSpace: 'nowrap',
+                  letterSpacing: '-0.01em',
+                  boxShadow: '0 2px 8px rgba(184,134,11,0.35)',
+                }}
+                onMouseEnter={e => {
+                  const shine = e.currentTarget.querySelector('.cc-shine-gold') as HTMLElement
+                  if (shine) shine.style.animation = 'cc-shimmer 0.6s ease forwards'
+                }}
+                onMouseLeave={e => {
+                  const shine = e.currentTarget.querySelector('.cc-shine-gold') as HTMLElement
+                  if (shine) { shine.style.animation = 'none' }
+                }}
+              >
+                <span className="cc-shine-gold" style={{
+                  position: 'absolute', top: 0, left: 0,
+                  width: '40%', height: '100%',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)',
+                  animation: 'none', pointerEvents: 'none',
+                }} />
+                ✅ Action Items
+              </a>
+            </div>
+          )}
+
           {lecture?.mindmap_json && (
             <div style={{ marginTop: 14 }}>
               <div style={{
