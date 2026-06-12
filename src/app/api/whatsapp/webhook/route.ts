@@ -56,29 +56,15 @@ async function handleVoiceNote(from: string, mediaUrl: string) {
         'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64')
       }
     })
+    if (!audioRes.ok) throw new Error(`Twilio audio download failed: ${audioRes.status}`)
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg' })
 
-    // Hantar ke transcription pipeline
-    const formData = new FormData()
-    formData.append('audio', new Blob([audioBuffer], { type: 'audio/ogg' }), 'lecture.ogg')
-    formData.append('source', 'whatsapp')
+    // Transcribe terus via Soniox — bypass /api/upload-audio (require auth)
+    const { transcribeWithSoniox } = await import('@/lib/soniox')
+    const { text: transcript } = await transcribeWithSoniox(audioBlob, 'lecture.ogg')
 
-    const transcribeRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/upload-audio`, {
-      method: 'POST',
-      body: formData
-    })
-    const { jobId } = await transcribeRes.json()
-
-    // Poll sampai done
-    let transcript = ''
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 3000))
-      const status = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/upload-audio/status/${jobId}`)
-      const data = await status.json()
-      if (data.status === 'done') { transcript = data.transcript_md; break }
-    }
-
-    if (!transcript) throw new Error('Transcription timeout')
+    if (!transcript) throw new Error('Transcription returned empty')
 
     // Summarize
     const sumRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ai-summarize`, {
