@@ -83,8 +83,11 @@ export async function POST(req: NextRequest) {
 
     // v65: baca arrayBuffer sekali je — elak double-consume bila fallback engine 2/4
     const audioBuffer = await audio.arrayBuffer()
-    console.log(`[transcribe] audio: ${audio.size}B | buffer: ${audioBuffer.byteLength}B | mime: ${audioMime}`)
-
+const audioBytes = new Uint8Array(audioBuffer)
+const audioSize = audioBytes.byteLength
+const makeFreshBlob = () => new Blob([audioBytes], { type: audioMime })
+console.log(`[transcribe] audio: ${audio.size}B | buffer: ${audioSize}B | mime: ${audioMime}`)
+    
     // Helper: update usage + log
     const updateUsage = async (audioSeconds: number, provider: string, detectedLang: string) => {
       if (audioSeconds <= 0) return
@@ -122,9 +125,9 @@ export async function POST(req: NextRequest) {
     // ===== ENGINE 1: SONIOX (PRIMARY — ALL languages) =====
     try {
       
-      const sonioxAudio: Blob = audio
-      const sonioxFilename = `audio.${audioExt}`
-      console.log(`[transcribe] Soniox: sending ${audioExt} directly (no ffmpeg)`)
+      const sonioxAudio: Blob = makeFreshBlob()
+const sonioxFilename = `audio.${audioExt}`
+console.log(`[transcribe] Soniox: sending ${audioExt} directly (no ffmpeg)`)
          
       console.log(`[transcribe] Soniox (primary) | hints: ${sonioxLangHints.join('+')} | ${sonioxFilename} | ${audioMime} | ${sonioxAudio.size}B`)
       const result = await transcribeWithSoniox(sonioxAudio, sonioxFilename, {
@@ -244,7 +247,7 @@ export async function POST(req: NextRequest) {
             : "Malaysian student speaking natural rojak (Malay + English). Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
 
         const groqForm = new FormData()
-        groqForm.append('file', audio, `audio.${audioExt}`)
+groqForm.append('file', makeFreshBlob(), `audio.${audioExt}`)
         groqForm.append('model', MODEL_TURBO)
         groqForm.append('response_format', 'verbose_json')
         groqForm.append('prompt', whisperPrompt)
@@ -294,10 +297,10 @@ export async function POST(req: NextRequest) {
         const dgUrl = `https://api.deepgram.com/v1/listen?model=nova-2&language=${dgLang}&punctuate=true&smart_format=true`
         // guna audioBuffer yang dah dibaca atas — jangan double-consume
         const dgRes = await fetch(dgUrl, {
-          method: 'POST',
-          headers: { 'Authorization': `Token ${deepgramKey}`, 'Content-Type': audioMime },
-          body: audioBuffer,
-        })
+  method: 'POST',
+  headers: { 'Authorization': `Token ${deepgramKey}`, 'Content-Type': audioMime },
+  body: makeFreshBlob(),
+})
         if (!dgRes.ok) {
           const errText = await dgRes.text().catch(() => 'unknown')
           throw new Error(`Deepgram HTTP ${dgRes.status}: ${errText.slice(0, 200)}`)
