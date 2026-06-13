@@ -54,8 +54,11 @@ export async function POST(req: NextRequest) {
 
     if (!lecture) return NextResponse.json({ error: 'Lecture not found' }, { status: 404 })
 
-    // Return cached if exists
-    if (lecture.flashcards_json) {
+    // Return cached if exists (skip if bustCache or type mismatch)
+    const { bustCache } = body
+    const cachedType = (lecture.flashcards_json as any)?.type
+    const expectedType = isPulse ? 'pulse' : 'flashcards'
+    if (lecture.flashcards_json && !bustCache && cachedType === expectedType) {
       return NextResponse.json({ data: lecture.flashcards_json, cached: true })
     }
 
