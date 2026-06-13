@@ -159,32 +159,26 @@ export async function transcribeOne(
   skipConversion = false,
 ): Promise<TranscribeResponse> {
 
-  // LANGKAH 1: Convert ke WAV dulu
-  // WAV = raw PCM — boleh di-split ikut bytes tanpa corrupt
-  // WebM/MP4 TIDAK boleh di-split (tiada EBML header pada setiap chunk)
-  let wavBlob: Blob
+  console.log(`[transcribeOne] v2 | ${audioBlob.type} | ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB | skip=${skipConversion}`)
 
-  const needsConversion = !audioBlob.type.includes('wav')
-  const isChromeiOS = !skipConversion && isChromeIOS()
+  // LANGKAH 1: Convert ke WAV — WAV boleh di-split, WebM tidak (EBML header issue)
+  let wavBlob: Blob = audioBlob
 
-  if (needsConversion || isChromeiOS) {
-    console.log(`[transcribeOne] converting to WAV | original: ${audioBlob.type} | ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB`)
+  if (!skipConversion) {
+    console.log(`[transcribeOne] converting to WAV...`)
     try {
       wavBlob = await convertToWav(audioBlob)
       console.log(`[transcribeOne] WAV ready | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB`)
     } catch (e) {
-      console.warn('[transcribeOne] WAV conversion failed — sending original as-is (may 413 if >4.5MB):', e)
-      // Fallback: hantar terus, terima nasib kalau besar
+      console.warn('[transcribeOne] WAV conversion failed:', e)
       wavBlob = audioBlob
     }
-  } else {
-    wavBlob = audioBlob
   }
 
   // LANGKAH 2: Split kalau perlu, hantar satu-satu, join transcript
   if (wavBlob.size <= MAX_VERCEL_BYTES) {
-    // Kecil — hantar terus
-    console.log(`[transcribeOne] sending | wav | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
+    const ext = wavBlob.type.includes('wav') ? 'wav' : 'webm'
+    console.log(`[transcribeOne] sending | ${ext} | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
     return _sendWavPart(wavBlob, signal, language)
   }
 
