@@ -391,9 +391,7 @@ export default function LectureRecorder({ id }: { id: string }) {
 
   // v20.14: Refs untuk pastikan autosave dan finishLecture dapat nilai terkini
   const linesRef = useRef<Line[]>([])
-const cleanSegmentsRef = useRef<CleanSegment[]>([])
-const autoFinishRef = useRef(false)
-const planRef = useRef<keyof typeof PLANS>('free')
+  const cleanSegmentsRef = useRef<CleanSegment[]>([])
 
   // --- Whisper enhancement (MediaRecorder parallel, no storage) ---
   const mediaRecRef = useRef<MediaRecorder | null>(null)
@@ -516,18 +514,9 @@ const planRef = useRef<keyof typeof PLANS>('free')
 
   // v20.14: Sync refs setiap kali state berubah
   useEffect(() => { linesRef.current = lines }, [lines])
-useEffect(() => { cleanSegmentsRef.current = cleanSegments }, [cleanSegments])
-useEffect(() => { planRef.current = plan }, [plan])
+  useEffect(() => { cleanSegmentsRef.current = cleanSegments }, [cleanSegments])
 
-  useEffect(() => {
-  if (!recording && autoFinishRef.current) {
-    autoFinishRef.current = false
-    finishLecture()
-  }
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [recording])
-
-const updateAIProvider = async (newProvider: AIProvider) => {
+  const updateAIProvider = async (newProvider: AIProvider) => {
     setAiProvider(newProvider)
     if (!lecture) return
     try {
@@ -787,28 +776,20 @@ const startRecognition = useCallback((langCode: string) => {
         const nowElapsed = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
         setElapsed(nowElapsed)
 
-        const perLectureMax = PLANS[planRef.current].minutesPerLecture * 60
-if (nowElapsed >= perLectureMax) {
-  console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-finishing')
-  stopRecognition()
-  accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
-  if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-  autoFinishRef.current = true
-  setRecording(false)
-  return
-}
+        const perLectureMax = PLANS[plan].minutesPerLecture * 60
+        if (nowElapsed >= perLectureMax) {
+          console.log('[cap] Per-lecture limit reached:', perLectureMax, 's — auto-stopping')
+          toggle()
+          return
+        }
 
         if (usage && usage.allowed) {
           const projected = (usage.usedSeconds || 0) + nowElapsed
           if (projected >= usage.capSeconds) {
-  console.log('[cap] Global audio cap reached — auto-finishing')
-  setCapReachedDuringRec(true)
-  stopRecognition()
-  accumRef.current = accumRef.current + Math.floor((Date.now() - startRef.current) / 1000)
-  if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-  autoFinishRef.current = true
-  setRecording(false)
-}
+            console.log('[cap] Global audio cap reached — auto-stopping')
+            setCapReachedDuringRec(true)
+            toggle()
+          }
         }
       }, 500)
       setRecording(true)
