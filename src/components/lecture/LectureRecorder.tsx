@@ -1092,13 +1092,28 @@ getRecentTranscript: () => linesRef.current.slice(-3).map(l => l.text).join(' ')
       setEnhanceProgress({ done: 0, total: 1 })
       try {
         const mime = chunks[0]?.type || 'audio/webm'
-        const combinedBlob = new Blob(chunks, { type: mime })
+        const totalMB = (chunks.reduce((a, c) => a + c.size, 0) / 1024 / 1024).toFixed(1)
+        console.log(`[finishLecture] ${chunks.length} chunks, total: ${totalMB}MB`)
 
         try {
-          const result = await transcribeOne(combinedBlob, undefined, recordingLang)
-          if (result.usage) setUsage(result.usage)
-          setEnhanceProgress({ done: 1, total: 1 })
-          const combined = result.text?.trim() || ''
+          setEnhanceProgress({ done: 0, total: chunks.length })
+          const combinedTexts: string[] = []
+          let lastUsage: AudioUsageInfo | undefined
+
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i]
+            if (chunk.size < 2000) {
+              console.log(`[finishLecture] chunk ${i} too small (${chunk.size}B) — skip`)
+              setEnhanceProgress({ done: i + 1, total: chunks.length })
+              continue
+            }
+            const result = await transcribeOne(chunk, undefined, recordingLang)
+            if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
+            if (result.text?.trim()) combinedTexts.push(result.text.trim())
+            setEnhanceProgress({ done: i + 1, total: chunks.length })
+          }
+
+          const combined = combinedTexts.join(' ')
 
           if (combined.length > 20) {
             const currentSegs = cleanSegmentsRef.current
