@@ -546,6 +546,8 @@ const startRecognition = useCallback((langCode: string) => {
   const engine = new LiveTranscriptEngine({
     getElapsed: () => Math.floor((Date.now() - startRef.current) / 1000) + accumRef.current,
     language: langCode,
+    // TAMBAH dalam options object
+getRecentTranscript: () => linesRef.current.slice(-3).map(l => l.text).join(' '),
     onLine: (line) => {
       const subjectHint = detectSubject(lectureRef.current?.title || '', lectureRef.current?.subject || '') ?? undefined
       const corrected = correctScientificTerms(line.text, subjectHint)
