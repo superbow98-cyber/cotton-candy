@@ -82,6 +82,11 @@ function QuizQuestion({ card, index, total, primary, onAnswer }: {
   const [selected, setSelected] = useState<number | null>(null)
   const [answered, setAnswered] = useState(false)
 
+  useEffect(() => {
+    setSelected(null)
+    setAnswered(false)
+  }, [card])
+
   const handleSelect = (i: number) => {
     if (selected !== null) return
     setSelected(i)
