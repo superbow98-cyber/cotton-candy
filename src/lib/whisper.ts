@@ -6,7 +6,9 @@ const CHUNK_DURATION_SEC = 9 * 60
 export function shouldChunk(audioBlob: Blob): boolean {
   return audioBlob.size > 20 * 1024 * 1024
 }
-// Tambah selepas shouldChunk()
+
+// Split blob ikut bytes — SELAMAT untuk WAV (raw PCM) sahaja
+// JANGAN guna untuk WebM/MP4 — akan corrupt (tiada EBML header pada chunks)
 export function splitBlob(blob: Blob, maxBytes = 3.5 * 1024 * 1024): Blob[] {
   if (blob.size <= maxBytes) return [blob]
   const parts: Blob[] = []
@@ -114,53 +116,15 @@ function isChromeIOS(): boolean {
   return /CriOS/i.test(navigator.userAgent)
 }
 
-export async function transcribeOne(
-  audioBlob: Blob,
+// Hantar satu bahagian WAV ke /api/transcribe
+// Internal — guna oleh transcribeOne sahaja
+async function _sendWavPart(
+  wavBlob: Blob,
   signal?: AbortSignal,
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
-  skipConversion = false,
 ): Promise<TranscribeResponse> {
   const form = new FormData()
-
-  let finalBlob = audioBlob
-  let ext = audioBlob.type.includes('mp4') ? 'mp4'
-           : audioBlob.type.includes('ogg') ? 'ogg'
-           : audioBlob.type.includes('wav') ? 'wav'
-           : 'webm'
-
-  // FIX: Chrome iOS convert ke WAV
-  if (!skipConversion && isChromeIOS() && (audioBlob.type.includes('mp4') || audioBlob.type.includes('webm'))) {
-    console.log('[transcribeOne] Chrome iOS detected — converting to WAV client-side')
-    try {
-      finalBlob = await convertToWav(audioBlob)
-      ext = 'wav'
-      console.log(`[transcribeOne] WAV conversion done | ${finalBlob.size}B`)
-    } catch (e) {
-      console.warn('[transcribeOne] WAV conversion failed, using original:', e)
-      finalBlob = audioBlob
-    }
-  }
-
-  // FIX: Groq limit 25MB — kalau blob terlalu besar, hantar terus ke /api/transcribe
-  // (server-side Soniox boleh handle saiz besar, Groq ada limit)
-  const MAX_SIZE = 24 * 1024 * 1024  // 24MB safe limit
-  if (finalBlob.size > MAX_SIZE) {
-    console.warn(`[transcribeOne] blob ${(finalBlob.size / 1024 / 1024).toFixed(1)}MB > 24MB — splitting not supported, sending as-is (server will handle via Soniox)`)
-  }
-
-  const MAX_VERCEL_BYTES = 4 * 1024 * 1024  // 4MB safe limit (Vercel = 4.5MB)
-
-// Kalau blob > 4MB, split dan transcribe bahagian terbesar sahaja
-// (untuk rakaman panjang, Soniox server lebih sesuai — ini fallback path)
-let sendBlob = finalBlob
-if (finalBlob.size > MAX_VERCEL_BYTES) {
-  console.warn(`[transcribeOne] blob ${(finalBlob.size / 1024 / 1024).toFixed(1)}MB > 4MB — trimming to first 4MB`)
-  sendBlob = finalBlob.slice(0, MAX_VERCEL_BYTES, finalBlob.type)
-}
-
-console.log(`[transcribeOne] sending | ${ext} | ${(sendBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
-
-form.append('audio', sendBlob, `audio.${ext}`)
+  form.append('audio', wavBlob, 'audio.wav')
   if (language && language !== 'auto') {
     form.append('language', language)
   }
@@ -184,6 +148,68 @@ form.append('audio', sendBlob, `audio.${ext}`)
     throw new Error(data.error || `Transcribe failed (${res.status})`)
   }
   return data
+}
+
+const MAX_VERCEL_BYTES = 3.5 * 1024 * 1024  // 3.5MB — selamat bawah limit Vercel 4.5MB
+
+export async function transcribeOne(
+  audioBlob: Blob,
+  signal?: AbortSignal,
+  language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
+  skipConversion = false,
+): Promise<TranscribeResponse> {
+
+  // LANGKAH 1: Convert ke WAV dulu
+  // WAV = raw PCM — boleh di-split ikut bytes tanpa corrupt
+  // WebM/MP4 TIDAK boleh di-split (tiada EBML header pada setiap chunk)
+  let wavBlob: Blob
+
+  const needsConversion = !audioBlob.type.includes('wav')
+  const isChromeiOS = !skipConversion && isChromeIOS()
+
+  if (needsConversion || isChromeiOS) {
+    console.log(`[transcribeOne] converting to WAV | original: ${audioBlob.type} | ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB`)
+    try {
+      wavBlob = await convertToWav(audioBlob)
+      console.log(`[transcribeOne] WAV ready | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB`)
+    } catch (e) {
+      console.warn('[transcribeOne] WAV conversion failed — sending original as-is (may 413 if >4.5MB):', e)
+      // Fallback: hantar terus, terima nasib kalau besar
+      wavBlob = audioBlob
+    }
+  } else {
+    wavBlob = audioBlob
+  }
+
+  // LANGKAH 2: Split kalau perlu, hantar satu-satu, join transcript
+  if (wavBlob.size <= MAX_VERCEL_BYTES) {
+    // Kecil — hantar terus
+    console.log(`[transcribeOne] sending | wav | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
+    return _sendWavPart(wavBlob, signal, language)
+  }
+
+  // Besar — split jadi bahagian ≤3.5MB, transcribe satu-satu, join teks
+  const parts = splitBlob(wavBlob, MAX_VERCEL_BYTES)
+  console.log(`[transcribeOne] blob ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB — splitting into ${parts.length} parts`)
+
+  const results: TranscribeResponse[] = []
+  for (let i = 0; i < parts.length; i++) {
+    console.log(`[transcribeOne] part ${i + 1}/${parts.length} | ${(parts[i].size / 1024 / 1024).toFixed(2)}MB`)
+    // CapReachedError akan throw terus — bubble up ke caller
+    const r = await _sendWavPart(parts[i], signal, language)
+    results.push(r)
+  }
+
+  // Join semua teks bahagian
+  const joinedText = results.map(r => r.text).filter(Boolean).join(' ').trim()
+  console.log(`[transcribeOne] split-join done | ${parts.length} parts | total chars: ${joinedText.length}`)
+
+  return {
+    text: joinedText,
+    language: results[0]?.language,
+    audioSeconds: results.reduce((sum, r) => sum + (r.audioSeconds ?? 0), 0),
+    usage: results[results.length - 1]?.usage,  // usage terkini dari bahagian terakhir
+  }
 }
 
 export async function transcribeChunks(
