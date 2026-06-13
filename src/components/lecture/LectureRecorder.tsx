@@ -1098,22 +1098,28 @@ getRecentTranscript: () => linesRef.current.slice(-3).map(l => l.text).join(' ')
         try {
           setEnhanceProgress({ done: 0, total: chunks.length })
           const combinedTexts: string[] = []
-          let lastUsage: AudioUsageInfo | undefined
+let lastUsage: AudioUsageInfo | undefined
 
-          for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i]
-            if (chunk.size < 2000) {
-              console.log(`[finishLecture] chunk ${i} too small (${chunk.size}B) — skip`)
-              setEnhanceProgress({ done: i + 1, total: chunks.length })
-              continue
-            }
-            const result = await transcribeOne(chunk, undefined, recordingLang, true)
-            if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
-            if (result.text?.trim()) combinedTexts.push(result.text.trim())
-            setEnhanceProgress({ done: i + 1, total: chunks.length })
-          }
+// FIX: combine semua chunks jadi satu Blob
+// WebM chunks dari MediaRecorder — hanya chunk pertama ada header
+// Bila combine jadi satu Blob, struktur WebM jadi complete dan semua engine boleh baca
+const fullMime = chunks[0]?.type || 'audio/webm'
+const totalSize = chunks.reduce((a, c) => a + c.size, 0)
+console.log(`[finishLecture] combining ${chunks.length} chunks → ${(totalSize / 1024 / 1024).toFixed(1)}MB`)
 
-          const combined = combinedTexts.join(' ')
+const fullBlob = new Blob(chunks, { type: fullMime })
+
+if (fullBlob.size >= 2000) {
+  setEnhanceProgress({ done: 0, total: 1 })
+  const result = await transcribeOne(fullBlob, undefined, recordingLang, true)
+  if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
+  if (result.text?.trim()) combinedTexts.push(result.text.trim())
+  setEnhanceProgress({ done: 1, total: 1 })
+} else {
+  console.log(`[finishLecture] fullBlob too small (${fullBlob.size}B) — skip`)
+}
+
+const combined = combinedTexts.join(' ')
 
           if (combined.length > 20) {
             const currentSegs = cleanSegmentsRef.current
