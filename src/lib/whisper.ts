@@ -6,6 +6,17 @@ const CHUNK_DURATION_SEC = 9 * 60
 export function shouldChunk(audioBlob: Blob): boolean {
   return audioBlob.size > 20 * 1024 * 1024
 }
+// Tambah selepas shouldChunk()
+export function splitBlob(blob: Blob, maxBytes = 3.5 * 1024 * 1024): Blob[] {
+  if (blob.size <= maxBytes) return [blob]
+  const parts: Blob[] = []
+  let offset = 0
+  while (offset < blob.size) {
+    parts.push(blob.slice(offset, offset + maxBytes, blob.type))
+    offset += maxBytes
+  }
+  return parts
+}
 
 export type AudioUsageInfo = {
   allowed: boolean
