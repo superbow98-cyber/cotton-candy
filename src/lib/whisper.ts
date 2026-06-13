@@ -124,7 +124,11 @@ async function _sendWavPart(
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
 ): Promise<TranscribeResponse> {
   const form = new FormData()
-  form.append('audio', wavBlob, 'audio.wav')
+  // Pastikan MIME type betul — Soniox semak MIME, bukan filename sahaja
+  const audioBlob = wavBlob.type === 'audio/wav'
+    ? wavBlob
+    : new Blob([wavBlob], { type: 'audio/wav' })
+  form.append('audio', audioBlob, 'audio.wav')
   if (language && language !== 'auto') {
     form.append('language', language)
   }
