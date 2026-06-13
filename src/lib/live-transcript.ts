@@ -28,7 +28,9 @@ export type LiveTranscriptOptions = {
   onError?: (err: string) => void
   onEngineChange?: (engine: 'groq' | 'webkit') => void
   getElapsed: () => number
+  getRecentTranscript?: () => string  // TAMBAH NI
 }
+
 
 const CHUNK_INTERVAL_MS = 10_000
 const MIN_CHUNK_BYTES = 2_000
