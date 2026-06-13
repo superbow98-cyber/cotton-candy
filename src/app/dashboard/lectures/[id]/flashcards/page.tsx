@@ -190,8 +190,21 @@ export default function FlashcardsPage() {
         return
       }
 
-      const items = json.data?.items ?? []
-      setCards(items as Flashcard[])
+      // Kalau cached data adalah pulse type (dari Action Items), ignore cache — regenerate
+      const dataType = json.data?.type
+      if (dataType === 'pulse') {
+        // Clear cache dan regenerate sebagai flashcards
+        const res2 = await fetch('/api/generate-flashcards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lectureId: params.id, bustCache: true }),
+        })
+        const json2 = await res2.json()
+        if (!res2.ok) { setError(json2.error || 'Failed to generate flashcards'); setLoading(false); return }
+        setCards((json2.data?.items ?? []) as Flashcard[])
+      } else {
+        setCards((json.data?.items ?? []) as Flashcard[])
+      }
       setLoading(false)
     }
     load()
