@@ -79,22 +79,29 @@ export async function POST(req: NextRequest) {
                    : 'webm'
 
     // Prompt ikut bahasa — bantu Whisper context
-    const prompt = langParam === 'ms'
-      ? "Rakaman dalam Bahasa Melayu. Pelajar Malaysia. Perkataan biasa: saya, awak, kita, yang, dengan, untuk, sebab, lepas, ni, macam, boleh, tak, lah."
-      : langParam === 'en'
-        ? "Speech recording from a Malaysian student. Educational content in English."
-        : langParam === 'zh'
-          ? "普通话录音。学生课堂讲课内容。"
-          : langParam === 'ta'
-            ? "மலேசிய மாணவர் பேச்சு பதிவு."
-            : "Malaysian student. Natural rojak BM + English. Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
+    // AFTER
+const contextParam = (form.get('context') as string | null) || ''
+
+const basePrompt = langParam === 'ms'
+  ? "Rakaman kuliah dalam Bahasa Melayu. Pelajar universiti Malaysia. Perkataan biasa: saya, awak, kita, yang, dengan, untuk, sebab, lepas, ni, macam, boleh, tak, lah."
+  : langParam === 'en'
+    ? "Speech recording from a Malaysian student. Educational content in English."
+    : langParam === 'zh'
+      ? "普通话录音。学生课堂讲课内容。"
+      : langParam === 'ta'
+        ? "மலேசிய மாணவர் பேச்சு பதிவு."
+        : "Malaysian student. Natural rojak BM + English. Common: yang, dengan, tu, je, kan, lah, dia, saya, kita, ada, untuk, sebab, lepas, ni, macam, boleh, tak."
+
+const prompt = contextParam
+  ? `${basePrompt} Sambungan: ...${contextParam}`
+  : basePrompt
 
     const groqForm = new FormData()
     groqForm.append('file', audio, `chunk.${audioExt}`)
     groqForm.append('model', MODEL)
     groqForm.append('response_format', 'json')
     groqForm.append('prompt', prompt)
-    groqForm.append('temperature', '0.0')
+    groqForm.append('temperature', '0.1')
     if (useLanguageHint && langParam) {
       groqForm.append('language', langParam)
     }
