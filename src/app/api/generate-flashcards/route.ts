@@ -41,9 +41,10 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { lectureId, mode } = body
+    const { lectureId, mode, bustCache } = body
     if (!lectureId) return NextResponse.json({ error: 'lectureId required' }, { status: 400 })
-    
+    const isPulse = mode === 'pulse'
+
     // Get lecture transcript
     const { data: lecture } = await supabase
       .from('lectures')
@@ -55,13 +56,11 @@ export async function POST(req: NextRequest) {
     if (!lecture) return NextResponse.json({ error: 'Lecture not found' }, { status: 404 })
 
     // Return cached if exists (skip if bustCache or type mismatch)
-    const { bustCache } = body
     const cachedType = (lecture.flashcards_json as any)?.type
     const expectedType = isPulse ? 'pulse' : 'flashcards'
     if (lecture.flashcards_json && !bustCache && cachedType === expectedType) {
       return NextResponse.json({ data: lecture.flashcards_json, cached: true })
     }
-
     // Best available transcript
     const transcript = lecture.transcript_md || lecture.raw_transcript_md || ''
     const summaryText = lecture.summary
@@ -75,8 +74,6 @@ export async function POST(req: NextRequest) {
     if (!contentForAI.trim()) {
       return NextResponse.json({ error: 'No transcript available' }, { status: 422 })
     }
-
-    const isPulse = mode === 'pulse'
 
     // ── Build AI prompt ────────────────────────────────────────────────────────
     const systemPrompt = isPulse
