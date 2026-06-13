@@ -148,9 +148,19 @@ export async function transcribeOne(
     console.warn(`[transcribeOne] blob ${(finalBlob.size / 1024 / 1024).toFixed(1)}MB > 24MB — splitting not supported, sending as-is (server will handle via Soniox)`)
   }
 
-  console.log(`[transcribeOne] sending | ${ext} | ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
+  const MAX_VERCEL_BYTES = 4 * 1024 * 1024  // 4MB safe limit (Vercel = 4.5MB)
 
-  form.append('audio', finalBlob, `audio.${ext}`)
+// Kalau blob > 4MB, split dan transcribe bahagian terbesar sahaja
+// (untuk rakaman panjang, Soniox server lebih sesuai — ini fallback path)
+let sendBlob = finalBlob
+if (finalBlob.size > MAX_VERCEL_BYTES) {
+  console.warn(`[transcribeOne] blob ${(finalBlob.size / 1024 / 1024).toFixed(1)}MB > 4MB — trimming to first 4MB`)
+  sendBlob = finalBlob.slice(0, MAX_VERCEL_BYTES, finalBlob.type)
+}
+
+console.log(`[transcribeOne] sending | ${ext} | ${(sendBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
+
+form.append('audio', sendBlob, `audio.${ext}`)
   if (language && language !== 'auto') {
     form.append('language', language)
   }
