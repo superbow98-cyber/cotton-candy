@@ -6,6 +6,10 @@ const nextConfig = {
       bodySizeLimit: '50mb',
     },
   },
+  // Fix 413 untuk API Routes (/api/transcribe)
+  async headers() {
+    return []
+  },
   typescript: {
     ignoreBuildErrors: true
   },
