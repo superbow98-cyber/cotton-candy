@@ -80,11 +80,12 @@ function QuizQuestion({ card, index, total, primary, onAnswer }: {
   onAnswer: (correct: boolean) => void
 }) {
   const [selected, setSelected] = useState<number | null>(null)
+  const [answered, setAnswered] = useState(false)
 
   const handleSelect = (i: number) => {
     if (selected !== null) return
     setSelected(i)
-    setTimeout(() => onAnswer(i === card.answer), 900)
+    setAnswered(true)
   }
 
   const optionColors = (i: number) => {
@@ -134,15 +135,27 @@ function QuizQuestion({ card, index, total, primary, onAnswer }: {
       </div>
 
       {selected !== null && (
-        <div style={{
-          marginTop: 14, padding: '12px 16px', borderRadius: 12,
-          background: selected === card.answer ? '#d1fae5' : '#fee2e2',
-          color: selected === card.answer ? '#065f46' : '#7f1d1d',
-          fontSize: 13, lineHeight: 1.5,
-        }}>
-          <strong>{selected === card.answer ? '✓ Correct! ' : '✗ Not quite. '}</strong>
-          {card.explanation}
-        </div>
+        <>
+          <div style={{
+            marginTop: 14, padding: '12px 16px', borderRadius: 12,
+            background: selected === card.answer ? '#d1fae5' : '#fee2e2',
+            color: selected === card.answer ? '#065f46' : '#7f1d1d',
+            fontSize: 13, lineHeight: 1.5,
+          }}>
+            <strong>{selected === card.answer ? '✓ Correct! ' : '✗ Not quite. '}</strong>
+            {card.explanation}
+          </div>
+          <button
+            onClick={() => onAnswer(selected === card.answer)}
+            style={{
+              marginTop: 14, width: '100%', padding: '13px 0', borderRadius: 12,
+              background: primary, color: '#fff', border: 'none',
+              fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            }}
+          >
+            {index + 1 >= total ? 'See Results →' : 'Next Question →'}
+          </button>
+        </>
       )}
     </div>
   )
@@ -216,9 +229,9 @@ export default function FlashcardsPage() {
     if (correct) setScore(s => s + 1)
 
     if (cardIndex + 1 >= cards.length) {
-      setTimeout(() => setMode('results'), 300)
+      setMode('results')
     } else {
-      setTimeout(() => setCardIndex(i => i + 1), 400)
+      setCardIndex(i => i + 1)
     }
   }
 
