@@ -1107,7 +1107,7 @@ getRecentTranscript: () => linesRef.current.slice(-3).map(l => l.text).join(' ')
               setEnhanceProgress({ done: i + 1, total: chunks.length })
               continue
             }
-            const result = await transcribeOne(chunk, undefined, recordingLang)
+            const result = await transcribeOne(chunk, undefined, recordingLang, true)
             if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
             if (result.text?.trim()) combinedTexts.push(result.text.trim())
             setEnhanceProgress({ done: i + 1, total: chunks.length })
