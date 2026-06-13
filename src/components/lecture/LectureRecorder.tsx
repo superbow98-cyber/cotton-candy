@@ -1111,7 +1111,7 @@ const fullBlob = new Blob(chunks, { type: fullMime })
 
 if (fullBlob.size >= 2000) {
   setEnhanceProgress({ done: 0, total: 1 })
-  const result = await transcribeOne(fullBlob, undefined, recordingLang, true)
+  const result = await transcribeOne(fullBlob, undefined, recordingLang, false)
   if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
   if (result.text?.trim()) combinedTexts.push(result.text.trim())
   setEnhanceProgress({ done: 1, total: 1 })
