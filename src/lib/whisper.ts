@@ -122,15 +122,13 @@ export async function transcribeOne(
 ): Promise<TranscribeResponse> {
   const form = new FormData()
 
-  // v62 FIX: Chrome iOS produce audio/mp4 yang server ffmpeg tak boleh convert
-  // (ffmpeg-static ENOENT dalam Vercel Lambda). Convert client-side ke WAV untuk Chrome iOS sahaja.
-  // Device lain (Android Chrome, Safari) hantar terus — Web Audio API ada restriction kat sana.
   let finalBlob = audioBlob
   let ext = audioBlob.type.includes('mp4') ? 'mp4'
            : audioBlob.type.includes('ogg') ? 'ogg'
            : audioBlob.type.includes('wav') ? 'wav'
            : 'webm'
 
+  // FIX: Chrome iOS convert ke WAV
   if (!skipConversion && isChromeIOS() && (audioBlob.type.includes('mp4') || audioBlob.type.includes('webm'))) {
     console.log('[transcribeOne] Chrome iOS detected — converting to WAV client-side')
     try {
@@ -143,7 +141,16 @@ export async function transcribeOne(
     }
   }
 
-  form.append('audio', finalBlob, `chunk.${ext}`)
+  // FIX: Groq limit 25MB — kalau blob terlalu besar, hantar terus ke /api/transcribe
+  // (server-side Soniox boleh handle saiz besar, Groq ada limit)
+  const MAX_SIZE = 24 * 1024 * 1024  // 24MB safe limit
+  if (finalBlob.size > MAX_SIZE) {
+    console.warn(`[transcribeOne] blob ${(finalBlob.size / 1024 / 1024).toFixed(1)}MB > 24MB — splitting not supported, sending as-is (server will handle via Soniox)`)
+  }
+
+  console.log(`[transcribeOne] sending | ${ext} | ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
+
+  form.append('audio', finalBlob, `audio.${ext}`)
   if (language && language !== 'auto') {
     form.append('language', language)
   }
