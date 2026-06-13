@@ -118,6 +118,7 @@ export async function transcribeOne(
   audioBlob: Blob,
   signal?: AbortSignal,
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
+  skipConversion = false,
 ): Promise<TranscribeResponse> {
   const form = new FormData()
 
@@ -130,7 +131,7 @@ export async function transcribeOne(
            : audioBlob.type.includes('wav') ? 'wav'
            : 'webm'
 
-  if (isChromeIOS() && (audioBlob.type.includes('mp4') || audioBlob.type.includes('webm'))) {
+  if (!skipConversion && isChromeIOS() && (audioBlob.type.includes('mp4') || audioBlob.type.includes('webm'))) {
     console.log('[transcribeOne] Chrome iOS detected — converting to WAV client-side')
     try {
       finalBlob = await convertToWav(audioBlob)
