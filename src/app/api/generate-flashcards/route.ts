@@ -40,9 +40,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Paid plan required' }, { status: 403 })
     }
 
-    const { lectureId } = await req.json()
+    const body = await req.json()
+    const { lectureId, mode } = body
     if (!lectureId) return NextResponse.json({ error: 'lectureId required' }, { status: 400 })
-
+    
     // Get lecture transcript
     const { data: lecture } = await supabase
       .from('lectures')
@@ -72,11 +73,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No transcript available' }, { status: 422 })
     }
 
-    const isStudent = true  // default student until Learning Style migration is run
+    const isPulse = mode === 'pulse'
 
     // ── Build AI prompt ────────────────────────────────────────────────────────
-    const systemPrompt = isStudent
-      ? `You are an educational assistant. Generate exactly 8 multiple-choice flashcards from the lecture content.
+    const systemPrompt = isPulse
+      ? `You are an expert educational assessor. Based on the lecture content, generate 8 diagnostic questions that a lecturer can use to check student understanding. Cover all 4 Bloom's Taxonomy levels: 2 remember, 2 understand, 2 apply, 2 analyse.
+Return ONLY a valid JSON array — no markdown, no explanation, no preamble.
+Each item: { "question": string, "bloom": "remember"|"understand"|"apply"|"analyse", "keyPoints": string[], "redFlag": string }
+Rules:
+- "question" — open-ended question the lecturer asks the student
+- "bloom" — must be exactly one of: remember, understand, apply, analyse
+- "keyPoints" — 2-4 bullet points of what a correct answer should include
+- "redFlag" — one sentence describing what a confused/wrong student answer sounds like
+- Base ALL questions strictly on the lecture summary and transcript content`
+      : `You are an educational assistant. Generate exactly 8 multiple-choice flashcards from the lecture content.
 Return ONLY a valid JSON array — no markdown, no explanation, no preamble.
 Each item: { "question": string, "options": [string, string, string, string], "answer": number (0-3), "explanation": string }
 Rules:
@@ -84,16 +94,6 @@ Rules:
 - Wrong options must be plausible (not obviously wrong)
 - Explanations must be 1-2 sentences explaining WHY the answer is correct
 - Mix difficulty: 2 easy, 4 medium, 2 hard`
-      : `You are an academic assistant. Extract action items from this lecture content for the lecturer.
-Return ONLY a valid JSON array — no markdown, no explanation, no preamble.
-Each item: { "task": string, "category": "follow-up"|"assignment"|"reminder"|"resource", "priority": "high"|"medium"|"low", "done": false }
-Rules:
-- Extract 6-12 realistic action items
-- "follow-up" = things to clarify or revisit with students
-- "assignment" = tasks to set for students
-- "reminder" = administrative or prep tasks
-- "resource" = materials to prepare or share`
-
     // ── Call DeepSeek V3 via Groq ──────────────────────────────────────────────
     const groqKey = process.env.GROQ_API_KEY
     if (!groqKey) return NextResponse.json({ error: 'AI not configured' }, { status: 500 })
@@ -137,7 +137,7 @@ Rules:
 
     // ── Cache in DB ────────────────────────────────────────────────────────────
     const cachePayload = {
-      type: isStudent ? 'flashcards' : 'action_items',
+      type: isPulse ? 'pulse' : 'flashcards',
       items: parsed,
       generatedAt: new Date().toISOString(),
     }
