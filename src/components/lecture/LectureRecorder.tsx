@@ -1111,7 +1111,24 @@ const fullBlob = new Blob(chunks, { type: fullMime })
 
 if (fullBlob.size >= 2000) {
   setEnhanceProgress({ done: 0, total: 1 })
-  const result = await transcribeOne(fullBlob, undefined, recordingLang, false)
+  const result = await transcribeOne(fullBlob, undefined, recordingLang, false, (partText, partIndex, totalParts) => {
+  // Progressive update — setiap part siap terus append ke clean segments
+  console.log(`[finishLecture] part ${partIndex + 1}/${totalParts} done | chars: ${partText.length}`)
+  const currentSegs = cleanSegmentsRef.current
+  const segStart = currentSegs.length > 0 ? Math.max(...currentSegs.map(s => s.end)) : 0
+  const segEnd = segStart + 110  // ~110s per part
+  const partSegment: CleanSegment = {
+    start: segStart,
+    end: segEnd,
+    text: partText,
+    source: 'soniox_async',
+    language: recordingLang === 'ms' ? 'ms' : 'auto',
+    created_at: new Date().toISOString(),
+  }
+  const updatedSegs = [...currentSegs, partSegment]
+  setCleanSegments(updatedSegs)
+  cleanSegmentsRef.current = updatedSegs
+})
   if (result.usage) { lastUsage = result.usage; setUsage(result.usage) }
   if (result.text?.trim()) combinedTexts.push(result.text.trim())
   setEnhanceProgress({ done: 1, total: 1 })
@@ -1122,22 +1139,9 @@ if (fullBlob.size >= 2000) {
 const combined = combinedTexts.join(' ')
 
           if (combined.length > 20) {
-            const currentSegs = cleanSegmentsRef.current
-            const segmentStart = isResume && currentSegs.length > 0
-              ? Math.max(...currentSegs.map(s => s.end))
-              : 0
-            const segmentEnd = elapsed
-            const isMalayMode = recordingLang === 'ms' || recordingLang === 'auto'
-            const newSegment: CleanSegment = {
-              start: segmentStart,
-              end: segmentEnd,
-              text: combined,
-              source: isMalayMode ? 'soniox_async' : 'whisper_turbo',
-              language: recordingLang === 'ms' ? 'ms' : recordingLang === 'auto' ? 'auto' : recordingLang,
-              created_at: new Date().toISOString(),
-            }
-            finalSegments = [...currentSegs, newSegment]
-            setCleanSegments(finalSegments)
+            // Segments dah di-append progressively dalam onPartDone callback
+            // Guna cleanSegmentsRef.current (yang dah updated) sebagai finalSegments
+            finalSegments = cleanSegmentsRef.current
 
             const whisperLines = whisperTextToLines(combined, elapsed)
             if (whisperLines.length > 0) {
