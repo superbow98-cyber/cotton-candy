@@ -160,6 +160,7 @@ export async function transcribeOne(
   signal?: AbortSignal,
   language?: 'auto' | 'ms' | 'en' | 'zh' | 'ta',
   skipConversion = false,
+  onPartDone?: (partText: string, partIndex: number, totalParts: number) => void,
 ): Promise<TranscribeResponse> {
 
   console.log(`[transcribeOne] v2 | ${audioBlob.type} | ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB | skip=${skipConversion}`)
@@ -224,8 +225,11 @@ export async function transcribeOne(
     console.log(`[transcribeOne] part ${i + 1}/${parts.length} | ${(parts[i].size / 1024 / 1024).toFixed(2)}MB`)
     const r = await _sendWavPart(parts[i], signal, language)
     results.push(r)
+    // Notify caller setiap part siap — untuk progressive UI update
+    if (r.text?.trim() && onPartDone) {
+      onPartDone(r.text.trim(), i, parts.length)
+    }
   }
-
   const joinedText = results.map(r => r.text).filter(Boolean).join(' ').trim()
   console.log(`[transcribeOne] done | ${parts.length} parts | chars: ${joinedText.length}`)
 
