@@ -154,8 +154,7 @@ async function _sendWavPart(
   return data
 }
 
-const MAX_VERCEL_BYTES = 3.5 * 1024 * 1024  // 3.5MB — selamat bawah limit Vercel 4.5MB
-
+// WAV split ikut PCM samples, bukan bytes — lihat transcribeOne()
 export async function transcribeOne(
   audioBlob: Blob,
   signal?: AbortSignal,
@@ -179,34 +178,62 @@ export async function transcribeOne(
     }
   }
 
-  // LANGKAH 2: Split kalau perlu, hantar satu-satu, join transcript
-  if (wavBlob.size <= MAX_VERCEL_BYTES) {
-    const ext = wavBlob.type.includes('wav') ? 'wav' : 'webm'
+ // LANGKAH 2: Hantar — WAV mesti hantar penuh (jangan split bytes, corrupt header)
+  // Kalau WAV > 4MB, kena split PCM sebelum encode — tapi buat dulu hantar penuh
+  const ext = wavBlob.type.includes('wav') ? 'wav' : 'webm'
+  const VERCEL_LIMIT = 4 * 1024 * 1024  // 4MB hard limit Vercel
+
+  if (wavBlob.size <= VERCEL_LIMIT) {
+    // Boleh hantar terus
     console.log(`[transcribeOne] sending | ${ext} | ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB | lang: ${language || 'auto'}`)
     return _sendWavPart(wavBlob, signal, language)
   }
 
-  // Besar — split jadi bahagian ≤3.5MB, transcribe satu-satu, join teks
-  const parts = splitBlob(wavBlob, MAX_VERCEL_BYTES)
-  console.log(`[transcribeOne] blob ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB — splitting into ${parts.length} parts`)
+  // WAV > 4MB — kena split PCM dan encode semula setiap bahagian dengan header lengkap
+  console.log(`[transcribeOne] WAV ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB > 4MB — splitting PCM`)
+  const arrayBuffer = await wavBlob.arrayBuffer()
+  // Skip 44-byte WAV header, ambil PCM data sahaja
+  const pcmData = new Int16Array(arrayBuffer, 44)
+  const SAMPLE_RATE = 16000
+  // ~110 saat PCM per part = ~3.5MB WAV (110s * 16000 * 2 bytes = 3.52MB + 44 header)
+  const SAMPLES_PER_PART = 110 * SAMPLE_RATE
 
+  const parts: Blob[] = []
+  for (let offset = 0; offset < pcmData.length; offset += SAMPLES_PER_PART) {
+    const slice = pcmData.slice(offset, offset + SAMPLES_PER_PART)
+    // Encode semula dengan WAV header lengkap
+    const partBuffer = new ArrayBuffer(44 + slice.byteLength)
+    const view = new DataView(partBuffer)
+    const write = (off: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i))
+    }
+    write(0, 'RIFF'); view.setUint32(4, 36 + slice.byteLength, true)
+    write(8, 'WAVE'); write(12, 'fmt ')
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true); view.setUint32(24, SAMPLE_RATE, true)
+    view.setUint32(28, SAMPLE_RATE * 2, true); view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true); write(36, 'data')
+    view.setUint32(40, slice.byteLength, true)
+    new Int16Array(partBuffer, 44).set(slice)
+    parts.push(new Blob([partBuffer], { type: 'audio/wav' }))
+  }
+
+  console.log(`[transcribeOne] PCM split → ${parts.length} parts`)
   const results: TranscribeResponse[] = []
   for (let i = 0; i < parts.length; i++) {
     console.log(`[transcribeOne] part ${i + 1}/${parts.length} | ${(parts[i].size / 1024 / 1024).toFixed(2)}MB`)
-    // CapReachedError akan throw terus — bubble up ke caller
     const r = await _sendWavPart(parts[i], signal, language)
     results.push(r)
   }
 
-  // Join semua teks bahagian
   const joinedText = results.map(r => r.text).filter(Boolean).join(' ').trim()
-  console.log(`[transcribeOne] split-join done | ${parts.length} parts | total chars: ${joinedText.length}`)
+  console.log(`[transcribeOne] done | ${parts.length} parts | chars: ${joinedText.length}`)
 
   return {
     text: joinedText,
     language: results[0]?.language,
     audioSeconds: results.reduce((sum, r) => sum + (r.audioSeconds ?? 0), 0),
-    usage: results[results.length - 1]?.usage,  // usage terkini dari bahagian terakhir
+    usage: results[results.length - 1]?.usage,
   }
 }
 
