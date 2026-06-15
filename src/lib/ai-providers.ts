@@ -1,6 +1,6 @@
 // ============================================================
-// Cotton Candy — Multi-provider AI (Groq prioritized, DeepSeek for Flash slot)
-// Order: Auto/Groq → GPT → Claude → DeepSeek → Gemini Flash-Lite
+// Cotton Candy — Multi-provider AI (cost-optimized)
+// Order: Auto → Gemini Flash-Lite → DeepSeek → GPT → Claude → Groq
 // ============================================================
 
 export type AIProvider = 'gemini-flash' | 'auto' | 'groq' | 'gemini-flash-lite' | 'gpt-4o-mini' | 'claude-haiku'
@@ -426,9 +426,10 @@ export async function callAI(
   } else if (effectiveProvider === 'claude-haiku') {
     chain = [allProviders[4], allProviders[1], allProviders[0], allProviders[2]]
   } else {
-    // 'auto'
-    chain = [allProviders[1], allProviders[3], allProviders[4], allProviders[0], allProviders[2]]
-  }
+  // 'auto' — ordered cheapest first
+  chain = [allProviders[2], allProviders[0], allProviders[3], allProviders[4], allProviders[1]]
+  //        gemini-lite       deepseek          gpt              claude            groq
+}
 
   const errors: string[] = []
   for (let i = 0; i < chain.length; i++) {
