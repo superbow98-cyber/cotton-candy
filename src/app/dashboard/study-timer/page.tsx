@@ -174,7 +174,7 @@ export default function StudyTimer() {
   }, [])
 
  // ── achievement card drawing ─────────────────────────────
-  const drawAchievementCard = useCallback(() => {
+  const drawAchievementCard = useCallback(async () => {
     const c = achieveCanvasRef.current
     if (!c) return
     const ctx = c.getContext('2d')!
@@ -202,25 +202,25 @@ export default function StudyTimer() {
     const pad = 90
     ctx.textBaseline = 'top'
 
-    // CC logo circle
-    const logoR = 44
-    ctx.beginPath()
-    ctx.arc(pad + logoR, 100 + logoR, logoR, 0, Math.PI * 2)
-    ctx.fillStyle = '#FF6B9D'
-    ctx.fill()
-    ctx.font = `bold 42px -apple-system, sans-serif`
-    ctx.fillStyle = '#fff'
-    ctx.textAlign = 'center'
-    ctx.fillText('cc', pad + logoR, 100 + logoR + 2)
-    ctx.textAlign = 'left'
+    // CC logo — real logo dari public/cc-logo.png
+    const logoSize = 88
+    await new Promise<void>(resolve => {
+      const logoImg = new Image()
+      logoImg.onload = () => {
+        ctx.drawImage(logoImg, pad, 100, logoSize, logoSize)
+        resolve()
+      }
+      logoImg.onerror = () => resolve() // fallback — skip logo kalau gagal load
+      logoImg.src = '/cc-logo.png'
+    })
 
     // Brand
     ctx.font = `500 52px -apple-system, BlinkMacSystemFont, sans-serif`
     ctx.fillStyle = '#ffffff'
-    ctx.fillText('Cotton Candy', pad + logoR * 2 + 20, 106)
+    ctx.fillText('Cotton Candy', pad + logoSize + 20, 106)
     ctx.font = `400 32px -apple-system, sans-serif`
     ctx.fillStyle = 'rgba(255,255,255,0.45)'
-    ctx.fillText('cottoncandy-s.com', pad + logoR * 2 + 20, 166)
+    ctx.fillText('cottoncandy-s.com', pad + logoSize + 20, 166)
 
     // Session label
     ctx.font = `400 36px -apple-system, sans-serif`
@@ -283,15 +283,16 @@ export default function StudyTimer() {
     ctx.fillStyle = 'rgba(255,255,255,0.4)'
     ctx.fillText('#cottoncandystudy', CW - pad, CH - 170)
 
-    // CC logo bottom right
-    ctx.beginPath()
-    ctx.arc(CW - pad - logoR, CH - 100, logoR, 0, Math.PI * 2)
-    ctx.fillStyle = '#FF6B9D'
-    ctx.fill()
-    ctx.font = `bold 38px -apple-system, sans-serif`
-    ctx.fillStyle = '#fff'
-    ctx.textAlign = 'center'
-    ctx.fillText('cc', CW - pad - logoR, CH - 100 + 2)
+    // CC logo bottom right — real logo
+    await new Promise<void>(resolve => {
+      const logoImgBr = new Image()
+      logoImgBr.onload = () => {
+        ctx.drawImage(logoImgBr, CW - pad - 88, CH - 144, 88, 88)
+        resolve()
+      }
+      logoImgBr.onerror = () => resolve()
+      logoImgBr.src = '/cc-logo.png'
+    })
 
     setCardDrawn(true)
  }, [bgPhoto, targetMins, sessions, lang, pauseCountRef])
@@ -348,8 +349,8 @@ export default function StudyTimer() {
     img.src = url
   }
 
-  const downloadCard = () => {
-    drawAchievementCard()
+  const downloadCard = async () => {
+    await drawAchievementCard()
     setTimeout(() => {
       const c = achieveCanvasRef.current
       if (!c) return
