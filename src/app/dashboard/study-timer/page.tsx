@@ -900,9 +900,9 @@ export default function StudyTimer() {
                 </span>
               </div>
 
-              {/* Big timer */}
+              {/* Big timer — 5x size */}
               <div style={{
-                fontSize: isFullscreen ? 100 : 80,
+                fontSize: isFullscreen ? 500 : 400,
                 fontWeight: 600,
                 letterSpacing: '-4px',
                 fontVariantNumeric: 'tabular-nums',
