@@ -79,6 +79,10 @@ export default function StudyTimer() {
   const [targetMins, setTargetMins] = useState(50)
   const [customTarget, setCustomTarget] = useState('')
 
+  // Study title
+  const [studyTitle, setStudyTitle] = useState('')
+  const studyTitleRef = useRef('')
+
   // Motion
   const motionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [motionPct, setMotionPct] = useState(0)
@@ -109,7 +113,7 @@ export default function StudyTimer() {
   const [history, setHistory] = useState<{
     id: string, focus_secs: number, target_mins: number,
     sessions: number, pause_count: number, presence_pct: number,
-    vibe: string, created_at: string
+    vibe: string, created_at: string, study_title?: string
   }[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [historyBgPhoto, setHistoryBgPhoto] = useState<{ [id: string]: HTMLImageElement }>({})
@@ -393,12 +397,12 @@ export default function StudyTimer() {
       ? [
           { label: 'Motion pauses', val: String(pauseCountRef.current) },
           { label: 'Ghost exits', val: String(ghostCountRef.current) },
-          { label: 'Sessions', val: String(sessions) },
+          { label: 'Studying', val: studyTitleRef.current || '—' },
           { label: 'Target', val: `${targetMins}m` },
           { label: 'Vibe check', val: vibe },
         ]
       : [
-          { label: 'Sessions', val: String(sessions) },
+          { label: 'Studying', val: studyTitleRef.current || '—' },
           { label: 'Target', val: `${targetMins}m` },
           { label: 'Vibe check', val: vibe },
         ]
@@ -410,10 +414,10 @@ export default function StudyTimer() {
       ctx.font = `400 30px -apple-system, sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.38)'
       ctx.fillText(s.label, x, y)
-      const isVibe = s.label === 'Vibe check'
-      ctx.font = `500 ${isVibe ? 42 : 68}px -apple-system, sans-serif`
+      const isText = s.label === 'Vibe check' || s.label === 'Studying'
+      ctx.font = `500 ${isText ? 42 : 68}px -apple-system, sans-serif`
       ctx.fillStyle = '#ffffff'
-      ctx.fillText(s.val, x, y + (isVibe ? 50 : 40))
+      ctx.fillText(s.val, x, y + (isText ? 50 : 40))
     })
 
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'
@@ -465,6 +469,7 @@ export default function StudyTimer() {
       sessions,
       pauseCount: pauseCountRef.current,
       targetMins,
+      studyTitle: studyTitleRef.current,
       timestamp: Date.now(),
     }))
     setTimeout(() => drawAchievementCard(), 100)
@@ -486,9 +491,11 @@ export default function StudyTimer() {
         pause_count: pauseCountRef.current,
         presence_pct: pct,
         vibe: v,
+        study_title: studyTitleRef.current || null,
       }),
     }).then(r => r.json()).then(({ session }) => {
-      if (session) setHistory(h => [session, ...h])
+      // Fallback: if backend doesn't yet persist study_title, keep what we typed locally
+      if (session) setHistory(h => [{ ...session, study_title: session.study_title ?? studyTitleRef.current }, ...h])
     })
   }, [stopTick, stopMotionWatch, drawAchievementCard, sessions, targetMins, mode, isFullscreen, exitFullscreen])
 
@@ -509,6 +516,8 @@ export default function StudyTimer() {
     prevFrameRef.current = null
     setCardDrawn(false)
     setRestoredSession(false)
+    setStudyTitle('')
+    studyTitleRef.current = ''
     localStorage.removeItem('cc_last_session')
   }, [stopTick, stopMotionWatch, mode])
 
@@ -538,6 +547,10 @@ export default function StudyTimer() {
       pauseCountRef.current = saved.pauseCount
       setPauseCount(saved.pauseCount)
       setTargetMins(saved.targetMins)
+      if (saved.studyTitle) {
+        setStudyTitle(saved.studyTitle)
+        studyTitleRef.current = saved.studyTitle
+      }
       setTimerState('stopped')
       setRestoredSession(true)
     } catch { /* ignore */ }
@@ -599,21 +612,28 @@ export default function StudyTimer() {
     ctx.fillText(`${s.presence_pct}%`, pad, 605)
     ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5
     ctx.beginPath(); ctx.moveTo(pad, 790); ctx.lineTo(CW - pad, 790); ctx.stroke()
-    const stats = [
-      { label: 'Motion pauses', val: String(s.pause_count) },
-      { label: 'Sessions today', val: String(s.sessions) },
-      { label: 'Target', val: `${s.target_mins}m` },
-      { label: 'Vibe check', val: s.vibe },
-    ]
+    const wasCameraMode = s.pause_count > 0
+    const stats = wasCameraMode
+      ? [
+          { label: 'Motion pauses', val: String(s.pause_count) },
+          { label: 'Studying', val: s.study_title || '—' },
+          { label: 'Target', val: `${s.target_mins}m` },
+          { label: 'Vibe check', val: s.vibe },
+        ]
+      : [
+          { label: 'Studying', val: s.study_title || '—' },
+          { label: 'Target', val: `${s.target_mins}m` },
+          { label: 'Vibe check', val: s.vibe },
+        ]
     const colW = (CW - pad * 2) / 2
     stats.forEach((st, i) => {
       const x = pad + (i % 2) * colW
       const y = 830 + Math.floor(i / 2) * 180
       ctx.font = '400 30px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.38)'
       ctx.fillText(st.label, x, y)
-      const isVibe = st.label === 'Vibe check'
-      ctx.font = `500 ${isVibe ? 42 : 68}px -apple-system, sans-serif`; ctx.fillStyle = '#fff'
-      ctx.fillText(st.val, x, y + (isVibe ? 50 : 40))
+      const isText = st.label === 'Vibe check' || st.label === 'Studying'
+      ctx.font = `500 ${isText ? 42 : 68}px -apple-system, sans-serif`; ctx.fillStyle = '#fff'
+      ctx.fillText(st.val, x, y + (isText ? 50 : 40))
     })
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(pad, CH - 200); ctx.lineTo(CW - pad, CH - 200); ctx.stroke()
@@ -696,6 +716,7 @@ export default function StudyTimer() {
     stop: bm ? 'Selesai' : 'Finish',
     reset: bm ? 'Reset' : 'Reset',
     target: bm ? 'Sasaran' : 'Target',
+    titlePlaceholder: bm ? 'Apa yang kau study? (cth: Bab 3 Kimia)' : 'What are you studying? (e.g. Chapter 3 Chemistry)',
     of: bm ? 'daripada' : 'of',
     achievement: bm ? 'Pencapaian kau' : 'Your achievement',
     uploadPhoto: bm ? 'Tukar gambar latar' : 'Upload background photo',
@@ -869,6 +890,25 @@ export default function StudyTimer() {
                 }}
               />
             </form>
+          </div>
+        )}
+
+        {/* Study title input */}
+        {!isStopped && timerState === 'idle' && (
+          <div style={{ marginBottom: 16 }}>
+            <input
+              type="text" maxLength={60}
+              placeholder={t.titlePlaceholder}
+              value={studyTitle}
+              onChange={e => { setStudyTitle(e.target.value); studyTitleRef.current = e.target.value }}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: isFullscreen ? '0.5px solid rgba(255,255,255,0.12)' : '0.5px solid rgba(0,0,0,0.08)',
+                fontSize: 13, fontFamily: 'inherit', textAlign: 'center',
+                background: isFullscreen ? 'rgba(255,255,255,0.06)' : '#f5f5f7',
+                color: isFullscreen ? '#fff' : '#1d1d1f',
+              }}
+            />
           </div>
         )}
 
@@ -1230,6 +1270,11 @@ export default function StudyTimer() {
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#1d1d1f' }}>
               {t.achievement}
             </h1>
+            {studyTitle && (
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#FF6B9D', marginTop: 4 }}>
+                {studyTitle}
+              </div>
+            )}
             <div style={{ fontSize: 12.5, color: 'rgba(29,29,31,0.5)', marginTop: 3 }}>
               {fmtDisplay(focusSecs)} · {Math.min(100, Math.round(progress * 100))}% of {targetMins}m target
             </div>
@@ -1326,7 +1371,7 @@ export default function StudyTimer() {
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginTop: 2 }}>
-                        {dateStr} · {timeStr}
+                        {s.study_title ? `${s.study_title} · ` : ''}{dateStr} · {timeStr}
                       </div>
                     </div>
                     <div style={{ fontSize: 11, color: '#FF6B9D', fontWeight: 500 }}>{s.vibe}</div>
@@ -1335,10 +1380,14 @@ export default function StudyTimer() {
 
                   {isOpen && (
                     <div style={{ padding: '0 14px 14px', borderTop: '0.5px solid rgba(0,0,0,0.05)' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, marginBottom: 12 }}>
+                      {s.study_title && (
+                        <div style={{ fontSize: 13, fontWeight: 500, color: '#1d1d1f', marginTop: 12 }}>
+                          {s.study_title}
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: s.study_title ? 8 : 12, marginBottom: 12 }}>
                         {[
-                          { label: 'Motion pauses', val: s.pause_count },
-                          { label: 'Sessions', val: s.sessions },
+                          ...(s.pause_count > 0 ? [{ label: 'Motion pauses', val: s.pause_count }] : []),
                           { label: 'Target', val: `${s.target_mins}m` },
                           { label: 'Reached', val: `${s.presence_pct}%` },
                         ].map(({ label, val }) => (
