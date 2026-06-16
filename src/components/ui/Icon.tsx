@@ -56,6 +56,7 @@ export const Icon = {
   Trash:      wrap(<><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></>),
   Clock:      wrap(<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>),
   Timer:      wrap(<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /><path d="M9 2h6" /></>),
+  Camera:     wrap(<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></>),
   Globe:      wrap(<><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></>),
   Play:       wrap(<polygon points="5 3 19 12 5 21 5 3" />),
   Stop:       wrap(<rect x="6" y="6" width="12" height="12" rx="1" />),
