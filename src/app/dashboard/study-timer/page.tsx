@@ -173,45 +173,7 @@ export default function StudyTimer() {
     if (timerRef.current) clearInterval(timerRef.current)
   }, [])
 
-  // ── controls ────────────────────────────────────────────
-  const handleStart = useCallback(() => {
-    isAwayRef.current = false
-    setTimerState('running')
-    setSessions(s => s + 1)
-    startTick()
-    startMotionWatch()
-  }, [startTick, startMotionWatch])
-
-  const handleStop = useCallback(() => {
-    setTimerState('stopped')
-    stopTick()
-    stopMotionWatch()
-    isAwayRef.current = false
-    setTimeout(() => drawAchievementCard(), 100)
-  }, [stopTick, stopMotionWatch, drawAchievementCard])
-
-  const handleReset = useCallback(() => {
-    setTimerState('idle')
-    stopTick()
-    stopMotionWatch()
-    isAwayRef.current = false
-    focusSecsRef.current = 0
-    setFocusSecs(0)
-    setSessions(0)
-    pauseCountRef.current = 0
-    setPauseCount(0)
-    setMotionPct(0)
-    prevFrameRef.current = null
-    setCardDrawn(false)
-  }, [stopTick, stopMotionWatch])
-
-  useEffect(() => () => {
-    stopTick()
-    stopMotionWatch()
-    streamRef.current?.getTracks().forEach(t => t.stop())
-  }, [stopTick, stopMotionWatch])
-
-  // ── achievement card drawing ─────────────────────────────
+ // ── achievement card drawing ─────────────────────────────
   const drawAchievementCard = useCallback(() => {
     const c = achieveCanvasRef.current
     if (!c) return
@@ -332,12 +294,50 @@ export default function StudyTimer() {
     ctx.fillText('cc', CW - pad - logoR, CH - 100 + 2)
 
     setCardDrawn(true)
-  }, [bgPhoto, targetMins, sessions, lang, pauseCountRef])
+ }, [bgPhoto, targetMins, sessions, lang, pauseCountRef])
 
   // Redraw card if bgPhoto changes while stopped
   useEffect(() => {
     if (timerState === 'stopped') drawAchievementCard()
   }, [bgPhoto, timerState, drawAchievementCard])
+
+  // ── controls ────────────────────────────────────────────
+  const handleStart = useCallback(() => {
+    isAwayRef.current = false
+    setTimerState('running')
+    setSessions(s => s + 1)
+    startTick()
+    startMotionWatch()
+  }, [startTick, startMotionWatch])
+
+  const handleStop = useCallback(() => {
+    setTimerState('stopped')
+    stopTick()
+    stopMotionWatch()
+    isAwayRef.current = false
+    setTimeout(() => drawAchievementCard(), 100)
+  }, [stopTick, stopMotionWatch, drawAchievementCard])
+
+  const handleReset = useCallback(() => {
+    setTimerState('idle')
+    stopTick()
+    stopMotionWatch()
+    isAwayRef.current = false
+    focusSecsRef.current = 0
+    setFocusSecs(0)
+    setSessions(0)
+    pauseCountRef.current = 0
+    setPauseCount(0)
+    setMotionPct(0)
+    prevFrameRef.current = null
+    setCardDrawn(false)
+  }, [stopTick, stopMotionWatch])
+
+  useEffect(() => () => {
+    stopTick()
+    stopMotionWatch()
+    streamRef.current?.getTracks().forEach(t => t.stop())
+  }, [stopTick, stopMotionWatch])
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
