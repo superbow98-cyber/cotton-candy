@@ -47,7 +47,6 @@ export default function StudyTimer() {
 
   // Target
   const [targetMins, setTargetMins] = useState(50)
-  const [showTargetPicker, setShowTargetPicker] = useState(false)
   const [customTarget, setCustomTarget] = useState('')
 
   // Motion
@@ -295,7 +294,7 @@ export default function StudyTimer() {
     })
 
     setCardDrawn(true)
- }, [bgPhoto, targetMins, sessions, lang, pauseCountRef])
+}, [bgPhoto, targetMins, sessions, lang])
 
   // Redraw card if bgPhoto changes while stopped
   useEffect(() => {
@@ -366,9 +365,7 @@ export default function StudyTimer() {
   const isStopped = timerState === 'stopped'
   const targetSecs = targetMins * 60
   const progress = Math.min(1, focusSecs / targetSecs)
-  const ringR = 54
-  const ringCirc = 2 * Math.PI * ringR
-  const ringOffset = ringCirc * (1 - progress)
+  
 
   const bm = lang === 'bm'
   const t = {
@@ -458,62 +455,6 @@ export default function StudyTimer() {
         <h1 style={S.h1}>{t.title}</h1>
         <div style={S.sub}>{t.subtitle}</div>
       </div>
-
-      
-          )}
-          <video ref={videoRef} autoPlay playsInline muted style={{
-            width: '100%', height: '100%', objectFit: 'cover',
-            transform: 'scaleX(-1)', display: camReady ? 'block' : 'none',
-          }} />
-          <canvas ref={canvasRef} width={W} height={H} style={{ display: 'none' }} />
-          {camReady && (
-            <div style={S.statusPill}>
-              <div style={{
-                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: isPausedAway ? '#ef4444' : awayCountdown !== null ? '#f59e0b' : '#22c55e',
-              }} />
-              <span style={{ fontSize: 11, color: '#fff', whiteSpace: 'nowrap' }}>
-                {isPausedAway ? t.paused : t.focused}
-              </span>
-            </div>
-          )}
-          {camReady && (
-            <div style={{
-              position: 'absolute', bottom: 10, left: 12, right: 12,
-              height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden',
-            }}>
-              <div style={{
-                height: '100%', width: `${motionPct}%`,
-                background: motionPct > 60 ? '#ef4444' : '#22c55e',
-                borderRadius: 2, transition: 'width 0.1s',
-              }} />
-            </div>
-          )}
-          {awayCountdown !== null && !isPausedAway && (
-            <div style={{
-              position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}>
-              <p style={{ color: '#fff', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.awayMsg}</p>
-              <div style={{ fontSize: 44, fontWeight: 500, color: '#f59e0b', lineHeight: 1 }}>{awayCountdown}</div>
-            </div>
-          )}
-          {isPausedAway && (
-            <div style={{
-              position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <div style={{
-                background: 'rgba(239,68,68,0.15)', border: '0.5px solid rgba(239,68,68,0.35)',
-                borderRadius: 12, padding: '10px 20px',
-              }}>
-                <p style={{ color: '#fca5a5', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.labelPaused}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Target picker */}
       {!isStopped && (
@@ -711,21 +652,6 @@ export default function StudyTimer() {
                 {t.of} {fmt(targetSecs)}
               </span>
             </div>
-          </div>
-        </div>
-      )}
-
-          {/* Progress % */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', maxWidth: 240 }}>
-            <div style={{ flex: 1, height: 2, background: 'rgba(0,0,0,0.06)', borderRadius: 1, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', width: `${Math.round(progress * 100)}%`,
-                background: '#1d1d1f', borderRadius: 1, transition: 'width 0.5s',
-              }} />
-            </div>
-            <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', fontVariantNumeric: 'tabular-nums', minWidth: 28 }}>
-              {Math.round(progress * 100)}%
-            </span>
           </div>
         </div>
       )}
