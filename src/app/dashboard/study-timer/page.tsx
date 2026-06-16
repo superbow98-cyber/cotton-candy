@@ -188,7 +188,7 @@ export default function StudyTimer() {
     stopMotionWatch()
     isAwayRef.current = false
     setTimeout(() => drawAchievementCard(), 100)
-  }, [stopTick, stopMotionWatch])
+  }, [stopTick, stopMotionWatch, drawAchievementCard])
 
   const handleReset = useCallback(() => {
     setTimerState('idle')
