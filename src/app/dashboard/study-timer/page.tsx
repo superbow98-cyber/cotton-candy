@@ -402,6 +402,26 @@ export default function StudyTimer() {
     await drawAchievementCard()
     const c = achieveCanvasRef.current
     if (!c) return
+
+    // Mobile: guna Web Share API (iOS Safari, Android Chrome support)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (isMobile && navigator.share) {
+      await new Promise<void>(resolve => {
+        c.toBlob(async (blob) => {
+          if (!blob) { resolve(); return }
+          const file = new File([blob], 'cotton-candy-study.png', { type: 'image/png' })
+          try {
+            await navigator.share({ files: [file], title: 'Cotton Candy Study' })
+          } catch {
+            // User cancel — ignore
+          }
+          resolve()
+        }, 'image/png')
+      })
+      return
+    }
+
+    // Desktop: download biasa
     const link = document.createElement('a')
     link.download = 'cotton-candy-study.png'
     link.href = c.toDataURL('image/png')
