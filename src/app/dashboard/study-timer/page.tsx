@@ -69,6 +69,7 @@ export default function StudyTimer() {
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [cardDrawn, setCardDrawn] = useState(false)
   const [restoredSession, setRestoredSession] = useState(false)
+  const [cardLoading, setCardLoading] = useState(false)
 
   // ── camera ──────────────────────────────────────────────
   const startCamera = useCallback(async () => {
@@ -177,6 +178,7 @@ export default function StudyTimer() {
   const drawAchievementCard = useCallback(async () => {
     const c = achieveCanvasRef.current
     if (!c) return
+    setCardLoading(true)
     const ctx = c.getContext('2d')!
     const CW = 1080, CH = 1920
     c.width = CW; c.height = CH
@@ -296,6 +298,7 @@ export default function StudyTimer() {
     })
 
     setCardDrawn(true)
+    setCardLoading(false)
 }, [bgPhoto, targetMins, sessions, lang])
 
   // Draw card after restore — delay bagi state settle
@@ -357,6 +360,13 @@ export default function StudyTimer() {
     stopMotionWatch()
     streamRef.current?.getTracks().forEach(t => t.stop())
   }, [stopTick, stopMotionWatch])
+
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.innerHTML = `@keyframes cc-slide { 0% { width: 0%; margin-left: 0% } 50% { width: 60%; margin-left: 20% } 100% { width: 0%; margin-left: 100% } }`
+    document.head.appendChild(style)
+    return () => { document.head.removeChild(style) }
+  }, [])
 
   // Restore last session on mount (within 24 hours)
   useEffect(() => {
@@ -751,7 +761,32 @@ export default function StudyTimer() {
           <div style={S.achieveWrap}>
             {/* Canvas preview — rendered as image */}
             <canvas ref={achieveCanvasRef} style={{ display: 'none' }} />
-            {cardDrawn && achieveCanvasRef.current && (
+
+            {/* Loading state */}
+            {cardLoading && (
+              <div style={{
+                width: '100%', aspectRatio: '9/16',
+                borderRadius: 16, background: '#0a0a0a',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 16,
+              }}>
+                <div style={{
+                  width: 180, height: 3, background: 'rgba(255,255,255,0.08)',
+                  borderRadius: 99, overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%', borderRadius: 99,
+                    background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
+                    animation: 'cc-slide 1.2s ease-in-out infinite',
+                  }} />
+                </div>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+                  {bm ? 'Menyediakan kad...' : 'Preparing card...'}
+                </span>
+              </div>
+            )}
+
+            {cardDrawn && !cardLoading && achieveCanvasRef.current && (
               <img
                 key={bgPhoto ? bgPhoto.src : 'default'}
                 src={achieveCanvasRef.current.toDataURL('image/png')}
@@ -761,7 +796,10 @@ export default function StudyTimer() {
             )}
 
             {/* Upload photo */}
-            <button style={S.uploadBtn} onClick={() => photoInputRef.current?.click()}>
+            <button
+              style={{ ...S.uploadBtn, opacity: cardLoading ? 0.4 : 1, pointerEvents: cardLoading ? 'none' : 'auto' }}
+              onClick={() => photoInputRef.current?.click()}
+            >
               <Icon.Export size={16} />
               {t.uploadPhoto}
             </button>
@@ -774,9 +812,12 @@ export default function StudyTimer() {
             />
 
             {/* Download */}
-            <button style={S.dlBtn} onClick={downloadCard}>
+            <button
+              style={{ ...S.dlBtn, opacity: cardLoading ? 0.4 : 1, pointerEvents: cardLoading ? 'none' : 'auto' }}
+              onClick={downloadCard}
+            >
               <Icon.Download size={16} />
-              {t.download}
+              {cardLoading ? (bm ? 'Menyediakan...' : 'Preparing...') : t.download}
             </button>
 
             {/* New session */}
