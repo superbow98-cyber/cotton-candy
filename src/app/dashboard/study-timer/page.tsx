@@ -262,12 +262,13 @@ export default function StudyTimer() {
     ctx.beginPath(); ctx.moveTo(pad, 790); ctx.lineTo(CW - pad, 790); ctx.stroke()
 
     // 4 mini stats grid
-    const vibe = presencePct >= 100 ? 'certified nerd fr'
-      : presencePct >= 80 ? 'almost there bestie'
-      : presencePct >= 60 ? 'not bad, keep going'
-      : presencePct >= 40 ? 'mid session energy'
-      : presencePct >= 20 ? 'just warming up huh'
-      : 'bro just opened the app'
+    const pct = Math.min(100, Math.round((focusSecsRef.current / targetSecs) * 100))
+    const vibe = pct >= 100 ? 'in the zone, completely.'
+      : pct >= 80 ? 'nearly flawless'
+      : pct >= 60 ? 'solid effort today'
+      : pct >= 40 ? 'progress, not perfection'
+      : pct >= 20 ? 'getting started counts'
+      : 'showed up.'
     const stats = [
       { label: 'Motion pauses', val: String(pauseCountRef.current) },
       { label: 'Sessions today', val: String(sessions) },
@@ -348,12 +349,12 @@ export default function StudyTimer() {
   // Save to Supabase
     const targetSecs = targetMins * 60
     const pct = Math.min(100, Math.round((focusSecsRef.current / targetSecs) * 100))
-    const v = pct >= 100 ? 'certified nerd fr'
-      : pct >= 80 ? 'almost there bestie'
-      : pct >= 60 ? 'not bad, keep going'
-      : pct >= 40 ? 'mid session energy'
-      : pct >= 20 ? 'just warming up huh'
-      : 'bro just opened the app'
+    const v = pct >= 100 ? 'in the zone, completely.'
+  : pct >= 80 ? 'nearly flawless'
+  : pct >= 60 ? 'solid effort today'
+  : pct >= 40 ? 'progress, not perfection'
+  : pct >= 20 ? 'getting started counts'
+  : 'showed up.'
     fetch('/api/study-sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
