@@ -332,7 +332,7 @@ export default function StudyTimer() {
     ctx.fillText('cc', CW - pad - logoR, CH - 100 + 2)
 
     setCardDrawn(true)
-  }, [bgPhoto, targetMins, sessions, lang])
+  }, [bgPhoto, targetMins, sessions, lang, pauseCountRef])
 
   // Redraw card if bgPhoto changes while stopped
   useEffect(() => {
@@ -349,12 +349,15 @@ export default function StudyTimer() {
   }
 
   const downloadCard = () => {
-    const c = achieveCanvasRef.current
-    if (!c) return
-    const link = document.createElement('a')
-    link.download = 'cotton-candy-study.png'
-    link.href = c.toDataURL('image/png')
-    link.click()
+    drawAchievementCard()
+    setTimeout(() => {
+      const c = achieveCanvasRef.current
+      if (!c) return
+      const link = document.createElement('a')
+      link.download = 'cotton-candy-study.png'
+      link.href = c.toDataURL('image/png')
+      link.click()
+    }, 200)
   }
 
   const isRunning = timerState === 'running' || timerState === 'paused-away'
@@ -667,6 +670,7 @@ export default function StudyTimer() {
             <canvas ref={achieveCanvasRef} style={{ display: 'none' }} />
             {cardDrawn && achieveCanvasRef.current && (
               <img
+                key={bgPhoto ? bgPhoto.src : 'default'}
                 src={achieveCanvasRef.current.toDataURL('image/png')}
                 alt="Study achievement card"
                 style={S.cardPreview}
