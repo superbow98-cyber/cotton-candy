@@ -71,6 +71,17 @@ export default function StudyTimer() {
   const [restoredSession, setRestoredSession] = useState(false)
   const [cardLoading, setCardLoading] = useState(false)
 
+  // Session history
+  const [history, setHistory] = useState<{
+    id: string, focus_secs: number, target_mins: number,
+    sessions: number, pause_count: number, presence_pct: number,
+    vibe: string, created_at: string
+  }[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [historyBgPhoto, setHistoryBgPhoto] = useState<{ [id: string]: HTMLImageElement }>({})
+  const historyPhotoInputRef = useRef<HTMLInputElement>(null)
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null)
+
   // ── camera ──────────────────────────────────────────────
   const startCamera = useCallback(async () => {
     try {
@@ -334,6 +345,29 @@ export default function StudyTimer() {
       timestamp: Date.now(),
     }))
     setTimeout(() => drawAchievementCard(), 100)
+  // Save to Supabase
+    const targetSecs = targetMins * 60
+    const pct = Math.min(100, Math.round((focusSecsRef.current / targetSecs) * 100))
+    const v = pct >= 100 ? 'certified nerd fr'
+      : pct >= 80 ? 'almost there bestie'
+      : pct >= 60 ? 'not bad, keep going'
+      : pct >= 40 ? 'mid session energy'
+      : pct >= 20 ? 'just warming up huh'
+      : 'bro just opened the app'
+    fetch('/api/study-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        focus_secs: focusSecsRef.current,
+        target_mins: targetMins,
+        sessions,
+        pause_count: pauseCountRef.current,
+        presence_pct: pct,
+        vibe: v,
+      }),
+    }).then(r => r.json()).then(({ session }) => {
+      if (session) setHistory(h => [session, ...h])
+    })
   }, [stopTick, stopMotionWatch, drawAchievementCard, sessions, targetMins])
 
   const handleReset = useCallback(() => {
@@ -386,6 +420,107 @@ export default function StudyTimer() {
       // corrupt data — ignore
     }
   }, [])
+
+  // Load session history on mount
+  useEffect(() => {
+    fetch('/api/study-sessions')
+      .then(r => r.json())
+      .then(({ sessions: data }) => { if (data) setHistory(data) })
+      .catch(() => {})
+  }, [])
+
+  const handleHistoryPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f || !activeHistoryId) return
+    const url = URL.createObjectURL(f)
+    const img = new Image()
+    img.onload = () => {
+      setHistoryBgPhoto(prev => ({ ...prev, [activeHistoryId]: img }))
+    }
+    img.src = url
+  }
+
+  const saveHistoryCard = async (s: typeof history[0]) => {
+    const c = document.createElement('canvas')
+    const ctx = c.getContext('2d')!
+    const CW = 1080, CH = 1920
+    c.width = CW; c.height = CH
+    const bg = historyBgPhoto[s.id]
+    if (bg) {
+      const scale = Math.max(CW / bg.width, CH / bg.height)
+      const sw = bg.width * scale, sh = bg.height * scale
+      ctx.drawImage(bg, (CW - sw) / 2, (CH - sh) / 2, sw, sh)
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, CW, CH)
+    } else {
+      ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, CW, CH)
+      const grad = ctx.createLinearGradient(0, 0, 0, CH * 0.4)
+      grad.addColorStop(0, 'rgba(255,107,157,0.08)'); grad.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, CW, CH)
+    }
+    const pad = 90
+    ctx.textBaseline = 'top'
+    await new Promise<void>(resolve => {
+      const logo = new Image()
+      logo.onload = () => { ctx.drawImage(logo, pad, 100, 88, 88); resolve() }
+      logo.onerror = () => resolve()
+      logo.src = '/cc-logo.png'
+    })
+    ctx.font = '500 52px -apple-system, sans-serif'; ctx.fillStyle = '#fff'
+    ctx.fillText('Cotton Candy', pad + 108, 106)
+    ctx.font = '400 32px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.45)'
+    ctx.fillText('cottoncandy-s.com', pad + 108, 166)
+    ctx.font = '400 36px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.4)'
+    ctx.fillText('Focus session', pad, 290)
+    const focusDisplay = fmtDisplay(s.focus_secs)
+    ctx.font = `500 ${focusDisplay.length > 6 ? 130 : 160}px -apple-system, sans-serif`
+    ctx.fillStyle = '#fff'; ctx.fillText(focusDisplay, pad, 340)
+    ctx.font = '400 36px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.4)'
+    ctx.fillText('Target reached', pad, 560)
+    ctx.font = '500 120px -apple-system, sans-serif'; ctx.fillStyle = '#FF6B9D'
+    ctx.fillText(`${s.presence_pct}%`, pad, 605)
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.moveTo(pad, 790); ctx.lineTo(CW - pad, 790); ctx.stroke()
+    const stats = [
+      { label: 'Motion pauses', val: String(s.pause_count) },
+      { label: 'Sessions today', val: String(s.sessions) },
+      { label: 'Target', val: `${s.target_mins}m` },
+      { label: 'Vibe check', val: s.vibe },
+    ]
+    const colW = (CW - pad * 2) / 2
+    stats.forEach((st, i) => {
+      const x = pad + (i % 2) * colW
+      const y = 830 + Math.floor(i / 2) * 180
+      ctx.font = '400 30px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.38)'
+      ctx.fillText(st.label, x, y)
+      const isVibe = st.label === 'Vibe check'
+      ctx.font = `500 ${isVibe ? 42 : 68}px -apple-system, sans-serif`; ctx.fillStyle = '#fff'
+      ctx.fillText(st.val, x, y + (isVibe ? 50 : 40))
+    })
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(pad, CH - 200); ctx.lineTo(CW - pad, CH - 200); ctx.stroke()
+    ctx.font = '400 30px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.3)'
+    ctx.fillText('Focus like a student. Study with Cotton Candy.', pad, CH - 170)
+    ctx.textAlign = 'right'; ctx.font = '500 30px -apple-system, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillText('#cottoncandystudy', CW - pad, CH - 170)
+    ctx.textAlign = 'left'
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (isMobile && navigator.share) {
+      await new Promise<void>(resolve => {
+        c.toBlob(async (blob) => {
+          if (!blob) { resolve(); return }
+          const file = new File([blob], 'cotton-candy-study.png', { type: 'image/png' })
+          try { await navigator.share({ files: [file], title: 'Cotton Candy Study' }) } catch {}
+          resolve()
+        }, 'image/png')
+      })
+    } else {
+      const link = document.createElement('a')
+      link.download = 'cotton-candy-study.png'
+      link.href = c.toDataURL('image/png')
+      link.click()
+    }
+  }
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -850,6 +985,93 @@ export default function StudyTimer() {
           </div>
         </>
       )}
+
+    {/* ── Session History ── */}
+      {history.length > 0 && (
+        <div style={{ marginTop: 40 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(29,29,31,0.4)', marginBottom: 12 }}>
+            Study history
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {history.map(s => {
+              const isOpen = expandedId === s.id
+              const date = new Date(s.created_at)
+              const dateStr = date.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })
+              const timeStr = date.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })
+              return (
+                <div key={s.id} style={{ borderRadius: 12, border: '0.5px solid rgba(0,0,0,0.07)', overflow: 'hidden', background: '#fff' }}>
+                  {/* Row header */}
+                  <button onClick={() => setExpandedId(isOpen ? null : s.id)} style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    padding: '12px 14px', background: 'none', border: 'none',
+                    cursor: 'pointer', fontFamily: 'inherit', gap: 10,
+                  }}>
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: '#1d1d1f' }}>
+                        {fmtDisplay(s.focus_secs)}
+                        <span style={{ fontSize: 11, fontWeight: 400, color: 'rgba(29,29,31,0.4)', marginLeft: 6 }}>
+                          {s.presence_pct}% of {s.target_mins}m
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginTop: 2 }}>
+                        {dateStr} · {timeStr}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#FF6B9D', fontWeight: 500 }}>{s.vibe}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.3)', marginLeft: 4 }}>{isOpen ? '▲' : '▼'}</div>
+                  </button>
+
+                  {/* Expanded */}
+                  {isOpen && (
+                    <div style={{ padding: '0 14px 14px', borderTop: '0.5px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, marginBottom: 12 }}>
+                        {[
+                          { label: 'Motion pauses', val: s.pause_count },
+                          { label: 'Sessions', val: s.sessions },
+                          { label: 'Target', val: `${s.target_mins}m` },
+                          { label: 'Reached', val: `${s.presence_pct}%` },
+                        ].map(({ label, val }) => (
+                          <div key={label} style={{ background: '#f5f5f7', borderRadius: 8, padding: '8px 12px' }}>
+                            <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.4)', marginBottom: 2 }}>{label}</div>
+                            <div style={{ fontSize: 18, fontWeight: 500, color: '#1d1d1f' }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {historyBgPhoto[s.id] && (
+                        <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginBottom: 8 }}>
+                          ✓ Background photo ready
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => { setActiveHistoryId(s.id); historyPhotoInputRef.current?.click() }}
+                          style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#f5f5f7', border: '0.5px solid rgba(0,0,0,0.06)', fontSize: 12, fontWeight: 500, color: 'rgba(29,29,31,0.7)', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          {historyBgPhoto[s.id] ? 'Change photo' : 'Upload photo'}
+                        </button>
+                        <button
+                          onClick={() => saveHistoryCard(s)}
+                          style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#1d1d1f', border: 'none', fontSize: 12, fontWeight: 500, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          Save card
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={historyPhotoInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleHistoryPhotoUpload}
+      />
 
     </div>
   )
