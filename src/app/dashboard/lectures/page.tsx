@@ -196,13 +196,15 @@ export default function LecturesList() {
       )}
 
       {/* TABLE */}
-      <div style={{
-        background: '#fff',
-        border: '0.5px solid rgba(0,0,0,0.06)',
-        borderRadius: 14,
-        overflow: 'hidden',
-      }}>
-        <div className="hidden md:grid" style={{
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<div style={{
+  background: '#fff',
+  border: '0.5px solid rgba(0,0,0,0.06)',
+  borderRadius: 14,
+  overflow: 'hidden',
+  minWidth: 520,
+}}>
+        <div style={{
           padding: '12px 16px',
           borderBottom: '0.5px solid rgba(0,0,0,0.05)',
           display: 'grid',
@@ -281,23 +283,16 @@ export default function LecturesList() {
           ))
         )}
       </div>
+      </div>{/* tutup scroll wrapper */}
 
       <style jsx>{`
-        @media (max-width: 768px) {
-          :global(.cc-session-row) {
-            grid-template-columns: 1fr auto !important;
-          }
-          :global(.cc-session-row) > *:nth-child(3),
-          :global(.cc-session-row) > *:nth-child(4),
-          :global(.cc-session-row) > *:nth-child(5) {
-            display: none;
-          }
+        :global(.cc-session-row:hover) {
+          background: rgba(0,0,0,0.018);
         }
       `}</style>
     </div>
   )
 }
-
 function FilterPill({ active, onClick, label, accentBg, accentColor }: {
   active: boolean; onClick: () => void; label: string;
   accentBg?: string; accentColor?: string;
