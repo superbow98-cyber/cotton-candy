@@ -32,11 +32,33 @@ function fmtTime(date: Date) {
   return date.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Inline SVG icons — no Icon.tsx dependency needed
+function IconExpand() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M2 2h4M2 2v4M14 2h-4M14 2v4M2 14h4M2 14v-4M14 14h-4M14 14v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+function IconCompress() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
 export default function StudyTimer() {
   const { lang } = useLang()
 
   // Mode
   const [mode, setMode] = useState<TimerMode>('camera')
+
+  // Fullscreen
+  const fsWrapRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const isIOS = useRef(false)
 
   // Camera
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -94,11 +116,58 @@ export default function StudyTimer() {
   const historyPhotoInputRef = useRef<HTMLInputElement>(null)
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null)
 
+  // ── Fullscreen logic ─────────────────────────────────
+  useEffect(() => {
+    isIOS.current = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  }, [])
+
+  const enterFullscreen = useCallback(() => {
+    const el = fsWrapRef.current
+    if (!el) return
+    if (isIOS.current) {
+      // iOS: CSS fullscreen fallback
+      setIsFullscreen(true)
+      return
+    }
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {
+        // fallback to CSS if API fails
+        setIsFullscreen(true)
+      })
+    } else {
+      setIsFullscreen(true)
+    }
+  }, [])
+
+  const exitFullscreen = useCallback(() => {
+    if (!isIOS.current && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+    }
+    setIsFullscreen(false)
+  }, [])
+
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setIsFullscreen(false)
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+
+  // Lock screen orientation to portrait when fullscreen on mobile
+  useEffect(() => {
+    if (isFullscreen && (screen.orientation as any)?.lock) {
+      (screen.orientation as any).lock('portrait').catch(() => {})
+    }
+    if (!isFullscreen && (screen.orientation as any)?.unlock) {
+      (screen.orientation as any).unlock()
+    }
+  }, [isFullscreen])
+
   // ── mode switch — reset if timer running ────────────────
   const handleModeSwitch = useCallback((newMode: TimerMode) => {
     if (newMode === mode) return
     if (timerState !== 'idle') {
-      // Auto-reset
       if (timerRef.current) clearInterval(timerRef.current)
       if (motionIntervalRef.current) clearInterval(motionIntervalRef.current)
       if (awayCountIntervalRef.current) clearInterval(awayCountIntervalRef.current)
@@ -320,7 +389,6 @@ export default function StudyTimer() {
       : pct >= 20 ? 'just warming up huh'
       : 'bro just opened the app'
 
-    // Stats — camera mode includes ghost/sessions, timer-only just sessions + target
     const stats = mode === 'camera'
       ? [
           { label: 'Motion pauses', val: String(pauseCountRef.current) },
@@ -390,6 +458,8 @@ export default function StudyTimer() {
     stopTick()
     if (mode === 'camera') stopMotionWatch()
     isAwayRef.current = false
+    // Exit fullscreen when session ends
+    if (isFullscreen) exitFullscreen()
     localStorage.setItem('cc_last_session', JSON.stringify({
       focusSecs: focusSecsRef.current,
       sessions,
@@ -420,7 +490,7 @@ export default function StudyTimer() {
     }).then(r => r.json()).then(({ session }) => {
       if (session) setHistory(h => [session, ...h])
     })
-  }, [stopTick, stopMotionWatch, drawAchievementCard, sessions, targetMins, mode])
+  }, [stopTick, stopMotionWatch, drawAchievementCard, sessions, targetMins, mode, isFullscreen, exitFullscreen])
 
   const handleReset = useCallback(() => {
     setTimerState('idle')
@@ -609,7 +679,6 @@ export default function StudyTimer() {
   const targetSecs = targetMins * 60
   const progress = Math.min(1, focusSecs / targetSecs)
 
-  // Expected finish time
   const remainingSecs = Math.max(0, targetSecs - focusSecs)
   const expectedFinish = new Date(Date.now() + remainingSecs * 1000)
 
@@ -634,7 +703,37 @@ export default function StudyTimer() {
     newSession: bm ? 'Sesi baru' : 'New session',
     expectedFinish: bm ? 'Jangka tamat' : 'Expected finish',
     timeAchieved: bm ? 'Masa fokus' : 'Time achieved',
+    fullscreen: bm ? 'Skrin penuh' : 'Fullscreen',
+    exitFullscreen: bm ? 'Keluar skrin penuh' : 'Exit fullscreen',
   }
+
+  // Fullscreen button — shared between modes
+  const FsBtn = () => (
+    <button
+      onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+      title={isFullscreen ? t.exitFullscreen : t.fullscreen}
+      style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 10,
+        width: 32, height: 32,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(255,255,255,0.10)',
+        border: '0.5px solid rgba(255,255,255,0.15)',
+        borderRadius: 8, cursor: 'pointer', color: 'rgba(255,255,255,0.6)',
+        backdropFilter: 'blur(8px)',
+        transition: 'background 0.15s, color 0.15s',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.18)'
+        ;(e.currentTarget as HTMLButtonElement).style.color = '#fff'
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.10)'
+        ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.6)'
+      }}
+    >
+      {isFullscreen ? <IconCompress /> : <IconExpand />}
+    </button>
+  )
 
   const S = {
     page: { maxWidth: 480, margin: '0 auto', padding: '0 0 60px' } as React.CSSProperties,
@@ -671,399 +770,458 @@ export default function StudyTimer() {
     },
   }
 
+  // Fullscreen wrapper styles — CSS fallback for iOS
+  const fsWrapStyle: React.CSSProperties = isFullscreen
+    ? {
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: '#0A0A10',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'stretch', justifyContent: 'center',
+        padding: '24px 20px',
+        overflowY: 'auto',
+      }
+    : {}
+
   return (
     <div style={S.page}>
 
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#1d1d1f' }}>
-          {t.title}
-        </h1>
-      </div>
+      {/* Header — hidden during fullscreen */}
+      {!isFullscreen && (
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#1d1d1f' }}>
+            {t.title}
+          </h1>
+        </div>
+      )}
 
-      {/* ── 2-Pill Mode Toggle ── */}
-      {!isStopped && (
-        <div style={{
-          display: 'flex', gap: 4, marginBottom: 20,
-          background: '#f0f0f2', borderRadius: 12, padding: 4,
-        }}>
-          {(['timer-only', 'camera'] as TimerMode[]).map(m => {
-            const active = mode === m
-            const label = m === 'timer-only'
-              ? (bm ? 'Timer Sahaja' : 'Timer Only')
-              : (bm ? 'Kamera' : 'Camera')
-            return (
-              <button
-                key={m}
-                onClick={() => handleModeSwitch(m)}
+      {/* ── Fullscreen outer wrapper ── */}
+      <div ref={fsWrapRef} style={fsWrapStyle}>
+
+        {/* ── 2-Pill Mode Toggle ── */}
+        {!isStopped && (
+          <div style={{
+            display: 'flex', gap: 4, marginBottom: 20,
+            background: isFullscreen ? 'rgba(255,255,255,0.06)' : '#f0f0f2',
+            borderRadius: 12, padding: 4,
+          }}>
+            {(['timer-only', 'camera'] as TimerMode[]).map(m => {
+              const active = mode === m
+              const label = m === 'timer-only'
+                ? (bm ? 'Timer Sahaja' : 'Timer Only')
+                : (bm ? 'Kamera' : 'Camera')
+              return (
+                <button
+                  key={m}
+                  onClick={() => handleModeSwitch(m)}
+                  style={{
+                    flex: 1, padding: '9px 12px',
+                    borderRadius: 9, border: 'none', cursor: 'pointer',
+                    fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
+                    background: active
+                      ? 'linear-gradient(135deg, #FF6B9D, #C471F5)'
+                      : 'transparent',
+                    color: active ? '#fff' : isFullscreen ? 'rgba(255,255,255,0.35)' : 'rgba(29,29,31,0.5)',
+                    transition: 'all 0.2s',
+                    boxShadow: active ? '0 1px 6px rgba(196,113,245,0.3)' : 'none',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Target picker */}
+        {!isStopped && (
+          <div style={S.targetRow}>
+            <span style={{ fontSize: 12, color: isFullscreen ? 'rgba(255,255,255,0.3)' : 'rgba(29,29,31,0.45)' }}>{t.target}:</span>
+            {TARGET_OPTIONS.map(m => (
+              <button key={m} onClick={() => setTargetMins(m)} style={{
+                padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
+                background: targetMins === m
+                  ? (isFullscreen ? '#fff' : '#1d1d1f')
+                  : (isFullscreen ? 'rgba(255,255,255,0.08)' : '#f0f0f2'),
+                color: targetMins === m
+                  ? (isFullscreen ? '#1d1d1f' : '#fff')
+                  : (isFullscreen ? 'rgba(255,255,255,0.5)' : 'rgba(29,29,31,0.6)'),
+                transition: 'background 0.15s',
+              }}>
+                {m}m
+              </button>
+            ))}
+            <form onSubmit={e => {
+              e.preventDefault()
+              const v = parseInt(customTarget)
+              if (v > 0 && v <= 480) { setTargetMins(v); setCustomTarget('') }
+            }} style={{ display: 'flex', gap: 4 }}>
+              <input
+                type="number" min={1} max={480} placeholder="Custom"
+                value={customTarget}
+                onChange={e => setCustomTarget(e.target.value)}
                 style={{
-                  flex: 1, padding: '9px 12px',
-                  borderRadius: 9, border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-                  background: active
-                    ? 'linear-gradient(135deg, #FF6B9D, #C471F5)'
-                    : 'transparent',
-                  color: active ? '#fff' : 'rgba(29,29,31,0.5)',
-                  transition: 'all 0.2s',
-                  boxShadow: active ? '0 1px 6px rgba(196,113,245,0.3)' : 'none',
+                  width: 72, padding: '5px 10px', borderRadius: 999,
+                  border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12,
+                  fontFamily: 'inherit',
+                  background: isFullscreen ? 'rgba(255,255,255,0.08)' : '#f0f0f2',
+                  color: isFullscreen ? '#fff' : '#1d1d1f',
+                }}
+              />
+            </form>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════
+            TIMER ONLY MODE
+        ════════════════════════════════════════ */}
+        {mode === 'timer-only' && !isStopped && (
+          <div style={{ marginBottom: 20 }}>
+            {/* Timer hero card */}
+            <div style={{
+              background: '#0A0A10',
+              borderRadius: isFullscreen ? 0 : 24,
+              padding: isFullscreen ? '20px 28px 28px' : '36px 28px 28px',
+              border: isFullscreen ? 'none' : '0.5px solid rgba(255,255,255,0.06)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              position: 'relative',
+            }}>
+              {/* Fullscreen button */}
+              <FsBtn />
+
+              {/* CC Branding */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isFullscreen ? 12 : 20 }}>
+                <img src="/cc-logo.png" alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain' }} />
+                <span style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+                  color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase',
+                }}>
+                  Cotton Candy
+                </span>
+              </div>
+
+              {/* Big timer */}
+              <div style={{
+                fontSize: isFullscreen ? 100 : 80,
+                fontWeight: 600,
+                letterSpacing: '-4px',
+                fontVariantNumeric: 'tabular-nums',
+                color: timerState === 'idle' ? 'rgba(255,255,255,0.3)' : '#ffffff',
+                lineHeight: 1,
+                marginBottom: isFullscreen ? 32 : 24,
+                fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                transition: 'color 0.3s, font-size 0.3s',
+              }}>
+                {fmt(focusSecs)}
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ width: '100%', marginBottom: 20 }}>
+                <div style={{ height: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${progress * 100}%`,
+                    background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
+                    borderRadius: 2,
+                    transition: 'width 0.5s',
+                  }} />
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {Math.round(progress * 100)}% of {targetMins}m
+                </div>
+              </div>
+
+              {/* Stats row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%' }}>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 6 }}>
+                    {t.expectedFinish}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: 'rgba(255,255,255,0.8)', fontVariantNumeric: 'tabular-nums' }}>
+                    {timerState === 'running' || timerState === 'paused-away' || timerState === 'paused-ghost'
+                      ? fmtTime(expectedFinish)
+                      : '—'}
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 6 }}>
+                    {t.timeAchieved}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: '#FF6B9D', fontVariantNumeric: 'tabular-nums' }}>
+                    {focusSecs > 0 ? fmtDisplay(focusSecs) : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ ...S.btnRow, marginTop: 12 }}>
+              <button
+                onClick={isRunning ? handleStop : handleStart}
+                style={{
+                  flex: 1, padding: '13px', borderRadius: 10,
+                  background: isRunning
+                    ? '#ef4444'
+                    : 'linear-gradient(135deg, #FF6B9D, #C471F5)',
+                  color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 500,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit', transition: 'opacity 0.2s',
                 }}
               >
-                {label}
+                {isRunning ? t.stop : t.start}
               </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Target picker */}
-      {!isStopped && (
-        <div style={S.targetRow}>
-          <span style={{ fontSize: 12, color: 'rgba(29,29,31,0.45)' }}>{t.target}:</span>
-          {TARGET_OPTIONS.map(m => (
-            <button key={m} onClick={() => setTargetMins(m)} style={{
-              padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-              fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
-              background: targetMins === m ? '#1d1d1f' : '#f0f0f2',
-              color: targetMins === m ? '#fff' : 'rgba(29,29,31,0.6)',
-              transition: 'background 0.15s',
-            }}>
-              {m}m
-            </button>
-          ))}
-          <form onSubmit={e => {
-            e.preventDefault()
-            const v = parseInt(customTarget)
-            if (v > 0 && v <= 480) { setTargetMins(v); setCustomTarget('') }
-          }} style={{ display: 'flex', gap: 4 }}>
-            <input
-              type="number" min={1} max={480} placeholder="Custom"
-              value={customTarget}
-              onChange={e => setCustomTarget(e.target.value)}
-              style={{
-                width: 72, padding: '5px 10px', borderRadius: 999,
-                border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12,
-                fontFamily: 'inherit', background: '#f0f0f2', color: '#1d1d1f',
-              }}
-            />
-          </form>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════
-          TIMER ONLY MODE
-      ════════════════════════════════════════ */}
-      {mode === 'timer-only' && !isStopped && (
-        <div style={{ marginBottom: 20 }}>
-          {/* Timer hero card */}
-          <div style={{
-            background: '#0A0A10',
-            borderRadius: 24,
-            padding: '36px 28px 28px',
-            border: '0.5px solid rgba(255,255,255,0.06)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            gap: 0,
-          }}>
-            {/* CC Branding */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-              <img src="/cc-logo.png" alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain' }} />
-              <span style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
-                color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase',
-              }}>
-                Cotton Candy
-              </span>
-            </div>
-
-            {/* Big timer */}
-            <div style={{
-              fontSize: 80, fontWeight: 600,
-              letterSpacing: '-4px',
-              fontVariantNumeric: 'tabular-nums',
-              color: timerState === 'idle' ? 'rgba(255,255,255,0.3)' : '#ffffff',
-              lineHeight: 1,
-              marginBottom: 24,
-              fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-              transition: 'color 0.3s',
-            }}>
-              {fmt(focusSecs)}
-            </div>
-
-            {/* Progress ring — thin line */}
-            <div style={{ width: '100%', marginBottom: 20 }}>
-              <div style={{ height: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${progress * 100}%`,
-                  background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
-                  borderRadius: 2,
-                  transition: 'width 0.5s',
-                }} />
-              </div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.round(progress * 100)}% of {targetMins}m
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%' }}>
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '12px 14px' }}>
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 6 }}>
-                  {t.expectedFinish}
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 500, color: 'rgba(255,255,255,0.8)', fontVariantNumeric: 'tabular-nums' }}>
-                  {timerState === 'running' || timerState === 'paused-away' || timerState === 'paused-ghost'
-                    ? fmtTime(expectedFinish)
-                    : '—'}
-                </div>
-              </div>
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '12px 14px' }}>
-                <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 6 }}>
-                  {t.timeAchieved}
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 500, color: '#FF6B9D', fontVariantNumeric: 'tabular-nums' }}>
-                  {focusSecs > 0 ? fmtDisplay(focusSecs) : '—'}
-                </div>
-              </div>
+              {(isRunning || focusSecs > 0) && (
+                <button onClick={handleReset} style={{
+                  padding: '13px 18px', borderRadius: 10,
+                  background: isFullscreen ? 'rgba(255,255,255,0.08)' : '#fff',
+                  border: isFullscreen ? '0.5px solid rgba(255,255,255,0.12)' : '0.5px solid rgba(0,0,0,0.08)',
+                  fontSize: 14, cursor: 'pointer',
+                  color: isFullscreen ? 'rgba(255,255,255,0.6)' : 'rgba(29,29,31,0.6)',
+                  fontFamily: 'inherit',
+                }}>
+                  {t.reset}
+                </button>
+              )}
             </div>
           </div>
+        )}
 
-          {/* Buttons */}
-          <div style={{ ...S.btnRow, marginTop: 12 }}>
-            <button
-              onClick={isRunning ? handleStop : handleStart}
-              style={{
-                flex: 1, padding: '13px', borderRadius: 10,
-                background: isRunning
-                  ? '#ef4444'
-                  : 'linear-gradient(135deg, #FF6B9D, #C471F5)',
-                color: '#fff', border: 'none',
-                fontSize: 14, fontWeight: 500,
-                cursor: 'pointer',
-                fontFamily: 'inherit', transition: 'opacity 0.2s',
-              }}
-            >
-              {isRunning ? t.stop : t.start}
-            </button>
-            {(isRunning || focusSecs > 0) && (
-              <button onClick={handleReset} style={{
-                padding: '13px 18px', borderRadius: 10,
-                background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)',
-                fontSize: 14, cursor: 'pointer',
-                color: 'rgba(29,29,31,0.6)', fontFamily: 'inherit',
+        {/* ════════════════════════════════════════
+            CAMERA MODE
+        ════════════════════════════════════════ */}
+        {mode === 'camera' && !isStopped && (
+          <div style={{ marginBottom: 20 }}>
+            {/* Ring wrapping video */}
+            <div style={{ position: 'relative', width: '100%', paddingBottom: '75%' }}>
+              <svg
+                viewBox="0 0 100 75"
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  zIndex: 2, pointerEvents: 'none',
+                }}
+              >
+                <circle cx="50" cy="37.5" r="34" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.2" />
+                <circle
+                  cx="50" cy="37.5" r="34"
+                  fill="none"
+                  stroke={isPausedAway ? '#ef4444' : isGhost ? '#6366f1' : '#1d1d1f'}
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 34 * progress} ${2 * Math.PI * 34}`}
+                  transform="rotate(-90 50 37.5)"
+                  style={{ transition: 'stroke-dasharray 0.5s, stroke 0.3s' }}
+                />
+              </svg>
+
+              <div style={{
+                position: 'absolute',
+                top: '5%', left: '5%', right: '5%', bottom: '5%',
+                borderRadius: 12, overflow: 'hidden', background: '#111',
+                border: '0.5px solid rgba(0,0,0,0.08)',
+                zIndex: 1,
               }}>
-                {t.reset}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════
-          CAMERA MODE
-      ════════════════════════════════════════ */}
-      {mode === 'camera' && !isStopped && (
-        <div style={{ marginBottom: 20 }}>
-          {/* Ring wrapping video */}
-          <div style={{ position: 'relative', width: '100%', paddingBottom: '75%' }}>
-            <svg
-              viewBox="0 0 100 75"
-              style={{
-                position: 'absolute', inset: 0,
-                width: '100%', height: '100%',
-                zIndex: 2, pointerEvents: 'none',
-              }}
-            >
-              <circle cx="50" cy="37.5" r="34" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.2" />
-              <circle
-                cx="50" cy="37.5" r="34"
-                fill="none"
-                stroke={isPausedAway ? '#ef4444' : isGhost ? '#6366f1' : '#1d1d1f'}
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 34 * progress} ${2 * Math.PI * 34}`}
-                transform="rotate(-90 50 37.5)"
-                style={{ transition: 'stroke-dasharray 0.5s, stroke 0.3s' }}
-              />
-            </svg>
-
-            <div style={{
-              position: 'absolute',
-              top: '5%', left: '5%', right: '5%', bottom: '5%',
-              borderRadius: 12, overflow: 'hidden', background: '#111',
-              border: '0.5px solid rgba(0,0,0,0.08)',
-              zIndex: 1,
-            }}>
-              {!camReady && (
-                <div style={S.camPromptWrap}>
-                  <Icon.Camera size={32} style={{ color: 'rgba(255,255,255,0.35)' }} />
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.4, margin: 0 }}>
-                    {camError ? t.camErr : t.camPrompt}
-                  </p>
-                  {!camError && (
-                    <button onClick={startCamera} style={{
-                      marginTop: 4, padding: '8px 20px', borderRadius: 8,
-                      background: '#fff', color: '#111', border: 'none',
-                      fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-                    }}>
-                      {t.grantBtn}
-                    </button>
-                  )}
-                </div>
-              )}
-              <video ref={videoRef} autoPlay playsInline muted style={{
-                width: '100%', height: '100%', objectFit: 'cover',
-                transform: 'scaleX(-1)', display: camReady ? 'block' : 'none',
-              }} />
-              <canvas ref={canvasRef} width={W} height={H} style={{ display: 'none' }} />
-
-              {camReady && (
-                <div style={S.statusPill}>
-                  <div style={{
-                    width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                    background: isPausedAway ? '#ef4444' : awayCountdown !== null ? '#f59e0b' : '#22c55e',
-                  }} />
-                  <span style={{ fontSize: 11, color: '#fff', whiteSpace: 'nowrap' }}>
-                    {isPausedAway ? t.paused : t.focused}
-                  </span>
-                </div>
-              )}
-
-              {camReady && (
-                <div style={{
-                  position: 'absolute', bottom: 10, left: 12, right: 12,
-                  height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden',
-                }}>
-                  <div style={{
-                    height: '100%', width: `${motionPct}%`,
-                    background: motionPct > 60 ? '#ef4444' : '#22c55e',
-                    borderRadius: 2, transition: 'width 0.1s',
-                  }} />
-                </div>
-              )}
-
-              {awayCountdown !== null && !isPausedAway && (
-                <div style={{
-                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)',
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}>
-                  <p style={{ color: '#fff', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.awayMsg}</p>
-                  <div style={{ fontSize: 44, fontWeight: 500, color: '#f59e0b', lineHeight: 1 }}>{awayCountdown}</div>
-                </div>
-              )}
-
-              {isPausedAway && (
-                <div style={{
-                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <div style={{
-                    background: 'rgba(239,68,68,0.15)', border: '0.5px solid rgba(239,68,68,0.35)',
-                    borderRadius: 12, padding: '10px 20px',
-                  }}>
-                    <p style={{ color: '#fca5a5', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.labelPaused}</p>
-                  </div>
-                </div>
-              )}
-
-              {isGhost && (
-                <div style={{
-                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <div style={{
-                    background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.35)',
-                    borderRadius: 12, padding: '10px 20px', textAlign: 'center' as const,
-                  }}>
-                    <p style={{ color: 'rgba(199,210,254,0.9)', fontSize: 13, fontWeight: 500, margin: 0 }}>
-                      {bm ? 'Tiada orang dikesan' : 'No one detected'}
+                {!camReady && (
+                  <div style={S.camPromptWrap}>
+                    <Icon.Camera size={32} style={{ color: 'rgba(255,255,255,0.35)' }} />
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.4, margin: 0 }}>
+                      {camError ? t.camErr : t.camPrompt}
                     </p>
+                    {!camError && (
+                      <button onClick={startCamera} style={{
+                        marginTop: 4, padding: '8px 20px', borderRadius: 8,
+                        background: '#fff', color: '#111', border: 'none',
+                        fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                      }}>
+                        {t.grantBtn}
+                      </button>
+                    )}
                   </div>
+                )}
+                <video ref={videoRef} autoPlay playsInline muted style={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  transform: 'scaleX(-1)', display: camReady ? 'block' : 'none',
+                }} />
+                <canvas ref={canvasRef} width={W} height={H} style={{ display: 'none' }} />
+
+                {camReady && (
+                  <div style={S.statusPill}>
+                    <div style={{
+                      width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                      background: isPausedAway ? '#ef4444' : awayCountdown !== null ? '#f59e0b' : '#22c55e',
+                    }} />
+                    <span style={{ fontSize: 11, color: '#fff', whiteSpace: 'nowrap' }}>
+                      {isPausedAway ? t.paused : t.focused}
+                    </span>
+                  </div>
+                )}
+
+                {/* Fullscreen button — sits inside video box, top-right */}
+                <button
+                  onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+                  title={isFullscreen ? t.exitFullscreen : t.fullscreen}
+                  style={{
+                    position: 'absolute', top: 10, right: 10, zIndex: 5,
+                    width: 30, height: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.45)',
+                    border: '0.5px solid rgba(255,255,255,0.15)',
+                    borderRadius: 7, cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+                    backdropFilter: 'blur(6px)',
+                  }}
+                >
+                  {isFullscreen ? <IconCompress /> : <IconExpand />}
+                </button>
+
+                {camReady && (
+                  <div style={{
+                    position: 'absolute', bottom: 10, left: 12, right: 12,
+                    height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${motionPct}%`,
+                      background: motionPct > 60 ? '#ef4444' : '#22c55e',
+                      borderRadius: 2, transition: 'width 0.1s',
+                    }} />
+                  </div>
+                )}
+
+                {awayCountdown !== null && !isPausedAway && (
+                  <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                    <p style={{ color: '#fff', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.awayMsg}</p>
+                    <div style={{ fontSize: 44, fontWeight: 500, color: '#f59e0b', lineHeight: 1 }}>{awayCountdown}</div>
+                  </div>
+                )}
+
+                {isPausedAway && (
+                  <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <div style={{
+                      background: 'rgba(239,68,68,0.15)', border: '0.5px solid rgba(239,68,68,0.35)',
+                      borderRadius: 12, padding: '10px 20px',
+                    }}>
+                      <p style={{ color: '#fca5a5', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.labelPaused}</p>
+                    </div>
+                  </div>
+                )}
+
+                {isGhost && (
+                  <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <div style={{
+                      background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.35)',
+                      borderRadius: 12, padding: '10px 20px', textAlign: 'center' as const,
+                    }}>
+                      <p style={{ color: 'rgba(199,210,254,0.9)', fontSize: 13, fontWeight: 500, margin: 0 }}>
+                        {bm ? 'Tiada orang dikesan' : 'No one detected'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Timer + Logo bawah video */}
+            <div style={{
+              background: isFullscreen ? 'rgba(255,255,255,0.04)' : '#fff',
+              borderRadius: 16, padding: '20px 24px 16px',
+              marginTop: 12,
+              border: isFullscreen ? '0.5px solid rgba(255,255,255,0.07)' : '0.5px solid rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <img src="/cc-logo.png" alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
+                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: isFullscreen ? 'rgba(255,255,255,0.3)' : 'rgba(29,29,31,0.4)', textTransform: 'uppercase' as const }}>
+                  Cotton Candy
+                </span>
+              </div>
+              <div style={{
+                fontSize: isFullscreen ? 72 : 56,
+                fontWeight: 600, letterSpacing: '-3px',
+                fontVariantNumeric: 'tabular-nums',
+                color: isFullscreen ? '#fff' : '#1d1d1f',
+                lineHeight: 1, marginBottom: 12,
+                transition: 'font-size 0.3s',
+              }}>
+                {fmt(focusSecs)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: 4, background: isFullscreen ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', width: `${progress * 100}%`,
+                    background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
+                    borderRadius: 2, transition: 'width 0.5s',
+                  }} />
                 </div>
+                <span style={{ fontSize: 12, color: isFullscreen ? 'rgba(255,255,255,0.3)' : 'rgba(29,29,31,0.4)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  {Math.round(progress * 100)}% {t.of} {targetMins}m
+                </span>
+              </div>
+            </div>
+
+            {/* Stats — Ghost + Grade */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+              {[
+                { label: 'Ghost', val: ghostCount },
+                { label: 'Grade', val: focusSecs === 0 ? '—' : progress < 0.2 ? '...' : (() => {
+                  const score = Math.max(0, Math.min(100, progress * 100) - (ghostCountRef.current * 5) - (pauseCountRef.current * 2))
+                  return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : score >= 50 ? 'E' : score >= 30 ? 'F' : 'G'
+                })() },
+              ].map(({ label, val }) => (
+                <div key={label} style={{
+                  background: isFullscreen ? 'rgba(255,255,255,0.05)' : '#f5f5f7',
+                  borderRadius: 10, padding: '10px 14px',
+                }}>
+                  <div style={{ fontSize: 11, color: isFullscreen ? 'rgba(255,255,255,0.35)' : 'rgba(29,29,31,0.45)', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 500, color: isFullscreen ? '#fff' : '#1d1d1f', fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Camera control buttons */}
+            <div style={{ ...S.btnRow, marginTop: 10 }}>
+              <button
+                disabled={!camReady}
+                onClick={isRunning ? handleStop : handleStart}
+                style={{
+                  flex: 1, padding: '13px', borderRadius: 10,
+                  background: isRunning ? '#ef4444' : '#1d1d1f',
+                  color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 500,
+                  cursor: camReady ? 'pointer' : 'not-allowed',
+                  opacity: camReady ? 1 : 0.4,
+                  fontFamily: 'inherit', transition: 'background 0.2s',
+                }}
+              >
+                {isRunning ? t.stop : t.start}
+              </button>
+              {(isRunning || focusSecs > 0) && (
+                <button onClick={handleReset} style={{
+                  padding: '13px 18px', borderRadius: 10,
+                  background: isFullscreen ? 'rgba(255,255,255,0.08)' : '#fff',
+                  border: isFullscreen ? '0.5px solid rgba(255,255,255,0.12)' : '0.5px solid rgba(0,0,0,0.08)',
+                  fontSize: 14, cursor: 'pointer',
+                  color: isFullscreen ? 'rgba(255,255,255,0.6)' : 'rgba(29,29,31,0.6)',
+                  fontFamily: 'inherit',
+                }}>
+                  {t.reset}
+                </button>
               )}
             </div>
           </div>
+        )}
 
-          {/* Timer + Logo bawah video */}
-          <div style={{
-            background: '#fff', borderRadius: 16, padding: '20px 24px 16px',
-            marginTop: 12, border: '0.5px solid rgba(0,0,0,0.06)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <img src="/cc-logo.png" alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: 'rgba(29,29,31,0.4)', textTransform: 'uppercase' as const }}>
-                Cotton Candy
-              </span>
-            </div>
-            <div style={{
-              fontSize: 56, fontWeight: 600, letterSpacing: '-3px',
-              fontVariantNumeric: 'tabular-nums', color: '#1d1d1f', lineHeight: 1,
-              marginBottom: 12,
-            }}>
-              {fmt(focusSecs)}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,0.07)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', width: `${progress * 100}%`,
-                  background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
-                  borderRadius: 2, transition: 'width 0.5s',
-                }} />
-              </div>
-              <span style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {Math.round(progress * 100)}% {t.of} {targetMins}m
-              </span>
-            </div>
-          </div>
+      </div>{/* end fsWrap */}
 
-          {/* Stats — Ghost + Grade */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-            {[
-              { label: 'Ghost', val: ghostCount },
-              { label: 'Grade', val: focusSecs === 0 ? '—' : progress < 0.2 ? '...' : (() => {
-                const score = Math.max(0, Math.min(100, progress * 100) - (ghostCountRef.current * 5) - (pauseCountRef.current * 2))
-                return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : score >= 50 ? 'E' : score >= 30 ? 'F' : 'G'
-              })() },
-            ].map(({ label, val }) => (
-              <div key={label} style={S.statCard}>
-                <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 24, fontWeight: 500, color: '#1d1d1f', fontVariantNumeric: 'tabular-nums' }}>{val}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Camera control buttons */}
-          <div style={{ ...S.btnRow, marginTop: 10 }}>
-            <button
-              disabled={!camReady}
-              onClick={isRunning ? handleStop : handleStart}
-              style={{
-                flex: 1, padding: '13px', borderRadius: 10,
-                background: isRunning ? '#ef4444' : '#1d1d1f',
-                color: '#fff', border: 'none',
-                fontSize: 14, fontWeight: 500,
-                cursor: camReady ? 'pointer' : 'not-allowed',
-                opacity: camReady ? 1 : 0.4,
-                fontFamily: 'inherit', transition: 'background 0.2s',
-              }}
-            >
-              {isRunning ? t.stop : t.start}
-            </button>
-            {(isRunning || focusSecs > 0) && (
-              <button onClick={handleReset} style={{
-                padding: '13px 18px', borderRadius: 10,
-                background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)',
-                fontSize: 14, cursor: 'pointer',
-                color: 'rgba(29,29,31,0.6)', fontFamily: 'inherit',
-              }}>
-                {t.reset}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Achievement card ── */}
+      {/* ── Achievement card — never fullscreened ── */}
       {isStopped && (
         <>
           <div style={{ marginBottom: 20 }}>
