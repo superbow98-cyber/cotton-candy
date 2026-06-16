@@ -867,10 +867,10 @@ export default function StudyTimer() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           {[
             { label: 'Ghost', val: ghostCount },
-{ label: 'Grade', val: (() => {
-  const score = Math.max(0, Math.min(100, progress * 100) - (ghostCountRef.current * 5) - (pauseCountRef.current * 2))
-  return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : score >= 50 ? 'E' : score >= 30 ? 'F' : 'G'
-})() },
+            { label: 'Grade', val: focusSecs === 0 ? '—' : progress < 0.2 ? '...' : (() => {
+              const score = Math.max(0, Math.min(100, progress * 100) - (ghostCountRef.current * 5) - (pauseCountRef.current * 2))
+              return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : score >= 50 ? 'E' : score >= 30 ? 'F' : 'G'
+            })() },
           ].map(({ label, val }) => (
             <div key={label} style={S.statCard}>
               <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginBottom: 4 }}>{label}</div>
