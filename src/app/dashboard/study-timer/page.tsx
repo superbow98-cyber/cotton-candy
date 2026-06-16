@@ -161,10 +161,10 @@ export default function StudyTimer() {
       const high = score > MOTION_THRESHOLD
       const zero = score === 0
 
-      // Ghost — 3s kosong (8 × 400ms)
+      // Ghost — 10s kosong (25 × 400ms)
       if (zero && !isAwayRef.current) {
         zeroStreakRef.current += 1
-        if (zeroStreakRef.current >= 8) {
+        if (zeroStreakRef.current >= 25) {
           zeroStreakRef.current = 0
           cancelAwayCountdown()
           isAwayRef.current = true
@@ -230,7 +230,6 @@ export default function StudyTimer() {
     } else {
       ctx.fillStyle = '#0a0a0a'
       ctx.fillRect(0, 0, CW, CH)
-      // Subtle pink tint top
       const grad = ctx.createLinearGradient(0, 0, 0, CH * 0.4)
       grad.addColorStop(0, 'rgba(255,107,157,0.08)')
       grad.addColorStop(1, 'rgba(0,0,0,0)')
@@ -241,7 +240,7 @@ export default function StudyTimer() {
     const pad = 90
     ctx.textBaseline = 'top'
 
-    // CC logo — real logo dari public/cc-logo.png
+    // CC logo
     const logoSize = 88
     await new Promise<void>(resolve => {
       const logoImg = new Image()
@@ -249,7 +248,7 @@ export default function StudyTimer() {
         ctx.drawImage(logoImg, pad, 100, logoSize, logoSize)
         resolve()
       }
-      logoImg.onerror = () => resolve() // fallback — skip logo kalau gagal load
+      logoImg.onerror = () => resolve()
       logoImg.src = '/cc-logo.png'
     })
 
@@ -287,7 +286,7 @@ export default function StudyTimer() {
     ctx.lineWidth = 1.5
     ctx.beginPath(); ctx.moveTo(pad, 790); ctx.lineTo(CW - pad, 790); ctx.stroke()
 
-    // 4 mini stats grid
+    // Stats grid
     const pct = Math.min(100, Math.round((focusSecsRef.current / targetSecs) * 100))
     const vibe = pct >= 100 ? 'in the zone, completely.'
       : pct >= 80 ? 'nearly flawless'
@@ -309,12 +308,12 @@ export default function StudyTimer() {
       ctx.font = `400 30px -apple-system, sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.38)'
       ctx.fillText(s.label, x, y)
-      // Vibe check guna font kecil sikit sebab text panjang
       const isVibe = s.label === 'Vibe check'
       ctx.font = `500 ${isVibe ? 42 : 68}px -apple-system, sans-serif`
       ctx.fillStyle = '#ffffff'
       ctx.fillText(s.val, x, y + (isVibe ? 50 : 40))
     })
+
     // Bottom divider
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'
     ctx.lineWidth = 1
@@ -332,13 +331,11 @@ export default function StudyTimer() {
     ctx.fillText('#cottoncandystudy', CW - pad, CH - 170)
     ctx.textAlign = 'left'
 
-    // CC logo bottom right — REMOVED
-
     setCardDrawn(true)
     setCardLoading(false)
-}, [bgPhoto, targetMins, sessions, lang])
+  }, [bgPhoto, targetMins, sessions, lang])
 
-  // Draw card after restore — delay bagi state settle
+  // Draw card after restore
   useEffect(() => {
     if (restoredSession) {
       setTimeout(() => drawAchievementCard(), 50)
@@ -364,7 +361,6 @@ export default function StudyTimer() {
     stopTick()
     stopMotionWatch()
     isAwayRef.current = false
-    // Save session to localStorage
     localStorage.setItem('cc_last_session', JSON.stringify({
       focusSecs: focusSecsRef.current,
       sessions,
@@ -373,15 +369,14 @@ export default function StudyTimer() {
       timestamp: Date.now(),
     }))
     setTimeout(() => drawAchievementCard(), 100)
-  // Save to Supabase
     const targetSecs = targetMins * 60
     const pct = Math.min(100, Math.round((focusSecsRef.current / targetSecs) * 100))
     const v = pct >= 100 ? 'in the zone, completely.'
-  : pct >= 80 ? 'nearly flawless'
-  : pct >= 60 ? 'solid effort today'
-  : pct >= 40 ? 'progress, not perfection'
-  : pct >= 20 ? 'getting started counts'
-  : 'showed up.'
+      : pct >= 80 ? 'nearly flawless'
+      : pct >= 60 ? 'solid effort today'
+      : pct >= 40 ? 'progress, not perfection'
+      : pct >= 20 ? 'getting started counts'
+      : 'showed up.'
     fetch('/api/study-sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -431,14 +426,14 @@ export default function StudyTimer() {
     return () => { document.head.removeChild(style) }
   }, [])
 
-  // Restore last session on mount (within 24 hours)
+  // Restore last session on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem('cc_last_session')
       if (!raw) return
       const saved = JSON.parse(raw)
       const age = Date.now() - saved.timestamp
-      if (age > 24 * 60 * 60 * 1000) return // expired
+      if (age > 24 * 60 * 60 * 1000) return
       focusSecsRef.current = saved.focusSecs
       setFocusSecs(saved.focusSecs)
       setSessions(saved.sessions)
@@ -566,26 +561,18 @@ export default function StudyTimer() {
     await drawAchievementCard()
     const c = achieveCanvasRef.current
     if (!c) return
-
-    // Mobile: guna Web Share API (iOS Safari, Android Chrome support)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     if (isMobile && navigator.share) {
       await new Promise<void>(resolve => {
         c.toBlob(async (blob) => {
           if (!blob) { resolve(); return }
           const file = new File([blob], 'cotton-candy-study.png', { type: 'image/png' })
-          try {
-            await navigator.share({ files: [file], title: 'Cotton Candy Study' })
-          } catch {
-            // User cancel — ignore
-          }
+          try { await navigator.share({ files: [file], title: 'Cotton Candy Study' }) } catch {}
           resolve()
         }, 'image/png')
       })
       return
     }
-
-    // Desktop: download biasa
     const link = document.createElement('a')
     link.download = 'cotton-candy-study.png'
     link.href = c.toDataURL('image/png')
@@ -598,7 +585,6 @@ export default function StudyTimer() {
   const isStopped = timerState === 'stopped'
   const targetSecs = targetMins * 60
   const progress = Math.min(1, focusSecs / targetSecs)
-  
 
   const bm = lang === 'bm'
   const t = {
@@ -624,17 +610,11 @@ export default function StudyTimer() {
     newSession: bm ? 'Sesi baru' : 'New session',
   }
 
-  // ── Inline styles ────────────────────────────────────────
   const S = {
     page: { maxWidth: 480, margin: '0 auto', padding: '0 0 60px' } as React.CSSProperties,
     header: { marginBottom: 24 } as React.CSSProperties,
     h1: { margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: '#1d1d1f' } as React.CSSProperties,
     sub: { fontSize: 12.5, color: 'rgba(29,29,31,0.5)', marginTop: 3 } as React.CSSProperties,
-    camBox: {
-      position: 'relative' as const, width: '100%', aspectRatio: '4/3',
-      borderRadius: 16, overflow: 'hidden', background: '#111',
-      border: '0.5px solid rgba(0,0,0,0.08)', marginBottom: 20,
-    },
     camPromptWrap: {
       position: 'absolute' as const, inset: 0,
       display: 'flex', flexDirection: 'column' as const,
@@ -645,23 +625,11 @@ export default function StudyTimer() {
       display: 'flex', alignItems: 'center', gap: 6,
       background: 'rgba(0,0,0,0.55)', padding: '5px 12px', borderRadius: 999,
     },
-    timerBlock: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', marginBottom: 24 },
-    ringWrap: { position: 'relative' as const, width: 140, height: 140, marginBottom: 10 },
-    ringTime: {
-      position: 'absolute' as const, inset: 0,
-      display: 'flex', flexDirection: 'column' as const,
-      alignItems: 'center', justifyContent: 'center',
-    },
-    statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 },
     statCard: { background: '#f5f5f7', borderRadius: 10, padding: '10px 14px' },
     btnRow: { display: 'flex', gap: 8, marginBottom: 8 },
     targetRow: {
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       marginBottom: 16, flexWrap: 'wrap' as const,
-    },
-    sectionLabel: {
-      fontSize: 10, fontWeight: 600, letterSpacing: '0.07em',
-      textTransform: 'uppercase' as const, color: 'rgba(29,29,31,0.4)', marginBottom: 10,
     },
     divider: { border: 'none', borderTop: '0.5px solid rgba(0,0,0,0.06)', margin: '28px 0' },
     achieveWrap: { display: 'flex', flexDirection: 'column' as const, gap: 10 },
@@ -704,7 +672,6 @@ export default function StudyTimer() {
               {m}m
             </button>
           ))}
-          {/* Custom */}
           <form onSubmit={e => {
             e.preventDefault()
             const v = parseInt(customTarget)
@@ -730,7 +697,7 @@ export default function StudyTimer() {
 
           {/* Ring wrapping video */}
           <div style={{ position: 'relative', width: '100%', paddingBottom: '75%' }}>
-            {/* SVG ring — absolute, fills container */}
+            {/* SVG ring */}
             <svg
               viewBox="0 0 100 75"
               style={{
@@ -739,11 +706,7 @@ export default function StudyTimer() {
                 zIndex: 2, pointerEvents: 'none',
               }}
             >
-              {/* Ring — centered in 4:3 viewBox, radius fits short side */}
-              <circle
-                cx="50" cy="37.5" r="34"
-                fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.2"
-              />
+              <circle cx="50" cy="37.5" r="34" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.2" />
               <circle
                 cx="50" cy="37.5" r="34"
                 fill="none"
@@ -756,7 +719,7 @@ export default function StudyTimer() {
               />
             </svg>
 
-            {/* Video — inset from ring edges */}
+            {/* Video inner div */}
             <div style={{
               position: 'absolute',
               top: '5%', left: '5%', right: '5%', bottom: '5%',
@@ -841,18 +804,17 @@ export default function StudyTimer() {
                 </div>
               )}
 
-              {/* Ghost overlay */}
+              {/* Ghost overlay — no emoji, text only */}
               {isGhost && (
                 <div style={{
                   position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <div style={{
-                    background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(99,102,241,0.15)', border: '0.5px solid rgba(99,102,241,0.35)',
                     borderRadius: 12, padding: '10px 20px', textAlign: 'center' as const,
                   }}>
-                    <div style={{ fontSize: 24, marginBottom: 4 }}>👻</div>
-                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, margin: 0 }}>
+                    <p style={{ color: 'rgba(199,210,254,0.9)', fontSize: 13, fontWeight: 500, margin: 0 }}>
                       {bm ? 'Tiada orang dikesan' : 'No one detected'}
                     </p>
                   </div>
@@ -861,16 +823,52 @@ export default function StudyTimer() {
 
             </div> {/* end video inner div */}
           </div> {/* end ring wrap */}
+
+          {/* Timer + Logo — bawah video */}
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: '20px 24px 16px',
+            marginTop: 12, border: '0.5px solid rgba(0,0,0,0.06)',
+          }}>
+            {/* Cotton Candy branding */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <img src="/cc-logo.png" alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: 'rgba(29,29,31,0.4)', textTransform: 'uppercase' as const }}>
+                Cotton Candy
+              </span>
+            </div>
+            {/* Big timer */}
+            <div style={{
+              fontSize: 56, fontWeight: 600, letterSpacing: '-3px',
+              fontVariantNumeric: 'tabular-nums', color: '#1d1d1f', lineHeight: 1,
+              marginBottom: 12,
+            }}>
+              {fmt(focusSecs)}
+            </div>
+            {/* Progress bar + % */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${progress * 100}%`,
+                  background: 'linear-gradient(90deg, #FF6B9D, #C471F5)',
+                  borderRadius: 2, transition: 'width 0.5s',
+                }} />
+              </div>
+              <span style={{ fontSize: 12, color: 'rgba(29,29,31,0.4)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {Math.round(progress * 100)}% {t.of} {targetMins}m
+              </span>
+            </div>
+          </div>
+
         </div>
       )}
 
       {/* Stats */}
       {!isStopped && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
-         {[
+          {[
             { label: t.sessions, val: sessions },
             { label: t.pauses, val: pauseCount },
-            { label: '👻 Ghost', val: ghostCount },
+            { label: 'Ghost', val: ghostCount },
           ].map(({ label, val }) => (
             <div key={label} style={S.statCard}>
               <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginBottom: 4 }}>{label}</div>
@@ -920,10 +918,8 @@ export default function StudyTimer() {
           </div>
 
           <div style={S.achieveWrap}>
-            {/* Canvas preview — rendered as image */}
             <canvas ref={achieveCanvasRef} style={{ display: 'none' }} />
 
-            {/* Loading state */}
             {cardLoading && (
               <div style={{
                 width: '100%', aspectRatio: '9/16',
@@ -956,7 +952,6 @@ export default function StudyTimer() {
               />
             )}
 
-            {/* Upload photo */}
             <button
               style={{ ...S.uploadBtn, opacity: cardLoading ? 0.4 : 1, pointerEvents: cardLoading ? 'none' : 'auto' }}
               onClick={() => photoInputRef.current?.click()}
@@ -964,15 +959,8 @@ export default function StudyTimer() {
               <Icon.Export size={16} />
               {t.uploadPhoto}
             </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handlePhotoUpload}
-            />
+            <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
 
-            {/* Download */}
             <button
               style={{ ...S.dlBtn, opacity: cardLoading ? 0.4 : 1, pointerEvents: cardLoading ? 'none' : 'auto' }}
               onClick={downloadCard}
@@ -981,7 +969,6 @@ export default function StudyTimer() {
               {cardLoading ? (bm ? 'Menyediakan...' : 'Preparing...') : t.download}
             </button>
 
-            {/* New session */}
             <button onClick={handleReset} style={{
               padding: '11px', borderRadius: 10,
               background: 'transparent', border: '0.5px solid rgba(0,0,0,0.08)',
@@ -994,7 +981,7 @@ export default function StudyTimer() {
         </>
       )}
 
-    {/* ── Session History ── */}
+      {/* ── Session History ── */}
       {history.length > 0 && (
         <div style={{ marginTop: 40 }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(29,29,31,0.4)', marginBottom: 12 }}>
@@ -1008,7 +995,6 @@ export default function StudyTimer() {
               const timeStr = date.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })
               return (
                 <div key={s.id} style={{ borderRadius: 12, border: '0.5px solid rgba(0,0,0,0.07)', overflow: 'hidden', background: '#fff' }}>
-                  {/* Row header */}
                   <button onClick={() => setExpandedId(isOpen ? null : s.id)} style={{
                     width: '100%', display: 'flex', alignItems: 'center',
                     padding: '12px 14px', background: 'none', border: 'none',
@@ -1029,7 +1015,6 @@ export default function StudyTimer() {
                     <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.3)', marginLeft: 4 }}>{isOpen ? '▲' : '▼'}</div>
                   </button>
 
-                  {/* Expanded */}
                   {isOpen && (
                     <div style={{ padding: '0 14px 14px', borderTop: '0.5px solid rgba(0,0,0,0.05)' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, marginBottom: 12 }}>
@@ -1046,9 +1031,7 @@ export default function StudyTimer() {
                         ))}
                       </div>
                       {historyBgPhoto[s.id] && (
-                        <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginBottom: 8 }}>
-                          ✓ Background photo ready
-                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginBottom: 8 }}>✓ Background photo ready</div>
                       )}
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
@@ -1073,13 +1056,7 @@ export default function StudyTimer() {
         </div>
       )}
 
-      <input
-        ref={historyPhotoInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleHistoryPhotoUpload}
-      />
+      <input ref={historyPhotoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleHistoryPhotoUpload} />
 
     </div>
   )
