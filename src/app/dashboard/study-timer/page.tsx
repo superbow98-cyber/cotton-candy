@@ -251,11 +251,17 @@ export default function StudyTimer() {
     ctx.beginPath(); ctx.moveTo(pad, 790); ctx.lineTo(CW - pad, 790); ctx.stroke()
 
     // 4 mini stats grid
+    const vibe = presencePct >= 100 ? 'certified nerd fr'
+      : presencePct >= 80 ? 'almost there bestie'
+      : presencePct >= 60 ? 'not bad, keep going'
+      : presencePct >= 40 ? 'mid session energy'
+      : presencePct >= 20 ? 'just warming up huh'
+      : 'bro just opened the app'
     const stats = [
-      { label: lang === 'bm' ? 'Pause gerak' : 'Motion pauses', val: String(pauseCountRef.current) },
-      { label: lang === 'bm' ? 'Sesi hari ini' : 'Sessions today', val: String(sessions) },
-      { label: lang === 'bm' ? 'Sasaran' : 'Target', val: `${targetMins}m` },
-      { label: lang === 'bm' ? 'Status' : 'Status', val: presencePct >= 100 ? '✓ Done' : 'In progress' },
+      { label: 'Motion pauses', val: String(pauseCountRef.current) },
+      { label: 'Sessions today', val: String(sessions) },
+      { label: 'Target', val: `${targetMins}m` },
+      { label: 'Vibe check', val: vibe },
     ]
     const colW = (CW - pad * 2) / 2
     stats.forEach((s, i) => {
@@ -264,11 +270,12 @@ export default function StudyTimer() {
       ctx.font = `400 30px -apple-system, sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.38)'
       ctx.fillText(s.label, x, y)
-      ctx.font = `500 68px -apple-system, sans-serif`
+      // Vibe check guna font kecil sikit sebab text panjang
+      const isVibe = s.label === 'Vibe check'
+      ctx.font = `500 ${isVibe ? 42 : 68}px -apple-system, sans-serif`
       ctx.fillStyle = '#ffffff'
-      ctx.fillText(s.val, x, y + 40)
+      ctx.fillText(s.val, x, y + (isVibe ? 50 : 40))
     })
-
     // Bottom divider
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'
     ctx.lineWidth = 1
@@ -286,16 +293,7 @@ export default function StudyTimer() {
     ctx.fillText('#cottoncandystudy', CW - pad, CH - 170)
     ctx.textAlign = 'left'
 
-    // CC logo bottom right — real logo
-    await new Promise<void>(resolve => {
-      const logoImgBr = new Image()
-      logoImgBr.onload = () => {
-        ctx.drawImage(logoImgBr, CW - pad - 88, CH - 144, 88, 88)
-        resolve()
-      }
-      logoImgBr.onerror = () => resolve()
-      logoImgBr.src = '/cc-logo.png'
-    })
+    // CC logo bottom right — REMOVED
 
     setCardDrawn(true)
     setCardLoading(false)
