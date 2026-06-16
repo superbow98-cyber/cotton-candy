@@ -281,6 +281,7 @@ export default function StudyTimer() {
     ctx.font = `500 30px -apple-system, sans-serif`
     ctx.fillStyle = 'rgba(255,255,255,0.4)'
     ctx.fillText('#cottoncandystudy', CW - pad, CH - 170)
+    ctx.textAlign = 'left'
 
     // CC logo bottom right — real logo
     await new Promise<void>(resolve => {
@@ -298,8 +299,8 @@ export default function StudyTimer() {
 
   // Redraw card if bgPhoto changes while stopped
   useEffect(() => {
-    if (timerState === 'stopped') drawAchievementCard()
-  }, [bgPhoto, timerState, drawAchievementCard])
+    if (timerState === 'stopped' && bgPhoto) drawAchievementCard()
+  }, [bgPhoto, drawAchievementCard])
 
   // ── controls ────────────────────────────────────────────
   const handleStart = useCallback(() => {
@@ -350,14 +351,12 @@ export default function StudyTimer() {
 
   const downloadCard = async () => {
     await drawAchievementCard()
-    setTimeout(() => {
-      const c = achieveCanvasRef.current
-      if (!c) return
-      const link = document.createElement('a')
-      link.download = 'cotton-candy-study.png'
-      link.href = c.toDataURL('image/png')
-      link.click()
-    }, 200)
+    const c = achieveCanvasRef.current
+    if (!c) return
+    const link = document.createElement('a')
+    link.download = 'cotton-candy-study.png'
+    link.href = c.toDataURL('image/png')
+    link.click()
   }
 
   const isRunning = timerState === 'running' || timerState === 'paused-away'
