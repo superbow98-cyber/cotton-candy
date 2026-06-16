@@ -900,17 +900,19 @@ export default function StudyTimer() {
                 </span>
               </div>
 
-              {/* Big timer — 5x size */}
+              {/* Big timer — scales with viewport, always fits */}
               <div style={{
-                fontSize: isFullscreen ? 500 : 400,
+                fontSize: isFullscreen ? 'clamp(64px, 22vw, 220px)' : 'clamp(48px, 18vw, 140px)',
                 fontWeight: 600,
-                letterSpacing: '-4px',
+                letterSpacing: '-0.03em',
                 fontVariantNumeric: 'tabular-nums',
                 color: timerState === 'idle' ? 'rgba(255,255,255,0.3)' : '#ffffff',
                 lineHeight: 1,
                 marginBottom: isFullscreen ? 32 : 24,
                 fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                 transition: 'color 0.3s, font-size 0.3s',
+                maxWidth: '100%',
+                textAlign: 'center',
               }}>
                 {fmt(focusSecs)}
               </div>
