@@ -68,6 +68,7 @@ export default function StudyTimer() {
   const [bgPhoto, setBgPhoto] = useState<HTMLImageElement | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [cardDrawn, setCardDrawn] = useState(false)
+  const [restoredSession, setRestoredSession] = useState(false)
 
   // ── camera ──────────────────────────────────────────────
   const startCamera = useCallback(async () => {
@@ -297,6 +298,13 @@ export default function StudyTimer() {
     setCardDrawn(true)
 }, [bgPhoto, targetMins, sessions, lang])
 
+  // Draw card after restore — delay bagi state settle
+  useEffect(() => {
+    if (restoredSession) {
+      setTimeout(() => drawAchievementCard(), 50)
+    }
+  }, [restoredSession, drawAchievementCard])
+
   // Redraw card if bgPhoto changes while stopped
   useEffect(() => {
     if (timerState === 'stopped' && bgPhoto) drawAchievementCard()
@@ -316,8 +324,16 @@ export default function StudyTimer() {
     stopTick()
     stopMotionWatch()
     isAwayRef.current = false
+    // Save session to localStorage
+    localStorage.setItem('cc_last_session', JSON.stringify({
+      focusSecs: focusSecsRef.current,
+      sessions,
+      pauseCount: pauseCountRef.current,
+      targetMins,
+      timestamp: Date.now(),
+    }))
     setTimeout(() => drawAchievementCard(), 100)
-  }, [stopTick, stopMotionWatch, drawAchievementCard])
+  }, [stopTick, stopMotionWatch, drawAchievementCard, sessions, targetMins])
 
   const handleReset = useCallback(() => {
     setTimerState('idle')
@@ -332,6 +348,8 @@ export default function StudyTimer() {
     setMotionPct(0)
     prevFrameRef.current = null
     setCardDrawn(false)
+    setRestoredSession(false)
+    localStorage.removeItem('cc_last_session')
   }, [stopTick, stopMotionWatch])
 
   useEffect(() => () => {
@@ -339,6 +357,27 @@ export default function StudyTimer() {
     stopMotionWatch()
     streamRef.current?.getTracks().forEach(t => t.stop())
   }, [stopTick, stopMotionWatch])
+
+  // Restore last session on mount (within 24 hours)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('cc_last_session')
+      if (!raw) return
+      const saved = JSON.parse(raw)
+      const age = Date.now() - saved.timestamp
+      if (age > 24 * 60 * 60 * 1000) return // expired
+      focusSecsRef.current = saved.focusSecs
+      setFocusSecs(saved.focusSecs)
+      setSessions(saved.sessions)
+      pauseCountRef.current = saved.pauseCount
+      setPauseCount(saved.pauseCount)
+      setTargetMins(saved.targetMins)
+      setTimerState('stopped')
+      setRestoredSession(true)
+    } catch {
+      // corrupt data — ignore
+    }
+  }, [])
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
