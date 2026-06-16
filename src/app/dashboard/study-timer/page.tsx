@@ -8,7 +8,7 @@ const MOTION_THRESHOLD = 25
 const PIXEL_DIFF_THRESH = 30
 const AWAY_COUNTDOWN_SECS = 3
 
-type TimerState = 'idle' | 'running' | 'paused-away' | 'stopped'
+type TimerState = 'idle' | 'running' | 'paused-away' | 'paused-ghost' | 'stopped'
 
 const TARGET_OPTIONS = [25, 50, 90]
 
@@ -62,6 +62,10 @@ export default function StudyTimer() {
   const [sessions, setSessions] = useState(0)
   const [pauseCount, setPauseCount] = useState(0)
   const pauseCountRef = useRef(0)
+
+  const [ghostCount, setGhostCount] = useState(0)
+  const ghostCountRef = useRef(0)
+  const zeroStreakRef = useRef(0)
 
   // Achievement card
   const achieveCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -155,16 +159,38 @@ export default function StudyTimer() {
       const score = getMotionScore()
       setMotionPct(Math.min(100, score * 4))
       const high = score > MOTION_THRESHOLD
+      const zero = score === 0
+
+      // Ghost — 3s kosong (8 × 400ms)
+      if (zero && !isAwayRef.current) {
+        zeroStreakRef.current += 1
+        if (zeroStreakRef.current >= 8) {
+          zeroStreakRef.current = 0
+          cancelAwayCountdown()
+          isAwayRef.current = true
+          ghostCountRef.current += 1
+          setGhostCount(ghostCountRef.current)
+          setTimerState('paused-ghost')
+        }
+      } else if (!zero && isAwayRef.current) {
+        zeroStreakRef.current = 0
+        isAwayRef.current = false
+        setTimerState('running')
+      } else if (!zero) {
+        zeroStreakRef.current = 0
+      }
+
+      // Motion pause — existing logic
       if (high && !isAwayRef.current && !awayTimerActiveRef.current) {
         startAwayCountdown()
       } else if (!high && awayTimerActiveRef.current && !isAwayRef.current) {
         cancelAwayCountdown()
-      } else if (!high && isAwayRef.current) {
+      } else if (!high && isAwayRef.current && timerState === 'paused-away') {
         isAwayRef.current = false
         setTimerState('running')
       }
     }, 400)
-  }, [getMotionScore, startAwayCountdown, cancelAwayCountdown])
+  }, [getMotionScore, startAwayCountdown, cancelAwayCountdown, timerState])
 
   const stopMotionWatch = useCallback(() => {
     if (motionIntervalRef.current) clearInterval(motionIntervalRef.current)
@@ -271,7 +297,8 @@ export default function StudyTimer() {
       : 'showed up.'
     const stats = [
       { label: 'Motion pauses', val: String(pauseCountRef.current) },
-      { label: 'Sessions today', val: String(sessions) },
+      { label: 'Ghost exits', val: String(ghostCountRef.current) },
+      { label: 'Sessions', val: String(sessions) },
       { label: 'Target', val: `${targetMins}m` },
       { label: 'Vibe check', val: vibe },
     ]
@@ -381,6 +408,9 @@ export default function StudyTimer() {
     setSessions(0)
     pauseCountRef.current = 0
     setPauseCount(0)
+    ghostCountRef.current = 0
+    setGhostCount(0)
+    zeroStreakRef.current = 0
     setMotionPct(0)
     prevFrameRef.current = null
     setCardDrawn(false)
@@ -564,6 +594,7 @@ export default function StudyTimer() {
 
   const isRunning = timerState === 'running' || timerState === 'paused-away'
   const isPausedAway = timerState === 'paused-away'
+  const isGhost = timerState === 'paused-ghost'
   const isStopped = timerState === 'stopped'
   const targetSecs = targetMins * 60
   const progress = Math.min(1, focusSecs / targetSecs)
@@ -716,7 +747,7 @@ export default function StudyTimer() {
               <circle
                 cx="50" cy="37.5" r="34"
                 fill="none"
-                stroke={isPausedAway ? '#ef4444' : '#1d1d1f'}
+                stroke={isPausedAway ? '#ef4444' : isGhost ? '#6366f1' : '#1d1d1f'}
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeDasharray={`${2 * Math.PI * 34 * progress} ${2 * Math.PI * 34}`}
@@ -809,61 +840,37 @@ export default function StudyTimer() {
                   </div>
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Timer + branding below video */}
-          <div style={{
-            background: '#fff',
-            borderRadius: 16,
-            padding: '20px 24px 16px',
-            marginTop: 12,
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          }}>
-            {/* Cotton Candy branding */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <img src="/cc-logo.png" alt="Cotton Candy" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(29,29,31,0.4)', letterSpacing: '0.04em' }}>
-                COTTON CANDY
-              </span>
-            </div>
-
-            {/* Big timer */}
-            <div style={{
-              fontSize: 56, fontWeight: 600, letterSpacing: '-3px', lineHeight: 1,
-              color: isPausedAway ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
-              fontVariantNumeric: 'tabular-nums',
-              transition: 'color 0.3s',
-              marginBottom: 10,
-            }}>
-              {fmt(focusSecs)}
-            </div>
-
-            {/* Progress bar + % */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, height: 2, background: 'rgba(0,0,0,0.06)', borderRadius: 1, overflow: 'hidden' }}>
+              {/* Ghost overlay */}
+              {isGhost && (
                 <div style={{
-                  height: '100%', width: `${Math.round(progress * 100)}%`,
-                  background: '#1d1d1f', borderRadius: 1, transition: 'width 0.5s',
-                }} />
-              </div>
-              <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', fontVariantNumeric: 'tabular-nums', minWidth: 32 }}>
-                {Math.round(progress * 100)}%
-              </span>
-              <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.3)' }}>
-                {t.of} {fmt(targetSecs)}
-              </span>
-            </div>
-          </div>
+                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.15)',
+                    borderRadius: 12, padding: '10px 20px', textAlign: 'center' as const,
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>👻</div>
+                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500, margin: 0 }}>
+                      {bm ? 'Tiada orang dikesan' : 'No one detected'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            </div> {/* end video inner div */}
+          </div> {/* end ring wrap */}
         </div>
       )}
 
       {/* Stats */}
       {!isStopped && (
-        <div style={S.statsGrid}>
-          {[
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+         {[
             { label: t.sessions, val: sessions },
             { label: t.pauses, val: pauseCount },
+            { label: '👻 Ghost', val: ghostCount },
           ].map(({ label, val }) => (
             <div key={label} style={S.statCard}>
               <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.45)', marginBottom: 4 }}>{label}</div>
