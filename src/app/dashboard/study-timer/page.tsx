@@ -459,25 +459,7 @@ export default function StudyTimer() {
         <div style={S.sub}>{t.subtitle}</div>
       </div>
 
-      {/* Camera feed — hide when stopped */}
-      {!isStopped && (
-        <div style={S.camBox}>
-          {!camReady && (
-            <div style={S.camPromptWrap}>
-              <Icon.Camera size={32} style={{ color: 'rgba(255,255,255,0.35)' }} />
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.4, margin: 0 }}>
-                {camError ? t.camErr : t.camPrompt}
-              </p>
-              {!camError && (
-                <button onClick={startCamera} style={{
-                  marginTop: 4, padding: '8px 20px', borderRadius: 8,
-                  background: '#fff', color: '#111', border: 'none',
-                  fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                  {t.grantBtn}
-                </button>
-              )}
-            </div>
+      
           )}
           <video ref={videoRef} autoPlay playsInline muted style={{
             width: '100%', height: '100%', objectFit: 'cover',
@@ -568,34 +550,170 @@ export default function StudyTimer() {
         </div>
       )}
 
-      {/* Ring timer */}
+      {/* Camera + Ring + Timer block */}
       {!isStopped && (
-        <div style={S.timerBlock}>
-          <div style={S.ringWrap}>
-            <svg width={140} height={140} viewBox="0 0 140 140" style={{ transform: 'rotate(-90deg)' }}>
-              <circle cx={70} cy={70} r={ringR} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={4} />
+        <div style={{ marginBottom: 20 }}>
+
+          {/* Ring wrapping video */}
+          <div style={{ position: 'relative', width: '100%', paddingBottom: '75%' }}>
+            {/* SVG ring — absolute, fills container */}
+            <svg
+              viewBox="0 0 100 75"
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%',
+                zIndex: 2, pointerEvents: 'none',
+              }}
+            >
+              {/* Ring — centered in 4:3 viewBox, radius fits short side */}
               <circle
-                cx={70} cy={70} r={ringR} fill="none"
+                cx="50" cy="37.5" r="34"
+                fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.2"
+              />
+              <circle
+                cx="50" cy="37.5" r="34"
+                fill="none"
                 stroke={isPausedAway ? '#ef4444' : '#1d1d1f'}
-                strokeWidth={4} strokeLinecap="round"
-                strokeDasharray={ringCirc}
-                strokeDashoffset={ringOffset}
-                style={{ transition: 'stroke-dashoffset 0.5s, stroke 0.3s' }}
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 34 * progress} ${2 * Math.PI * 34}`}
+                transform="rotate(-90 50 37.5)"
+                style={{ transition: 'stroke-dasharray 0.5s, stroke 0.3s' }}
               />
             </svg>
-            <div style={S.ringTime}>
-              <span style={{
-                fontSize: 30, fontWeight: 500, letterSpacing: '-1.5px', lineHeight: 1,
-                color: isPausedAway ? 'rgba(29,29,31,0.3)' : '#1d1d1f',
-                fontVariantNumeric: 'tabular-nums', transition: 'color 0.3s',
-              }}>
-                {fmt(focusSecs)}
+
+            {/* Video — inset from ring edges */}
+            <div style={{
+              position: 'absolute',
+              top: '5%', left: '5%', right: '5%', bottom: '5%',
+              borderRadius: 12, overflow: 'hidden', background: '#111',
+              border: '0.5px solid rgba(0,0,0,0.08)',
+              zIndex: 1,
+            }}>
+              {!camReady && (
+                <div style={S.camPromptWrap}>
+                  <Icon.Camera size={32} style={{ color: 'rgba(255,255,255,0.35)' }} />
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.4, margin: 0 }}>
+                    {camError ? t.camErr : t.camPrompt}
+                  </p>
+                  {!camError && (
+                    <button onClick={startCamera} style={{
+                      marginTop: 4, padding: '8px 20px', borderRadius: 8,
+                      background: '#fff', color: '#111', border: 'none',
+                      fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                      {t.grantBtn}
+                    </button>
+                  )}
+                </div>
+              )}
+              <video ref={videoRef} autoPlay playsInline muted style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                transform: 'scaleX(-1)', display: camReady ? 'block' : 'none',
+              }} />
+              <canvas ref={canvasRef} width={W} height={H} style={{ display: 'none' }} />
+
+              {/* Status pill */}
+              {camReady && (
+                <div style={S.statusPill}>
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                    background: isPausedAway ? '#ef4444' : awayCountdown !== null ? '#f59e0b' : '#22c55e',
+                  }} />
+                  <span style={{ fontSize: 11, color: '#fff', whiteSpace: 'nowrap' }}>
+                    {isPausedAway ? t.paused : t.focused}
+                  </span>
+                </div>
+              )}
+
+              {/* Motion bar */}
+              {camReady && (
+                <div style={{
+                  position: 'absolute', bottom: 10, left: 12, right: 12,
+                  height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%', width: `${motionPct}%`,
+                    background: motionPct > 60 ? '#ef4444' : '#22c55e',
+                    borderRadius: 2, transition: 'width 0.1s',
+                  }} />
+                </div>
+              )}
+
+              {/* Away countdown overlay */}
+              {awayCountdown !== null && !isPausedAway && (
+                <div style={{
+                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                  <p style={{ color: '#fff', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.awayMsg}</p>
+                  <div style={{ fontSize: 44, fontWeight: 500, color: '#f59e0b', lineHeight: 1 }}>{awayCountdown}</div>
+                </div>
+              )}
+
+              {/* Paused overlay */}
+              {isPausedAway && (
+                <div style={{
+                  position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <div style={{
+                    background: 'rgba(239,68,68,0.15)', border: '0.5px solid rgba(239,68,68,0.35)',
+                    borderRadius: 12, padding: '10px 20px',
+                  }}>
+                    <p style={{ color: '#fca5a5', fontSize: 13, fontWeight: 500, margin: 0 }}>{t.labelPaused}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Timer + branding below video */}
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: '20px 24px 16px',
+            marginTop: 12,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          }}>
+            {/* Cotton Candy branding */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <img src="/cc-logo.png" alt="Cotton Candy" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(29,29,31,0.4)', letterSpacing: '0.04em' }}>
+                COTTON CANDY
               </span>
-              <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', marginTop: 3 }}>
+            </div>
+
+            {/* Big timer */}
+            <div style={{
+              fontSize: 56, fontWeight: 600, letterSpacing: '-3px', lineHeight: 1,
+              color: isPausedAway ? 'rgba(29,29,31,0.25)' : '#1d1d1f',
+              fontVariantNumeric: 'tabular-nums',
+              transition: 'color 0.3s',
+              marginBottom: 10,
+            }}>
+              {fmt(focusSecs)}
+            </div>
+
+            {/* Progress bar + % */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, height: 2, background: 'rgba(0,0,0,0.06)', borderRadius: 1, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${Math.round(progress * 100)}%`,
+                  background: '#1d1d1f', borderRadius: 1, transition: 'width 0.5s',
+                }} />
+              </div>
+              <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.4)', fontVariantNumeric: 'tabular-nums', minWidth: 32 }}>
+                {Math.round(progress * 100)}%
+              </span>
+              <span style={{ fontSize: 11, color: 'rgba(29,29,31,0.3)' }}>
                 {t.of} {fmt(targetSecs)}
               </span>
             </div>
           </div>
+        </div>
+      )}
 
           {/* Progress % */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', maxWidth: 240 }}>
