@@ -524,6 +524,33 @@ export default function Home() {
               descZh: '基于你的转录和摘要继续提问，无需重读整堂课即可获得重点答案。',
               descTa: 'உங்கள் transcript மற்றும் summary அடிப்படையில் கேள்விகள் கேளுங்கள். முழு விரிவுரையையும் மீண்டும் படிக்காமல் பதில் பெறுங்கள்.',
             },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="7" width="15" height="10" rx="2" ry="2" />
+                  <path d="M17 9l5-2v10l-5-2" />
+                  <circle cx="9" cy="12" r="2" />
+                </svg>
+              ),
+              titleEn: 'Study Detection', titleBm: 'Pengesanan Belajar', titleZh: '学习检测', titleTa: 'படிப்பு கண்டறிதல்',
+              descEn: 'Camera watches if you\'re actually at your desk. Detects absence with Ghost Mode — auto-pauses when you leave, auto-resumes when you\'re back. Grades your session A–G.',
+              descBm: 'Kamera pantau sama ada kau betul-betul duduk belajar. Ghost Mode detect bila kau pergi — auto-pause, auto-resume bila balik. Grad sesi kau A–G.',
+              descZh: '摄像头监测你是否真的坐在桌前。Ghost Mode 检测离开时自动暂停，回来时自动恢复。为你的学习评级 A–G。',
+              descTa: 'கேமரா நீங்கள் மேசையில் இருக்கிறீர்களா என்று கண்காணிக்கும். Ghost Mode — நீங்கள் இல்லாதபோது auto-pause, திரும்பும்போது auto-resume. A–G தரம் வழங்கும்.',
+            },
+            {
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A8FF5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              ),
+              titleEn: 'Focus Timer', titleBm: 'Pemasa Fokus', titleZh: '专注计时器', titleTa: 'கவன டைமர்',
+              descEn: 'No camera needed. Set a target — 25, 50, or 90 min — and track how much time you actually hit. Saves an achievement card with your focus stats when done.',
+              descBm: 'Tak perlu kamera. Set target — 25, 50, atau 90 minit — dan track berapa lama kau betul-betul fokus. Simpan achievement card dengan stats fokus bila habis.',
+              descZh: '无需摄像头。设定目标——25、50 或 90 分钟——追踪你实际专注的时间。完成后保存带专注数据的成就卡。',
+              descTa: 'கேமரா தேவையில்லை. 25, 50 அல்லது 90 நிமிட இலக்கு வையுங்கள் — நீங்கள் எவ்வளவு நேரம் கவனம் செலுத்தினீர்கள் என்பதை கண்காணிக்கும். முடிந்தவுடன் achievement card சேமிக்கும்.',
+            },
           ].map((f, i) => (
             <div key={i} style={{
               background: '#fff',
