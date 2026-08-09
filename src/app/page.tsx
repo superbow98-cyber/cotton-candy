@@ -50,10 +50,10 @@ export default function Home() {
     }}
   />
 
-  {/* Promo Code button — always visible (desktop + mobile), never hidden */}
+  {/* Promo Code button — desktop: black pill w/ shimmer. Mobile: plain small gold text, no box. */}
   <Link
     href="/promo-code"
-    className="promo-shimmer-btn"
+    className="promo-shimmer-btn promo-header-btn"
     style={{
       display: 'inline-flex',
       alignItems: 'center',

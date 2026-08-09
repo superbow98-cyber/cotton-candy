@@ -85,6 +85,21 @@ a { color: inherit; text-decoration: none; }
   100% { left: 150%; }
 }
 
+/* Mobile header: Promo Code becomes plain small gold text, no black pill, no shimmer */
+@media (max-width: 767px) {
+  .promo-header-btn {
+    background: transparent !important;
+    color: #C99A2E !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+  .promo-header-btn::after {
+    display: none !important;
+  }
+}
+
 .transcript-md {
   font-family: 'Georgia', Cambria, serif;
   font-size: 17px;
