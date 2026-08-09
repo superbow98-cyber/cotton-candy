@@ -38,7 +38,7 @@ export default function Home() {
         borderBottom: '0.5px solid rgba(0, 0, 0, 0.06)',
         position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
   <img
     src="/cc-logo.png"
     alt="Cotton Candy"
@@ -49,6 +49,27 @@ export default function Home() {
       objectFit: 'contain',
     }}
   />
+
+  {/* Promo Code button — always visible (desktop + mobile), never hidden */}
+  <Link
+    href="/promo-code"
+    className="promo-shimmer-btn"
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      textDecoration: 'none',
+      background: '#000',
+      color: '#F5C767',
+      fontWeight: 700,
+      fontSize: 12,
+      padding: '6px 12px',
+      borderRadius: 100,
+      letterSpacing: '-0.01em',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
+  </Link>
 </div>
 
         <div className="hidden md:flex" style={{ gap: 28, fontSize: 13, color: 'rgba(29,29,31,0.75)' }}>
@@ -60,24 +81,6 @@ export default function Home() {
           </a>
           <Link href="/ambassador" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Ambassador', 'Ambassador', '大使计划', 'அம்பாசிடர்')}
-          </Link>
-          <Link
-            href="/promo-code"
-            className="promo-shimmer-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              textDecoration: 'none',
-              background: '#000',
-              color: '#F5C767',
-              fontWeight: 700,
-              fontSize: 13,
-              padding: '7px 16px',
-              borderRadius: 100,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
           </Link>
           <a href="#pricing" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Pricing', 'Harga', '价格', 'விலை')}
