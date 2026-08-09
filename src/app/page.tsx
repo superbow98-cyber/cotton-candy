@@ -61,6 +61,9 @@ export default function Home() {
           <Link href="/ambassador" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Ambassador', 'Ambassador', '大使计划', 'அம்பாசிடர்')}
           </Link>
+          <Link href="/promo-code" style={{ color: 'inherit', textDecoration: 'none' }}>
+            {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
+          </Link>
           <a href="#pricing" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Pricing', 'Harga', '价格', 'விலை')}
           </a>
@@ -662,6 +665,14 @@ export default function Home() {
         <div style={{ maxWidth: 1060, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 500, color: '#5A8FF5', marginBottom: 10 }}>
             {L('Simple pricing', 'Harga mudah', '简单定价', 'எளிய விலை')}
+          </div>
+          <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <Link href="/promo-code" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 13, fontWeight: 500, color: '#5A8FF5', textDecoration: 'none',
+            }}>
+              🎁 {L('Got a promo code? Unlock 20% off →', 'Ada kod promo? Buka 20% off →', '有优惠码？解锁 20% 折扣 →', 'விளம்பர குறியீடு உள்ளதா? 20% தள்ளுபடி →')}
+            </Link>
           </div>
           <h2 style={{
             fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 600,

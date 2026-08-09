@@ -73,6 +73,7 @@ export const translations = {
     dashLectures: 'Lectures',
     dashNotebooks: 'Notebooks',
     dashStudyTimer: 'Study Timer',
+    dashPromoCode: 'Promo Code',
     dashSettings: 'Settings',
     dashSignOut: 'Sign out',
 
@@ -219,6 +220,7 @@ export const translations = {
     dashLectures: 'Kuliah',
     dashNotebooks: 'Notebook',
     dashStudyTimer: 'Pemasa Belajar',
+    dashPromoCode: 'Kod Promo',
     dashSettings: 'Tetapan',
     dashSignOut: 'Log keluar',
 

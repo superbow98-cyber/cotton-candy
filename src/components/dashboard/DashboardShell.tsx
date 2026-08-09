@@ -9,7 +9,7 @@ import { Icon } from '@/components/ui/Icon'
 
 type NavItem = {
   href: string
-  key: 'dashHome' | 'dashLectures' | 'dashNotebooks' | 'dashSettings' | 'dashStudyTimer'
+  key: 'dashHome' | 'dashLectures' | 'dashNotebooks' | 'dashSettings' | 'dashStudyTimer' | 'dashPromoCode'
   icon: keyof typeof Icon
 }
 
@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/lectures',   key: 'dashLectures',  icon: 'Mic' },
   { href: '/dashboard/notebooks',  key: 'dashNotebooks', icon: 'Notebook' },
   { href: '/dashboard/study-timer', key: 'dashStudyTimer', icon: 'Timer' },
+  { href: '/promo-code',           key: 'dashPromoCode', icon: 'Tag' },
   { href: '/dashboard/settings',   key: 'dashSettings',  icon: 'Settings' },
 ]
 
