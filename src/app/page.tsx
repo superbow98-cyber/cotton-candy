@@ -15,8 +15,6 @@ export default function Home() {
   const langOptions: { code: string; label: string }[] = [
     { code: 'en', label: 'EN' },
     { code: 'bm', label: 'BM' },
-    { code: 'zh', label: '中文' },
-    { code: 'ta', label: 'தமிழ்' },
   ]
 
   return (
