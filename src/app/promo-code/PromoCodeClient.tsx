@@ -45,7 +45,7 @@ export default function PromoCodeClient() {
   // Load quota status on mount — read-only, doesn't consume a slot. Powers
   // the "X/10 left" badge and the disabled/exhausted state per card.
   useEffect(() => {
-    fetch('/api/promo-code/status')
+    fetch('/api/promo-code/status', { cache: 'no-store' })
       .then((r) => r.json())
       .then((j) => {
         if (!j.status) return

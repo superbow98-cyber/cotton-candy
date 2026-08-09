@@ -25,6 +25,9 @@ import { adminClient } from '@/lib/supabase/server'
 import { PLANS, type Plan } from '@/types'
 
 export const runtime = 'nodejs'
+// POST handlers aren't statically cached by default, but force-dynamic here
+// too for consistency — this route always needs a fresh DB read.
+export const dynamic = 'force-dynamic'
 
 export type Tier = 10 | 30
 

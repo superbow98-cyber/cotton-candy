@@ -13,6 +13,13 @@ import type { Plan } from '@/types'
 import type { Tier } from '../unlock/route'
 
 export const runtime = 'nodejs'
+// CRITICAL: without this, Next.js treats this GET handler as static (no
+// cookies/headers read = eligible for the Full Route Cache) and serves the
+// SAME cached response to every visitor forever after the first request —
+// this is why quota looked stuck at 0/10 even after unlocking. Force it to
+// re-run on every request.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const CODES: { plan: Plan; tier: Tier; code: string }[] = [
   { plan: 'student_pro', tier: 10, code: 'CCPRO10' },
