@@ -34,10 +34,38 @@ export default function CheckoutClient() {
     (async () => {
       const sb = createClient()
       const { data: { user } } = await sb.auth.getUser()
-      if (!user) { router.replace(`/login?next=/checkout?plan=${planKey}`); return }
+      if (!user) {
+        // Preserve `promo` (e.g. from /promo-code share links) through the
+        // login redirect so it isn't lost — login page must read it back
+        // into the eventual redirect target for this to fully round-trip.
+        const promoParam = params.get('promo')
+        const next = promoParam
+          ? `/checkout?plan=${planKey}&promo=${encodeURIComponent(promoParam)}`
+          : `/checkout?plan=${planKey}`
+        router.replace(`/login?next=${encodeURIComponent(next)}`)
+        return
+      }
       setEmail(user.email ?? null)
     })()
-  }, [planKey, router])
+  }, [planKey, params, router])
+
+  // Prefill promo code from a /promo-code share link (?promo=CODE) and
+  // auto-validate it once, so a shared checkout link "just works" without
+  // the visitor having to retype the code.
+  useEffect(() => {
+    const fromUrl = params.get('promo')
+    if (fromUrl && !promo) {
+      setPromo(fromUrl.toUpperCase())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
+
+  useEffect(() => {
+    if (promo && promoStatus === 'idle' && params.get('promo')) {
+      tryPromo()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promo, email])
 
   const tryPromo = async () => {
     const code = promo.trim().toUpperCase()
