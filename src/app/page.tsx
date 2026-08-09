@@ -61,7 +61,22 @@ export default function Home() {
           <Link href="/ambassador" style={{ color: 'inherit', textDecoration: 'none' }}>
             {L('Ambassador', 'Ambassador', '大使计划', 'அம்பாசிடர்')}
           </Link>
-          <Link href="/promo-code" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link
+            href="/promo-code"
+            className="promo-shimmer-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              textDecoration: 'none',
+              background: '#000',
+              color: '#F5C767',
+              fontWeight: 700,
+              fontSize: 13,
+              padding: '7px 16px',
+              borderRadius: 100,
+              letterSpacing: '-0.01em',
+            }}
+          >
             {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
           </Link>
           <a href="#pricing" style={{ color: 'inherit', textDecoration: 'none' }}>
