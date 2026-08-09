@@ -49,27 +49,6 @@ export default function Home() {
       objectFit: 'contain',
     }}
   />
-
-  {/* Promo Code button — desktop: black pill w/ shimmer. Mobile: plain small gold text, no box. */}
-  <Link
-    href="/promo-code"
-    className="promo-shimmer-btn promo-header-btn"
-    style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      textDecoration: 'none',
-      background: '#000',
-      color: '#F5C767',
-      fontWeight: 700,
-      fontSize: 12,
-      padding: '6px 12px',
-      borderRadius: 100,
-      letterSpacing: '-0.01em',
-      whiteSpace: 'nowrap',
-    }}
-  >
-    {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
-  </Link>
 </div>
 
         <div className="hidden md:flex" style={{ gap: 28, fontSize: 13, color: 'rgba(29,29,31,0.75)' }}>
@@ -87,7 +66,7 @@ export default function Home() {
           </a>
         </div>
 
-        {/* RIGHT SIDE: Language Toggle + CTA */}
+        {/* RIGHT SIDE: Language Toggle + Promo Code + CTA */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Language Toggle Pill */}
           <div style={{
@@ -130,6 +109,27 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          {/* Promo Code button — desktop: black pill w/ shimmer. Mobile: plain small gold text, no box. */}
+          <Link
+            href="/promo-code"
+            className="promo-shimmer-btn promo-header-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              textDecoration: 'none',
+              background: '#000',
+              color: '#F5C767',
+              fontWeight: 700,
+              fontSize: 12,
+              padding: '6px 12px',
+              borderRadius: 100,
+              letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {L('Promo Code', 'Kod Promo', '优惠码', 'விளம்பர குறியீடு')}
+          </Link>
 
           <Link href="/login" style={{
             padding: '7px 16px', borderRadius: 100,
