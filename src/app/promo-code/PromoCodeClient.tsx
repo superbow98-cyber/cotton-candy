@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useLang } from '@/lib/i18n/LangProvider'
 import LangToggle from '@/components/ui/LangToggle'
@@ -13,9 +13,12 @@ const SITE_URL = 'https://cottoncandy-s.com'
 // shared WITH, so they can actually redeem it. Same split as Memoir.
 const AFFILIATE_URL = 'https://s.shopee.com.my/8V7xUBGCLF'
 
-// Only the packages (pakej) that have a share code. Day Pass is excluded —
+type Tier = 10 | 30
+
+// Only the packages (pakej) that have share codes. Day Pass is excluded —
 // same rule the ambassador program uses (too cheap to discount meaningfully).
 const SHAREABLE_PLANS: Plan[] = ['student_pro', 'month', 'year']
+const TIERS: Tier[] = [10, 30]
 
 const PLAN_BADGES: Record<string, { label: { en: string; bm: string }; gradient: string }> = {
   student_pro: { label: { en: 'For Students', bm: 'Untuk Pelajar' }, gradient: 'linear-gradient(135deg, #D4A94B, #E8B347)' },
@@ -24,33 +27,65 @@ const PLAN_BADGES: Record<string, { label: { en: string; bm: string }; gradient:
 }
 
 type UnlockedCode = { code: string; discount_percent: number }
+type CardKey = `${Plan}_${Tier}`
+type QuotaStatus = { plan: Plan; tier: Tier; quota_used: number; quota_limit: number; exhausted: boolean }
+
+const key = (plan: Plan, tier: Tier): CardKey => `${plan}_${tier}`
 
 export default function PromoCodeClient() {
   const { lang } = useLang()
-  const [selected, setSelected] = useState<Plan | null>(null)
-  const [unlocking, setUnlocking] = useState<Plan | null>(null)
-  const [unlocked, setUnlocked] = useState<Partial<Record<Plan, UnlockedCode>>>({})
+  const [selected, setSelected] = useState<CardKey | null>(null)
+  const [unlocking, setUnlocking] = useState<CardKey | null>(null)
+  const [unlocked, setUnlocked] = useState<Partial<Record<CardKey, UnlockedCode>>>({})
+  const [quota, setQuota] = useState<Partial<Record<CardKey, QuotaStatus>>>({})
   const [copied, setCopied] = useState(false)
   const [shared, setShared] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const selectedPlan = selected ? PLANS[selected] : null
-  const selectedCode = selected ? unlocked[selected] : null
+  // Load quota status on mount — read-only, doesn't consume a slot. Powers
+  // the "X/10 left" badge and the disabled/exhausted state per card.
+  useEffect(() => {
+    fetch('/api/promo-code/status')
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j.status) return
+        const map: Partial<Record<CardKey, QuotaStatus>> = {}
+        for (const s of j.status as QuotaStatus[]) map[key(s.plan, s.tier)] = s
+        setQuota(map)
+      })
+      .catch(() => {}) // status is a nice-to-have; unlock() still enforces quota server-side
+  }, [])
 
-  async function unlock(plan: Plan) {
-    setSelected(plan)
+  const selectedPlan = selected ? PLANS[selected.split('_')[0] as Plan] : null
+  const selectedCode = selected ? unlocked[selected] : null
+  const selectedQuota = selected ? quota[selected] : null
+
+  async function unlock(plan: Plan, tier: Tier) {
+    const k = key(plan, tier)
+    setSelected(k)
     setErr(null)
-    if (unlocked[plan]) return // already unlocked, just show it
-    setUnlocking(plan)
+    if (unlocked[k]) return // already unlocked, just show it
+    if (quota[k]?.exhausted) return // client-side guard; server re-checks anyway
+    setUnlocking(k)
     try {
       const res = await fetch('/api/promo-code/unlock', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, tier }),
       })
       const j = await res.json()
+      if (res.status === 429 || j.error === 'quota_exhausted') {
+        setQuota((prev) => ({ ...prev, [k]: { plan, tier, quota_used: j.quota_used ?? 10, quota_limit: j.quota_limit ?? 10, exhausted: true } }))
+        setErr(
+          lang === 'bm'
+            ? 'Kuota bulan ini dah habis (10/10). Cuba lagi bulan depan!'
+            : 'This month\u2019s quota is full (10/10). Try again next month!'
+        )
+        return
+      }
       if (!res.ok || !j.code) throw new Error(j.error || 'unlock_failed')
-      setUnlocked((prev) => ({ ...prev, [plan]: { code: j.code, discount_percent: j.discount_percent } }))
+      setUnlocked((prev) => ({ ...prev, [k]: { code: j.code, discount_percent: j.discount_percent } }))
+      setQuota((prev) => ({ ...prev, [k]: { plan, tier, quota_used: j.quota_used, quota_limit: j.quota_limit, exhausted: j.quota_used >= j.quota_limit } }))
     } catch (e: any) {
       setErr(lang === 'bm' ? 'Gagal jana kod. Cuba lagi.' : 'Could not generate code. Try again.')
     } finally {
@@ -82,9 +117,10 @@ export default function PromoCodeClient() {
   // open the checkout link.
   async function shareCode() {
     if (!selected || !selectedCode) return
+    const plan = selected.split('_')[0] as Plan
     const { code, discount_percent } = selectedCode
-    const shareText = pitchText(selected, code, discount_percent)
-    const shareUrl = checkoutUrl(selected, code)
+    const shareText = pitchText(plan, code, discount_percent)
+    const shareUrl = checkoutUrl(plan, code)
 
     if (navigator.share) {
       try {
@@ -127,7 +163,7 @@ export default function PromoCodeClient() {
       padding: '40px 16px 60px',
     }}>
       {/* Top mini logo + lang toggle */}
-      <div style={{ width: '100%', maxWidth: 560, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ width: '100%', maxWidth: 640, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
           <img src="/cc-logo.png" alt="Cotton Candy" width={28} height={28} style={{ borderRadius: 7 }} />
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>Cotton Candy</span>
@@ -135,55 +171,89 @@ export default function PromoCodeClient() {
         <LangToggle />
       </div>
 
-      <div style={{ width: '100%', maxWidth: 560 }}>
+      <div style={{ width: '100%', maxWidth: 640 }}>
         <h1 style={{
           fontSize: 26, fontWeight: 600, color: '#1d1d1f',
           textAlign: 'center', letterSpacing: '-0.02em', margin: '0 0 8px',
         }}>
           {lang === 'bm' ? 'Kongsi, dapat diskaun' : 'Share to unlock a discount'}
         </h1>
-        <p style={{ fontSize: 14, color: '#6B6B70', textAlign: 'center', margin: '0 0 28px' }}>
+        <p style={{ fontSize: 14, color: '#6B6B70', textAlign: 'center', margin: '0 0 8px' }}>
           {lang === 'bm'
-            ? 'Pilih pakej, jana kod promo, dan kongsi dengan kawan-kawan.'
-            : 'Pick a package, generate a promo code, and share it with your friends.'}
+            ? 'Pilih pakej dan diskaun, jana kod promo, dan kongsi dengan kawan-kawan.'
+            : 'Pick a package and discount, generate a promo code, and share it with your friends.'}
+        </p>
+        <p style={{ fontSize: 12, color: '#9A9AA0', textAlign: 'center', margin: '0 0 28px' }}>
+          {lang === 'bm'
+            ? 'Setiap kod terhad kepada 10 slot sebulan — kuota reset automatik bulan depan.'
+            : 'Each code is limited to 10 slots a month — quota resets automatically next month.'}
         </p>
 
-        {/* Package cards */}
+        {/* Package + tier cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
-          {SHAREABLE_PLANS.map((planKey) => {
-            const plan = PLANS[planKey]
-            const badge = PLAN_BADGES[planKey]
-            const isSelected = selected === planKey
-            return (
-              <button
-                key={planKey}
-                onClick={() => unlock(planKey)}
-                style={{
-                  background: '#fff',
-                  borderRadius: 16,
-                  padding: '18px 14px',
-                  border: isSelected ? '2px solid #C8A8E9' : '1px solid #E5E5E7',
-                  boxShadow: isSelected ? '0 4px 16px rgba(200,168,233,0.25)' : '0 1px 3px rgba(0,0,0,0.04)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontFamily: 'inherit',
-                }}
-              >
-                <div style={{
-                  display: 'inline-block', background: badge.gradient, color: '#fff',
-                  padding: '3px 10px', borderRadius: 100, fontSize: 10, fontWeight: 600,
-                  textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10,
-                }}>{badge.label[lang]}</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{plan.name}</div>
-                <div style={{ fontSize: 13, color: '#6B6B70' }}>RM {plan.priceRM}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#34D399', marginTop: 6 }}>
-                  {unlocking === planKey
-                    ? (lang === 'bm' ? 'Menjana…' : 'Generating…')
-                    : (lang === 'bm' ? 'Jana kod promo' : 'Unlock promo code')}
-                </div>
-              </button>
-            )
-          })}
+          {SHAREABLE_PLANS.map((planKey) =>
+            TIERS.map((tier) => {
+              const plan = PLANS[planKey]
+              const badge = PLAN_BADGES[planKey]
+              const k = key(planKey, tier)
+              const isSelected = selected === k
+              const q = quota[k]
+              const exhausted = !!q?.exhausted
+              const remaining = q ? Math.max(0, q.quota_limit - q.quota_used) : null
+
+              return (
+                <button
+                  key={k}
+                  onClick={() => unlock(planKey, tier)}
+                  disabled={exhausted}
+                  style={{
+                    background: '#fff',
+                    borderRadius: 16,
+                    padding: '18px 14px',
+                    border: isSelected ? '2px solid #C8A8E9' : '1px solid #E5E5E7',
+                    boxShadow: isSelected ? '0 4px 16px rgba(200,168,233,0.25)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    cursor: exhausted ? 'not-allowed' : 'pointer',
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                    opacity: exhausted ? 0.55 : 1,
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                    <div style={{
+                      display: 'inline-block', background: badge.gradient, color: '#fff',
+                      padding: '3px 10px', borderRadius: 100, fontSize: 10, fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>{badge.label[lang]}</div>
+                    <div style={{
+                      display: 'inline-block', background: tier === 30 ? '#1d1d1f' : '#F4F4F5',
+                      color: tier === 30 ? '#F5C767' : '#1d1d1f',
+                      padding: '3px 10px', borderRadius: 100, fontSize: 10, fontWeight: 700,
+                    }}>{tier}% OFF</div>
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{plan.name}</div>
+                  <div style={{ fontSize: 13, color: '#6B6B70' }}>RM {plan.priceRM}</div>
+
+                  {exhausted ? (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#E24B4A', marginTop: 6 }}>
+                      {lang === 'bm' ? 'Kuota habis (10/10) · cuba bulan depan' : 'Sold out (10/10) · try next month'}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#34D399', marginTop: 6 }}>
+                      {unlocking === k
+                        ? (lang === 'bm' ? 'Menjana…' : 'Generating…')
+                        : (lang === 'bm' ? 'Jana kod promo' : 'Unlock promo code')}
+                    </div>
+                  )}
+                  {remaining !== null && !exhausted && (
+                    <div style={{ fontSize: 11, color: '#9A9AA0', marginTop: 2 }}>
+                      {q!.quota_used}/{q!.quota_limit} {lang === 'bm' ? 'digunakan bulan ini' : 'used this month'}
+                    </div>
+                  )}
+                </button>
+              )
+            })
+          )}
         </div>
 
         {err && (
@@ -209,6 +279,11 @@ export default function PromoCodeClient() {
             }}>
               {selectedCode.code}
             </div>
+            {selectedQuota && (
+              <div style={{ fontSize: 12, color: '#9A9AA0', textAlign: 'center', marginBottom: 14 }}>
+                {selectedQuota.quota_used}/{selectedQuota.quota_limit} {lang === 'bm' ? 'slot digunakan bulan ini' : 'slots used this month'}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={copyCode}
